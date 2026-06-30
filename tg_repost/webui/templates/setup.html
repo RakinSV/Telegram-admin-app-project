@@ -5,11 +5,21 @@
   <h1>Первый запуск</h1>
   <p class="muted">
     Создай пароль администратора и (опционально) сразу укажи минимум секретов,
-    чтобы запустить чтение каналов и публикацию. Telethon-сессию пока нужно
-    сгенерировать в терминале: <code>python -m tg_repost.tools.gen_session</code>
-    — визард для этого в браузере появится в Фазе 5.2. Всё, что оставишь
-    пустым, можно будет заполнить позже на странице «Секреты».
+    чтобы запустить чтение каналов и публикацию. Всё, что оставишь пустым,
+    можно будет заполнить позже на странице «Секреты».
   </p>
+
+  {% if telethon_connected %}
+  <div class="card" style="border-color: var(--ok);">
+    ✅ Telegram-сессия уже получена и сохранена.
+  </div>
+  {% else %}
+  <div class="card">
+    Telethon-аккаунт ещё не подключён.
+    <a href="/setup/telethon">Войти через Telegram →</a>
+  </div>
+  {% endif %}
+
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="post" action="/setup">
     <h2 style="margin-top:0">Пароль администратора</h2>
@@ -19,7 +29,6 @@
     <h2>Telegram (опционально сейчас)</h2>
     <input type="text" name="tg_api_id" placeholder="TG_API_ID">
     <input type="text" name="tg_api_hash" placeholder="TG_API_HASH">
-    <input type="text" name="tg_session_string" placeholder="TG_SESSION_STRING (из gen_session.py)">
     <input type="text" name="tg_bot_token" placeholder="TG_BOT_TOKEN">
     <input type="text" name="tg_owner_user_id" placeholder="TG_OWNER_USER_ID">
 

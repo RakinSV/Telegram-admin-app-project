@@ -1,0 +1,129 @@
+"""Тесты жизненного цикла компонентов (F23, Фаза 5.2): чистая логика
+синхронизации джобов APScheduler — без реальных Telegram-соединений
+(сам APScheduler-планировщик не требует сети, job-функции не вызываются,
+только регистрируются)."""
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+from tg_repost.config import Settings
+from tg_repost.webui.supervisor import (
+    RunningComponents,
+    _resync_optional_job,
+    _sync_jobs,
+    get_components,
+)
+
+
+def _noop(*args, **kwargs):
+    pass
+
+
+def test_running_components_is_running_false_by_default():
+    assert RunningComponents().is_running is False
+
+
+def test_running_components_is_running_true_with_client():
+    assert RunningComponents(tele_client=object()).is_running is True
+
+
+def test_get_components_returns_singleton():
+    assert get_components() is get_components()
+
+
+def test_resync_optional_job_creates_when_enabled():
+    scheduler = AsyncIOScheduler()
+    _resync_optional_job(scheduler, "test_job", True, _noop, [], IntervalTrigger(seconds=60))
+    assert scheduler.get_job("test_job") is not None
+
+
+def test_resync_optional_job_removes_when_disabled():
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(_noop, trigger=IntervalTrigger(seconds=60), id="test_job")
+    _resync_optional_job(scheduler, "test_job", False, _noop, [], IntervalTrigger(seconds=60))
+    assert scheduler.get_job("test_job") is None
+
+
+def test_resync_optional_job_noop_when_disabled_and_absent():
+    scheduler = AsyncIOScheduler()
+    _resync_optional_job(scheduler, "test_job", False, _noop, [], IntervalTrigger(seconds=60))
+    assert scheduler.get_job("test_job") is None
+
+
+def test_resync_optional_job_idempotent_recreation_updates_args():
+    scheduler = AsyncIOScheduler()
+    _resync_optional_job(scheduler, "test_job", True, _noop, [1], IntervalTrigger(seconds=60))
+    _resync_optional_job(scheduler, "test_job", True, _noop, [2], IntervalTrigger(seconds=60))
+    job = scheduler.get_job("test_job")
+    assert job is not None
+    assert list(job.args) == [2]
+    # Не задвоилась — одна джоба с этим id.
+    assert sum(1 for j in scheduler.get_jobs() if j.id == "test_job") == 1
+
+
+def test_sync_jobs_creates_pipeline_tick():
+    settings = Settings()
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("pipeline_tick") is not None
+
+
+def test_sync_jobs_reschedule_does_not_duplicate_pipeline_tick():
+    settings = Settings()
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    settings.pipeline_interval_seconds = 999
+    _sync_jobs(scheduler, settings)
+    assert sum(1 for j in scheduler.get_jobs() if j.id == "pipeline_tick") == 1
+
+
+def test_sync_jobs_no_optional_jobs_by_default():
+    settings = Settings()  # все *_enabled по умолчанию False
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    job_ids = {j.id for j in scheduler.get_jobs()}
+    assert "collect_stats" not in job_ids
+    assert "digest_job" not in job_ids
+    assert "collect_growth_snapshot" not in job_ids
+
+
+def test_sync_jobs_creates_optional_job_when_enabled():
+    settings = Settings()
+    settings.stats_enabled = True
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("collect_stats") is not None
+
+
+def test_sync_jobs_removes_optional_job_when_disabled_again():
+    settings = Settings()
+    settings.stats_enabled = True
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("collect_stats") is not None
+    settings.stats_enabled = False
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("collect_stats") is None
+
+
+def test_sync_jobs_creates_slot_jobs():
+    settings = Settings()
+    settings.scheduled_posting_enabled = True
+    settings.posting_slots = ["10:00", "14:00"]
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    job_ids = {j.id for j in scheduler.get_jobs()}
+    assert "slot_1000" in job_ids
+    assert "slot_1400" in job_ids
+
+
+def test_sync_jobs_recreates_slot_jobs_on_change():
+    settings = Settings()
+    settings.scheduled_posting_enabled = True
+    settings.posting_slots = ["10:00"]
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    settings.posting_slots = ["18:00"]
+    _sync_jobs(scheduler, settings)
+    slot_ids = {j.id for j in scheduler.get_jobs() if j.id.startswith("slot_")}
+    assert slot_ids == {"slot_1800"}

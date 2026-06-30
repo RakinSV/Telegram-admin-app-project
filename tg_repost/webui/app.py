@@ -18,7 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from tg_repost import crypto
 from tg_repost.config import get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
-from tg_repost.webui import dashboard, runtime_state, settings_store
+from tg_repost.webui import dashboard, runtime_state, settings_store, telethon_login
 from tg_repost.webui.auth import (
     NotAuthenticatedError,
     create_admin,
@@ -27,6 +27,13 @@ from tg_repost.webui.auth import (
     log_out,
     require_login,
     verify_login,
+)
+from tg_repost.webui.supervisor import (
+    get_components,
+    resync_scheduler_jobs,
+    restart_moderation_bot,
+    restart_telethon_listener,
+    start_components,
 )
 
 logger = get_logger(__name__)
@@ -70,15 +77,116 @@ def _coerce_form_value(value_type: str, raw: object) -> object:
     return text
 
 
+def _telethon_wizard_routes(
+    router: APIRouter, base_path: str, success_redirect: str, base_template: str
+) -> None:
+    """Зарегистрировать 3-шаговый визард Telethon-логина (телефон → код →
+    опционально пароль 2FA) на переданном роутере (F23, Фаза 5.2).
+
+    Общая реализация для `/setup/telethon` (до бутстрапа, без авторизации —
+    нужен для самого первого подключения) и `/components/telethon` (после
+    бутстрапа, с авторизацией — для повторного входа/смены аккаунта). Логика
+    шагов — в `webui/telethon_login.py`, эта функция только рендерит формы.
+    """
+
+    def _ctx(step: str, *, error: str | None = None) -> dict:
+        return {
+            "step": step, "base_path": base_path, "success_redirect": success_redirect,
+            "base_template": base_template, "error": error,
+        }
+
+    @router.get(base_path, response_class=HTMLResponse)
+    async def telethon_phone_form(request: Request) -> Response:
+        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("phone"))
+
+    @router.post(base_path)
+    async def telethon_phone_submit(
+        request: Request,
+        phone: str = Form(...),
+        api_id: str = Form(""),
+        api_hash: str = Form(""),
+    ) -> Response:
+        settings = get_settings()
+        final_api_id = int(api_id) if api_id.strip().isdigit() else settings.tg_api_id
+        final_api_hash = api_hash.strip() or settings.tg_api_hash
+        if not final_api_id or not final_api_hash:
+            return _templates.TemplateResponse(
+                request, "telethon_login.html",
+                _ctx("phone", error="Укажи TG_API_ID и TG_API_HASH."),
+                status_code=400,
+            )
+
+        # Сохраняем идентичность сразу — нужна не только этому визарду, но и
+        # самому Telethon-клиенту в принципе.
+        if api_id.strip().isdigit():
+            settings_store.save_setting("tg_api_id", final_api_id, "int")
+        if api_hash.strip():
+            settings_store.set_secret("tg_api_hash", final_api_hash)
+
+        ok, message = await telethon_login.begin(final_api_id, final_api_hash, phone.strip())
+        if not ok:
+            return _templates.TemplateResponse(
+                request, "telethon_login.html", _ctx("phone", error=message), status_code=400,
+            )
+        return RedirectResponse(url=f"{base_path}/code", status_code=303)
+
+    @router.get(f"{base_path}/code", response_class=HTMLResponse)
+    async def telethon_code_form(request: Request) -> Response:
+        if not telethon_login.is_in_progress():
+            return RedirectResponse(url=base_path, status_code=303)
+        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("code"))
+
+    @router.post(f"{base_path}/code")
+    async def telethon_code_submit(request: Request, code: str = Form(...)) -> Response:
+        status, payload = await telethon_login.submit_code(code.strip())
+        if status == "error":
+            return _templates.TemplateResponse(
+                request, "telethon_login.html", _ctx("code", error=payload), status_code=400,
+            )
+        if status == "need_password":
+            return RedirectResponse(url=f"{base_path}/password", status_code=303)
+        # status == "done" — по контракту telethon_login.submit_code это
+        # единственный оставшийся случай, и только в нём payload не None.
+        assert payload is not None
+        settings_store.set_secret("tg_session_string", payload)
+        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
+
+    @router.get(f"{base_path}/password", response_class=HTMLResponse)
+    async def telethon_password_form(request: Request) -> Response:
+        if not telethon_login.awaiting_password():
+            return RedirectResponse(url=base_path, status_code=303)
+        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("password"))
+
+    @router.post(f"{base_path}/password")
+    async def telethon_password_submit(request: Request, password: str = Form(...)) -> Response:
+        status, payload = await telethon_login.submit_password(password)
+        if status == "error":
+            return _templates.TemplateResponse(
+                request, "telethon_login.html", _ctx("password", error=payload), status_code=400,
+            )
+        # status == "done" — единственный оставшийся случай по контракту
+        # telethon_login.submit_password, payload гарантированно не None.
+        assert payload is not None
+        settings_store.set_secret("tg_session_string", payload)
+        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
+
+
 def _public_router() -> APIRouter:
     """Роуты без авторизации: бутстрап-визард и логин."""
     router = APIRouter()
+    _telethon_wizard_routes(router, "/setup/telethon", "/setup", "auth_base.html")
 
     @router.get("/setup", response_class=HTMLResponse)
     async def setup_form(request: Request) -> Response:
         if is_bootstrapped():
             return RedirectResponse(url="/login", status_code=303)
-        return _templates.TemplateResponse(request, "setup.html", {"error": None})
+        telethon_connected = any(
+            s.key == "tg_session_string" and s.is_set
+            for s in settings_store.list_secret_status()
+        )
+        return _templates.TemplateResponse(
+            request, "setup.html", {"error": None, "telethon_connected": telethon_connected},
+        )
 
     @router.post("/setup")
     async def setup_submit(
@@ -87,7 +195,6 @@ def _public_router() -> APIRouter:
         password_confirm: str = Form(...),
         tg_api_id: str = Form(""),
         tg_api_hash: str = Form(""),
-        tg_session_string: str = Form(""),
         tg_bot_token: str = Form(""),
         tg_owner_user_id: str = Form(""),
         openai_api_key: str = Form(""),
@@ -95,18 +202,24 @@ def _public_router() -> APIRouter:
         if is_bootstrapped():
             return RedirectResponse(url="/login", status_code=303)
         if password != password_confirm or len(password) < 8:
+            telethon_connected = any(
+                s.key == "tg_session_string" and s.is_set
+                for s in settings_store.list_secret_status()
+            )
             return _templates.TemplateResponse(
                 request, "setup.html",
-                {"error": "Пароли не совпадают или короче 8 символов"},
+                {"error": "Пароли не совпадают или короче 8 символов",
+                 "telethon_connected": telethon_connected},
                 status_code=400,
             )
 
         create_admin(password)
 
         # Секреты — write-only, тем же путём, что и обычное редактирование.
+        # tg_session_string сюда НЕ входит — он получается только через
+        # визард /setup/telethon (Фаза 5.2), не вставляется вручную.
         for key, value in (
             ("tg_api_hash", tg_api_hash),
-            ("tg_session_string", tg_session_string),
             ("tg_bot_token", tg_bot_token),
             ("openai_api_key", openai_api_key),
         ):
@@ -119,6 +232,14 @@ def _public_router() -> APIRouter:
             settings_store.save_setting("tg_owner_user_id", int(tg_owner_user_id), "int")
 
         log_in(request)
+
+        # Если все обязательные секреты уже на месте (включая сессию,
+        # полученную через визард до создания пароля) — поднимаем компоненты
+        # сразу, без перезапуска процесса.
+        settings = get_settings()
+        if settings.is_minimally_configured and not get_components().is_running:
+            await start_components(settings)
+
         return RedirectResponse(url="/", status_code=303)
 
     @router.get("/login", response_class=HTMLResponse)
@@ -190,6 +311,10 @@ def _protected_router() -> APIRouter:
             for field in group.fields:
                 value = _coerce_form_value(field.value_type, form.get(field.name))
                 settings_store.save_setting(field.name, value, field.value_type)
+            # F19/Фаза 5.2: поля с needs_resync меняют состав/параметры джобов
+            # планировщика — применяем сразу, если компоненты уже запущены.
+            if any(f.needs_resync for f in group.fields) and get_components().is_running:
+                await resync_scheduler_jobs()
         return RedirectResponse(url="/settings", status_code=303)
 
     @router.get("/secrets", response_class=HTMLResponse)
@@ -206,6 +331,43 @@ def _protected_router() -> APIRouter:
             except ValueError as exc:
                 logger.warning("Не удалось сохранить секрет '%s': %s", key, exc)
         return RedirectResponse(url="/secrets", status_code=303)
+
+    @router.get("/components", response_class=HTMLResponse)
+    async def components_page(request: Request) -> Response:
+        settings = get_settings()
+        return _templates.TemplateResponse(request, "components.html", {
+            "status": runtime_state.get_component_status(),
+            "is_running": get_components().is_running,
+            "is_minimally_configured": settings.is_minimally_configured,
+        })
+
+    @router.post("/components/start")
+    async def components_start(request: Request) -> Response:
+        del request
+        settings = get_settings()
+        if settings.is_minimally_configured and not get_components().is_running:
+            await start_components(settings)
+        return RedirectResponse(url="/components", status_code=303)
+
+    @router.post("/components/listener/restart")
+    async def components_restart_listener(request: Request) -> Response:
+        del request
+        await restart_telethon_listener()
+        return RedirectResponse(url="/components", status_code=303)
+
+    @router.post("/components/bot/restart")
+    async def components_restart_bot(request: Request) -> Response:
+        del request
+        await restart_moderation_bot()
+        return RedirectResponse(url="/components", status_code=303)
+
+    @router.post("/components/scheduler/resync")
+    async def components_resync_scheduler(request: Request) -> Response:
+        del request
+        await resync_scheduler_jobs()
+        return RedirectResponse(url="/components", status_code=303)
+
+    _telethon_wizard_routes(router, "/components/telethon", "/components", "base.html")
 
     return router
 

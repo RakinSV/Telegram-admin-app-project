@@ -1,0 +1,45 @@
+{% extends base_template %}
+{% block title %}Подключение Telegram — tg_repost admin{% endblock %}
+{% block content %}
+<div class="auth-page" style="max-width: 420px;">
+  <h1>Подключение Telegram-аккаунта</h1>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  {% if step == "phone" %}
+  <p class="muted">
+    Нужны TG_API_ID/TG_API_HASH с <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a>
+    (если ещё не заданы) и номер телефона аккаунта, который будет читать каналы.
+  </p>
+  <form method="post" action="{{ base_path }}">
+    <input type="text" name="api_id" placeholder="TG_API_ID (если ещё не задан)">
+    <input type="text" name="api_hash" placeholder="TG_API_HASH (если ещё не задан)">
+    <input type="text" name="phone" placeholder="+79991234567" required autofocus>
+    <input type="submit" value="Получить код">
+  </form>
+
+  {% elif step == "code" %}
+  <p class="muted">Код отправлен в Telegram — введи его ниже.</p>
+  <form method="post" action="{{ base_path }}/code">
+    <input type="text" name="code" placeholder="Код из Telegram" required autofocus inputmode="numeric">
+    <input type="submit" value="Подтвердить код">
+  </form>
+
+  {% elif step == "password" %}
+  <p class="muted">Аккаунт защищён облачным паролем (2FA) — введи его.</p>
+  <form method="post" action="{{ base_path }}/password">
+    <input type="password" name="password" placeholder="Пароль 2FA" required autofocus>
+    <input type="submit" value="Войти">
+  </form>
+
+  {% elif step == "done" %}
+  <div class="card" style="border-color: var(--ok);">
+    ✅ Telegram-сессия получена и сохранена (зашифрована, как обычный секрет).
+  </div>
+  <p><a href="{{ success_redirect }}">Продолжить →</a></p>
+  {% endif %}
+
+  {% if step != "done" %}
+  <p class="muted" style="margin-top: 16px;"><a href="{{ success_redirect }}">← Назад</a></p>
+  {% endif %}
+</div>
+{% endblock %}

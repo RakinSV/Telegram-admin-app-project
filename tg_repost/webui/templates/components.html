@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Компоненты — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Компоненты</h1>
+<p class="muted">
+  Рестарт каждого компонента живой — без перезапуска процесса. Делай это
+  после смены TG_SESSION_STRING/TG_BOT_TOKEN на странице «Секреты», или
+  после правки настроек, помеченных <span class="badge warn">resync</span>
+  (хотя «Настройки» теперь применяют их автоматически при сохранении).
+</p>
+
+{% if not is_running %}
+<div class="card" style="border-color: var(--warn);">
+  ⚠️ Компоненты не запущены.
+  {% if is_minimally_configured %}
+  <form method="post" action="/components/start" style="display:inline;">
+    <button type="submit">Запустить сейчас</button>
+  </form>
+  {% else %}
+  Не хватает обязательных секретов — заполни их на <a href="/secrets">«Секретах»</a>.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card grid">
+  <div class="stat">
+    <div class="label">Listener</div>
+    <span class="badge {{ 'ok' if status.listener else 'muted' }}">
+      {{ 'работает' if status.listener else 'остановлен' }}
+    </span>
+    <form method="post" action="/components/listener/restart" style="margin-top:8px;">
+      <button type="submit" class="secondary">Перезапустить listener</button>
+    </form>
+    <p class="muted" style="margin-top:6px;">
+      <a href="/components/telethon">Сменить Telegram-аккаунт →</a>
+    </p>
+  </div>
+
+  <div class="stat">
+    <div class="label">Бот модерации</div>
+    <span class="badge {{ 'ok' if status.bot else 'muted' }}">
+      {{ 'работает' if status.bot else 'остановлен' }}
+    </span>
+    <form method="post" action="/components/bot/restart" style="margin-top:8px;">
+      <button type="submit" class="secondary">Перезапустить бота</button>
+    </form>
+  </div>
+
+  <div class="stat">
+    <div class="label">Планировщик</div>
+    <span class="badge {{ 'ok' if status.scheduler else 'muted' }}">
+      {{ 'работает' if status.scheduler else 'остановлен' }}
+    </span>
+    <form method="post" action="/components/scheduler/resync" style="margin-top:8px;">
+      <button type="submit" class="secondary">Применить настройки джобов</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
