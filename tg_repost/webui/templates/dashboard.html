@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Дашборд</h1>
+
+{% if not is_minimally_configured %}
+<div class="card" style="border-color: var(--warn);">
+  ⚠️ Система не сконфигурирована полностью — Telethon-listener, бот и
+  планировщик не запущены. Заполни обязательные секреты на странице
+  <a href="/secrets">«Секреты»</a> и перезапусти процесс.
+</div>
+{% endif %}
+
+<h2>Компоненты</h2>
+<div class="card grid">
+  {% for name, running in components.items() %}
+  <div class="stat">
+    <span class="badge {{ 'ok' if running else 'muted' }}">{{ name }}: {{ 'работает' if running else 'остановлен' }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Воронка постов</h2>
+<div class="card grid">
+  {% for status, count in funnel.items() %}
+  <div class="stat">
+    <div class="num">{{ count }}</div>
+    <div class="label">{{ status }}</div>
+  </div>
+  {% else %}
+  <div class="muted">Постов ещё нет.</div>
+  {% endfor %}
+</div>
+
+<h2>Метрики</h2>
+<div class="card grid">
+  <div class="stat">
+    <div class="num">{{ tokens_today }}</div>
+    <div class="label">Токенов рерайта сегодня</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ "%.1f"|format(error_rate * 100) }}%</div>
+    <div class="label">Доля FAILED за 24ч</div>
+  </div>
+</div>
+
+<h2>Последние посты</h2>
+<div class="card">
+  <table>
+    <tr><th>ID</th><th>Вид</th><th>Статус</th><th>Создан</th><th>Текст</th></tr>
+    {% for post in recent %}
+    <tr>
+      <td>{{ post.id }}</td>
+      <td>{{ post.kind.value }}</td>
+      <td>{{ post.status.value }}</td>
+      <td>{{ post.created_at.strftime("%Y-%m-%d %H:%M") if post.created_at else "" }}</td>
+      <td>{{ (post.rewritten_text or post.original_text or "")[:80] }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Постов ещё нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

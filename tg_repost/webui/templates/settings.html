@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Настройки — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Настройки</h1>
+<p class="muted">
+  Большинство значений применяются сразу. Поля с пометкой
+  <span class="badge warn">resync</span> меняют состав/расписание задач
+  планировщика — кнопка их применения появится в Фазе 5.2 (сейчас значение
+  сохраняется, но требует ручного перезапуска планировщика).
+</p>
+
+{% for group in groups %}
+<div class="settings-group">
+  <h2>{{ group.title }}</h2>
+  <div class="card">
+    <form method="post" action="/settings/{{ group.key }}">
+      {% for field in group.fields %}
+      <div class="field-row">
+        <label for="{{ field.name }}">
+          {{ field.label }}
+          {% if field.needs_resync %}<span class="badge warn">resync</span>{% endif %}
+        </label>
+        {% if field.value_type == "bool" %}
+          <input type="checkbox" id="{{ field.name }}" name="{{ field.name }}" {{ "checked" if field.value else "" }}>
+        {% elif field.value_type == "csv_list" %}
+          <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value|join(', ') }}">
+        {% elif field.value_type in ("int", "float") %}
+          <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+        {% else %}
+          <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+      <button type="submit">Сохранить группу</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

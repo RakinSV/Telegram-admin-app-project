@@ -1,0 +1,32 @@
+{% extends "auth_base.html" %}
+{% block title %}Первый запуск — tg_repost admin{% endblock %}
+{% block content %}
+<div class="auth-page" style="max-width: 460px;">
+  <h1>Первый запуск</h1>
+  <p class="muted">
+    Создай пароль администратора и (опционально) сразу укажи минимум секретов,
+    чтобы запустить чтение каналов и публикацию. Telethon-сессию пока нужно
+    сгенерировать в терминале: <code>python -m tg_repost.tools.gen_session</code>
+    — визард для этого в браузере появится в Фазе 5.2. Всё, что оставишь
+    пустым, можно будет заполнить позже на странице «Секреты».
+  </p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" action="/setup">
+    <h2 style="margin-top:0">Пароль администратора</h2>
+    <input type="password" name="password" placeholder="Пароль (мин. 8 символов)" required minlength="8">
+    <input type="password" name="password_confirm" placeholder="Повтори пароль" required minlength="8">
+
+    <h2>Telegram (опционально сейчас)</h2>
+    <input type="text" name="tg_api_id" placeholder="TG_API_ID">
+    <input type="text" name="tg_api_hash" placeholder="TG_API_HASH">
+    <input type="text" name="tg_session_string" placeholder="TG_SESSION_STRING (из gen_session.py)">
+    <input type="text" name="tg_bot_token" placeholder="TG_BOT_TOKEN">
+    <input type="text" name="tg_owner_user_id" placeholder="TG_OWNER_USER_ID">
+
+    <h2>Рерайт (опционально сейчас)</h2>
+    <input type="text" name="openai_api_key" placeholder="OPENAI_API_KEY">
+
+    <input type="submit" value="Создать администратора и продолжить" style="margin-top: 12px;">
+  </form>
+</div>
+{% endblock %}

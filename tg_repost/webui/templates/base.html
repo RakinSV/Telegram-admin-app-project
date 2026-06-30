@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}tg_repost admin{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="brand">tg_repost</div>
+      <a href="/">Дашборд</a>
+      <a href="/settings">Настройки</a>
+      <a href="/secrets">Секреты</a>
+      <form method="post" action="/logout" style="margin-top: 20px;">
+        <button type="submit" class="secondary">Выйти</button>
+      </form>
+    </nav>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

@@ -278,6 +278,78 @@ class ChannelGrowthSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class AppSetting(Base):
+    """Настройка приложения, заданная через веб-админку (F23, Фаза 5).
+
+    Оверлей поверх дефолтов `.env`/`Settings` — см. `webui/settings_store.py`.
+    `value` хранится как JSON-текст (строка/число/bool/список), тип — в
+    `value_type`, чтобы расширение новых настроек не требовало новых колонок.
+    """
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    value: Mapped[str] = mapped_column(Text)
+    value_type: Mapped[str] = mapped_column(String(16))  # int|float|bool|str|csv_list
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class Secret(Base):
+    """Зашифрованный секрет, заданный через веб-админку (F23, Фаза 5).
+
+    `encrypted_value` — Fernet-токен (см. `webui/crypto.py`), никогда не
+    отдаётся обратно в браузер. `masked_hint` — то, что реально показывается
+    в UI (например "••••a1b2"), считается один раз при записи.
+    """
+
+    __tablename__ = "secrets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    encrypted_value: Mapped[str] = mapped_column(Text)
+    masked_hint: Mapped[str] = mapped_column(String(16))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class AdminUser(Base):
+    """Учётка администратора веб-панели (F23, Фаза 5).
+
+    Один владелец системы (см. CLAUDE.md) — таблица рассчитана на ровно одну
+    строку, но названа во множественном числе на случай будущего расширения
+    до нескольких пользователей (не потребует миграции схемы).
+    """
+
+    __tablename__ = "admin_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class AuditLog(Base):
+    """Журнал действий из веб-админки (F23, Фаза 5).
+
+    Только факт изменения и его адрес (`target`), НИКОГДА значения секретов.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor: Mapped[str] = mapped_column(String(64), default="admin")
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
     """Разобрать CSV из chat_id (поле `Source.target_chat_ids`) в список int."""
     if not raw:

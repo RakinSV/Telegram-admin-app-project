@@ -1,15 +1,24 @@
 """Конфигурация приложения через pydantic-settings.
 
-Все параметры читаются из `.env` (см. `.env.example`). Никаких голых
-`os.environ` по коду — только этот объект `settings`.
+Базовые значения читаются из `.env` (см. `.env.example`). С Фазы 5 (F23,
+веб-админка) `get_settings()` дополнительно накладывает оверлей: настройки
+из таблицы `app_settings` и расшифрованные секреты из таблицы `secrets`
+(см. `_apply_db_overrides`/`_apply_secret_overrides` ниже) — так веб-панель
+может менять конфигурацию без правки `.env` руками. 30+ существующих мест
+вызова `get_settings()` по коду не меняются: оверлей полностью прозрачен.
 """
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from tg_repost.logging_conf import get_logger
+
+logger = get_logger(__name__)
 
 
 class Settings(BaseSettings):
@@ -22,13 +31,16 @@ class Settings(BaseSettings):
     )
 
     # --- Telegram: Telethon (юзер-сессия для чтения) ---
-    tg_api_id: int = Field(..., alias="TG_API_ID")
-    tg_api_hash: str = Field(..., alias="TG_API_HASH")
+    # Поля ниже стали опциональными в Фазе 5: раньше их отсутствие в .env
+    # ронялo Settings() целиком, не давая веб-серверу даже подняться для
+    # /setup-визарда. Полнота проверяется через `is_minimally_configured`.
+    tg_api_id: int = Field(0, alias="TG_API_ID")
+    tg_api_hash: str = Field("", alias="TG_API_HASH")
     tg_session_string: str = Field("", alias="TG_SESSION_STRING")
 
     # --- Telegram: Bot API (постинг и модерация) ---
-    tg_bot_token: str = Field(..., alias="TG_BOT_TOKEN")
-    tg_owner_user_id: int = Field(..., alias="TG_OWNER_USER_ID")
+    tg_bot_token: str = Field("", alias="TG_BOT_TOKEN")
+    tg_owner_user_id: int = Field(0, alias="TG_OWNER_USER_ID")
     # Целевые группы публикации (F08/F12) хранятся в таблице `target_groups`,
     # управление — только через `cli.py add-target`. Отдельной настройки
     # "целевой группы по умолчанию" в .env намеренно нет — раньше здесь было
@@ -37,8 +49,15 @@ class Settings(BaseSettings):
 
     # --- Рерайт (OpenAI-совместимое API) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
-    openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
+    openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
+
+    # --- F23: веб-админка (Фаза 5) ---
+    # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
+    # секретов ключом из той же БД не защищало бы ни от чего). Генерируются
+    # автоматически при первом запуске setup-визарда, см. tg_repost/crypto.py.
+    webui_master_key: str = Field("", alias="WEBUI_MASTER_KEY")
+    webui_session_secret: str = Field("", alias="WEBUI_SESSION_SECRET")
 
     # --- БД ---
     database_url: str = Field("sqlite:///tg_repost.db", alias="DATABASE_URL")
@@ -157,13 +176,142 @@ class Settings(BaseSettings):
             return [str(s).strip() for s in value if str(s).strip()]
         return []
 
+    @field_validator("tg_api_id", "tg_owner_user_id", mode="before")
+    @classmethod
+    def _blank_int_to_zero(cls, value: object) -> object:
+        """Пустая строка (`TG_API_ID=` — обычный плейсхолдер из .env.example,
+        пока секрет не задан через `/setup`) не должна валить `Settings()`:
+        pydantic иначе пытается распарсить "" как int и падает с
+        ValidationError вместо мягкого дефолта 0 (`is_minimally_configured`
+        корректно интерпретирует 0 как «не настроено»)."""
+        if value == "":
+            return 0
+        return value
+
     @property
     def media_dir(self) -> str:
         """Каталог для скачанных медиа источников."""
         return "media"
 
+    @property
+    def is_minimally_configured(self) -> bool:
+        """Достаточно ли секретов, чтобы поднять Telethon-listener и бота.
+
+        Веб-сервер (Фаза 5) стартует независимо от этого — см. `main.py`.
+        Пока False, listener/бот/планировщик не запускаются, и пользователь
+        видит в логе подсказку открыть `/setup`.
+        """
+        return bool(
+            self.tg_api_id
+            and self.tg_api_hash
+            and self.tg_bot_token
+            and self.tg_owner_user_id
+            and self.openai_api_key
+        )
+
+
+# Поля, которые веб-админка (Фаза 5) считает секретами: хранятся в таблице
+# `secrets` зашифрованными (см. tg_repost/crypto.py), редактируются write-only,
+# никогда не показываются в открытом виде. Имена — реальные snake_case
+# атрибуты `Settings`, а не ALIAS (`.env`-имена) — так совпадает с ключом,
+# который пишет/читает `webui/settings_store.py`.
+SECRET_FIELD_NAMES: tuple[str, ...] = (
+    "tg_api_hash",
+    "tg_session_string",
+    "tg_bot_token",
+    "openai_api_key",
+    "brave_api_key",
+    "unsplash_access_key",
+)
+
+
+def _coerce_db_value(raw_value: str, value_type: str) -> object:
+    """Распарсить JSON-значение из `app_settings.value` по `value_type`."""
+    data = json.loads(raw_value)
+    if value_type == "int":
+        return int(data)
+    if value_type == "float":
+        return float(data)
+    if value_type == "bool":
+        return bool(data)
+    if value_type == "csv_list":
+        return list(data)
+    return str(data)
+
+
+def _apply_db_overrides(settings: Settings) -> None:
+    """Оверлей значений из `app_settings` (веб-админка) поверх .env-дефолтов.
+
+    Ленивые импорты `db.models`/`db.session` — чтобы у `db/session.py` не
+    появилось обратной зависимости от `config.py` (см. комментарий там).
+    Любая ошибка (например, таблицы ещё нет — миграция не накатана) не
+    должна ронять процесс: работаем на чистых .env-дефолтах.
+    """
+    try:
+        from tg_repost.db.models import AppSetting
+        from tg_repost.db.session import session_scope
+
+        with session_scope() as session:
+            rows = [(r.key, r.value, r.value_type) for r in session.query(AppSetting).all()]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Оверлей настроек из БД недоступен (%s) — использую .env", exc)
+        return
+
+    for key, raw_value, value_type in rows:
+        if not hasattr(settings, key):
+            continue
+        try:
+            setattr(settings, key, _coerce_db_value(raw_value, value_type))
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            logger.warning("Настройка '%s' из БД повреждена, пропущена: %s", key, exc)
+
+
+def _apply_secret_overrides(settings: Settings) -> None:
+    """Оверлей расшифрованных секретов из таблицы `secrets` поверх .env.
+
+    До первого запуска setup-визарда `webui_master_key` пуст — секретов в БД
+    ещё не существует, оверлей становится no-op.
+    """
+    if not settings.webui_master_key:
+        return
+    try:
+        from tg_repost.crypto import InvalidToken, decrypt
+        from tg_repost.db.models import Secret
+        from tg_repost.db.session import session_scope
+
+        with session_scope() as session:
+            rows = [(r.key, r.encrypted_value) for r in session.query(Secret).all()]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Оверлей секретов из БД недоступен (%s) — использую .env", exc)
+        return
+
+    for key, encrypted_value in rows:
+        if key not in SECRET_FIELD_NAMES or not hasattr(settings, key):
+            continue
+        try:
+            setattr(settings, key, decrypt(encrypted_value, settings.webui_master_key))
+        except InvalidToken:
+            logger.error(
+                "Секрет '%s' не расшифрован — неверный WEBUI_MASTER_KEY?", key
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
-    """Кэшированный синглтон настроек."""
-    return Settings()  # type: ignore[call-arg]
+    """Настройки: .env-дефолты + оверлей из БД (веб-админка, Фаза 5).
+
+    Кэшируется на процесс; после изменения настройки/секрета через веб-админку
+    вызывающий код обязан вызвать `invalidate_settings_cache()`, иначе кэш
+    переживёт сохранение до следующего перезапуска.
+    """
+    settings = Settings()  # type: ignore[call-arg]
+    _apply_db_overrides(settings)
+    _apply_secret_overrides(settings)
+    return settings
+
+
+def invalidate_settings_cache() -> None:
+    """Сбросить кэш `get_settings()` — вызывается после сохранения настройки/
+    секрета через веб-админку, чтобы изменение применилось без перезапуска
+    процесса (для значений из категории "live", см. план Фазы 5)."""
+    get_settings.cache_clear()
