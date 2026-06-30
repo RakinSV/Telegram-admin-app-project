@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Секреты и сессии
+.env
+*.session
+*.session-journal
+
+# БД (SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# Медиа, скачанное из источников
+media/
+
+# Логи
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# pytest
+.pytest_cache/
