@@ -87,7 +87,7 @@ def stats_summary(window_days: int) -> str:
 
         total_views = 0
         counted = 0
-        best = (0, None)  # (views, post_id)
+        best: tuple[int, int | None] = (0, None)  # (views, post_id)
         for post in posts:
             last = (
                 session.query(PostStat)

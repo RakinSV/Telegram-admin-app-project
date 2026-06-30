@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from telegram.ext import Application
 
+from tg_repost.ads.injector import inject_native_ad
 from tg_repost.config import get_settings
+from tg_repost.covers.dispatcher import generate_cover
 from tg_repost.db.models import Post, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.enrichment.enricher import enrich_post, enrichment_enabled_for
@@ -45,6 +47,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             original = post.original_text
             style = post.source.style_profile if post.source else None
             enrich = enrichment_enabled_for(post.source)
+            has_media = bool(post.media_path)
 
         prompt_name = resolve_style_prompt(style)
         try:
@@ -64,15 +67,22 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             if block:
                 final_text = f"{final_text}\n{block}"
 
+        # F18 — авто-обложка, только если у поста ещё нет своего медиа.
+        cover_path: str | None = None
+        if not has_media:
+            cover_path = await generate_cover(rewriter, original)
+
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post:
                 post.rewritten_text = final_text
                 post.rewrite_tokens = result.total_tokens
+                if cover_path:
+                    post.media_path = cover_path
                 post.set_status(PostStatus.REWRITTEN)
         logger.info(
-            "Пост %s рерайчен (стиль=%s, обогащение=%s, %d токенов)",
-            post_id, prompt_name, enrich, result.total_tokens,
+            "Пост %s рерайчен (стиль=%s, обогащение=%s, обложка=%s, %d токенов)",
+            post_id, prompt_name, enrich, bool(cover_path), result.total_tokens,
         )
 
 
@@ -103,10 +113,11 @@ async def _auto_publish_rewritten(application: Application) -> None:
 
 
 async def pipeline_tick(rewriter: RewriterClient, application: Application) -> None:
-    """Один проход пайплайна: рерайт + (модерация | авто-постинг)."""
+    """Один проход пайплайна: рерайт + реклама (F21) + (модерация | авто-постинг)."""
     settings = get_settings()
     try:
         await rewrite_new_posts(rewriter)
+        await inject_native_ad(rewriter)
         if settings.auto_post_enabled:
             await _auto_publish_rewritten(application)
         else:

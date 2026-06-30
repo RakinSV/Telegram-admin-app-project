@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from tg_repost.db.models import Base, Source, TargetGroup
+from tg_repost.db.models import AdBrief, Base, Source, TargetGroup
 from tg_repost.db.session import engine, session_scope
 from tg_repost.logging_conf import setup_logging
 
@@ -167,6 +167,42 @@ def cmd_list_targets(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_ad_brief(args: argparse.Namespace) -> int:
+    """F21 — добавить бриф нативной рекламы."""
+    with session_scope() as session:
+        session.add(
+            AdBrief(brief_text=args.brief_text, is_active=True, max_uses=args.max_uses)
+        )
+    print("✅ Бриф добавлен.")
+    return 0
+
+
+def cmd_list_ad_briefs(_: argparse.Namespace) -> int:
+    with session_scope() as session:
+        briefs = session.query(AdBrief).order_by(AdBrief.id).all()
+        if not briefs:
+            print("Брифов нет.")
+            return 0
+        print(f"{'ID':<4} {'Акт':<4} {'Использован':<14} {'Лимит':<8} Текст")
+        for b in briefs:
+            preview = b.brief_text[:60].replace("\n", " ")
+            limit = str(b.max_uses) if b.max_uses is not None else "∞"
+            print(f"{b.id:<4} {'да' if b.is_active else 'нет':<4} "
+                  f"{b.times_used:<14} {limit:<8} {preview}")
+    return 0
+
+
+def cmd_disable_ad_brief(args: argparse.Namespace) -> int:
+    with session_scope() as session:
+        brief = session.get(AdBrief, args.brief_id)
+        if brief is None:
+            print(f"Бриф #{args.brief_id} не найден.")
+            return 1
+        brief.is_active = False
+    print(f"✅ Бриф #{args.brief_id} деактивирован.")
+    return 0
+
+
 def cmd_init_db(_: argparse.Namespace) -> int:
     """Создать таблицы напрямую (для dev; в проде — alembic upgrade head)."""
     Base.metadata.create_all(engine)
@@ -212,6 +248,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("list-targets", help="Список целевых групп")
     p.set_defaults(func=cmd_list_targets)
+
+    p = sub.add_parser("add-ad-brief", help="F21: добавить бриф рекламы")
+    p.add_argument("brief_text", help="текст брифа (используй -- если начинается с -)")
+    p.add_argument("--max-uses", type=int, default=None, dest="max_uses",
+                    help="лимит показов (по умолчанию без лимита)")
+    p.set_defaults(func=cmd_add_ad_brief)
+
+    p = sub.add_parser("list-ad-briefs", help="F21: список брифов рекламы")
+    p.set_defaults(func=cmd_list_ad_briefs)
+
+    p = sub.add_parser("disable-ad-brief", help="F21: деактивировать бриф")
+    p.add_argument("brief_id", type=int)
+    p.set_defaults(func=cmd_disable_ad_brief)
 
     p = sub.add_parser("init-db", help="Создать таблицы (dev, без alembic)")
     p.set_defaults(func=cmd_init_db)

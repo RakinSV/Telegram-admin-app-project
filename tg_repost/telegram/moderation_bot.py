@@ -22,7 +22,7 @@ from telegram.ext import (
 )
 
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostStatus
+from tg_repost.db.models import Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 from tg_repost.telegram.publisher import publish_post
@@ -46,14 +46,22 @@ def _keyboard(post_id: int) -> InlineKeyboardMarkup:
     )
 
 
+_KIND_LABELS = {
+    PostKind.AD: "🎯 РЕКЛАМА",
+    PostKind.DIGEST: "📰 ДАЙДЖЕСТ",
+}
+
+
 def _format_preview(post: Post) -> str:
     text = post.rewritten_text or post.original_text or "(пусто)"
     src = f"\n\n🔗 Источник: {post.source_link}" if post.source_link else ""
     media = "\n🖼 Есть медиа" if post.media_path else ""
+    kind_label = _KIND_LABELS.get(post.kind)
+    kind_line = f"\n{kind_label}" if kind_label else ""
     body = text[:_PREVIEW_LEN]
     if len(text) > _PREVIEW_LEN:
         body += "…"
-    return f"📝 Пост #{post.id} на модерацию:\n\n{body}{media}{src}"
+    return f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n{body}{media}{src}"
 
 
 async def send_pending_for_approval(application: Application) -> None:
@@ -193,7 +201,7 @@ async def _cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if update.message:
         await update.message.reply_text(
             "Бот модерации запущен. Рерайченные посты будут приходить сюда "
-            "с кнопками одобрения.\nКоманды: /stats — статистика за период."
+            "с кнопками одобрения.\nКоманды: /stats, /best_times, /growth."
         )
 
 
@@ -208,6 +216,24 @@ async def _cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(summary)
 
 
+async def _cmd_best_times(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /best_times — рекомендация часов публикации (F19, каркас)."""
+    from tg_repost.scheduler.smart_schedule import best_times_summary
+
+    if update.message is None:
+        return
+    await update.message.reply_text(best_times_summary())
+
+
+async def _cmd_growth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /growth — отчёт о приросте подписчиков (F22, каркас)."""
+    from tg_repost.scheduler.growth import growth_summary
+
+    if update.message is None:
+        return
+    await update.message.reply_text(growth_summary())
+
+
 def build_application() -> Application:
     """Собрать PTB Application с хендлерами модерации."""
     settings = get_settings()
@@ -216,6 +242,8 @@ def build_application() -> Application:
     application = Application.builder().token(settings.tg_bot_token).build()
     application.add_handler(CommandHandler("start", _cmd_start, filters=owner_filter))
     application.add_handler(CommandHandler("stats", _cmd_stats, filters=owner_filter))
+    application.add_handler(CommandHandler("best_times", _cmd_best_times, filters=owner_filter))
+    application.add_handler(CommandHandler("growth", _cmd_growth, filters=owner_filter))
     application.add_handler(CallbackQueryHandler(_on_callback))
     application.add_handler(
         MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _on_text)

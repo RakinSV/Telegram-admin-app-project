@@ -86,7 +86,17 @@ async def publish_post(bot: Bot, post_id: int) -> None:
 
     with session_scope() as session:
         post = session.get(Post, post_id)
-        if post is None or post.status != PostStatus.APPROVED:
+        if post is None:
+            logger.warning("Публикация поста %s невозможна: пост не найден", post_id)
+            return
+        if post.status != PostStatus.APPROVED:
+            # Не ошибка сама по себе — например, пост уже отклонили модератором
+            # между выборкой в publish_slot и этим вызовом (TOCTOU-окно), но
+            # без лога оператор не узнает, почему запланированный пост не вышел.
+            logger.info(
+                "Публикация поста %s пропущена: статус %s (ожидался approved)",
+                post_id, post.status.value,
+            )
             return
         text = post.rewritten_text or post.original_text
         media_path = post.media_path

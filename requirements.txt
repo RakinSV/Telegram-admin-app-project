@@ -9,7 +9,7 @@ alembic==1.13.3
 # --- Конфиг ---
 pydantic==2.9.2
 pydantic-settings==2.5.2
-python-dotenv==1.0.1
+python-dotenv==1.2.2          # CVE-2026-28684 fixed in 1.2.2
 
 # --- Рерайт (любой OpenAI-совместимый API) ---
 openai==1.51.0
@@ -19,5 +19,5 @@ httpx==0.27.2
 APScheduler==3.10.4
 
 # --- Тесты ---
-pytest==8.3.3
-pytest-asyncio==0.24.0
+pytest==9.0.3                 # CVE-2025-71176 fixed in 9.0.3
+pytest-asyncio==1.4.0          # 0.24.0 не совместим с pytest 9 (requires pytest<9)

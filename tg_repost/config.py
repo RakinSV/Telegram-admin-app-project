@@ -29,7 +29,11 @@ class Settings(BaseSettings):
     # --- Telegram: Bot API (постинг и модерация) ---
     tg_bot_token: str = Field(..., alias="TG_BOT_TOKEN")
     tg_owner_user_id: int = Field(..., alias="TG_OWNER_USER_ID")
-    tg_target_chat_id: int = Field(..., alias="TG_TARGET_CHAT_ID")
+    # Целевые группы публикации (F08/F12) хранятся в таблице `target_groups`,
+    # управление — только через `cli.py add-target`. Отдельной настройки
+    # "целевой группы по умолчанию" в .env намеренно нет — раньше здесь было
+    # неиспользуемое поле TG_TARGET_CHAT_ID, вводившее в заблуждение (выглядело
+    # как рабочий конфиг, но нигде не читалось).
 
     # --- Рерайт (OpenAI-совместимое API) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
@@ -88,6 +92,46 @@ class Settings(BaseSettings):
     # Сколько результатов запрашивать у Brave и сколько максимум вставлять в пост.
     enrichment_max_results: int = Field(8, alias="ENRICHMENT_MAX_RESULTS")
     enrichment_max_sources: int = Field(3, alias="ENRICHMENT_MAX_SOURCES")
+
+    # --- F18: авто-обложки ---
+    enable_auto_cover: bool = Field(False, alias="ENABLE_AUTO_COVER")
+    cover_strategy: str = Field("unsplash", alias="COVER_STRATEGY")  # unsplash | comfyui
+    unsplash_access_key: str = Field("", alias="UNSPLASH_ACCESS_KEY")
+    unsplash_api_url: str = Field(
+        "https://api.unsplash.com/photos/random", alias="UNSPLASH_API_URL"
+    )
+    comfyui_base_url: str = Field("http://127.0.0.1:8188", alias="COMFYUI_BASE_URL")
+    # Путь к workflow в API-формате (экспорт из ComfyUI), специфичен для установки
+    # пользователя (чекпойнт, сэмплер) — общего шаблона на все случаи нет.
+    comfyui_workflow_path: str = Field("", alias="COMFYUI_WORKFLOW_PATH")
+    # ID узла (ключ в JSON workflow) CLIPTextEncode, куда подставляется промпт.
+    comfyui_positive_node_id: str = Field("", alias="COMFYUI_POSITIVE_NODE_ID")
+    comfyui_poll_attempts: int = Field(60, alias="COMFYUI_POLL_ATTEMPTS")
+    comfyui_poll_interval_seconds: float = Field(2.0, alias="COMFYUI_POLL_INTERVAL_SECONDS")
+
+    # --- F19: умное расписание (каркас — только рекомендация, без автоприменения) ---
+    smart_schedule_min_posts: int = Field(20, alias="SMART_SCHEDULE_MIN_POSTS")
+    smart_schedule_top_n: int = Field(3, alias="SMART_SCHEDULE_TOP_N")
+    smart_schedule_window_days: int = Field(21, alias="SMART_SCHEDULE_WINDOW_DAYS")
+
+    # --- F20: авто-дайджест ---
+    digest_enabled: bool = Field(False, alias="DIGEST_ENABLED")
+    # День недели для APScheduler CronTrigger: mon,tue,wed,thu,fri,sat,sun.
+    digest_day_of_week: str = Field("sun", alias="DIGEST_DAY_OF_WEEK")
+    digest_hour: int = Field(12, alias="DIGEST_HOUR")
+    digest_minute: int = Field(0, alias="DIGEST_MINUTE")
+    digest_top_n: int = Field(5, alias="DIGEST_TOP_N")
+    digest_window_days: int = Field(7, alias="DIGEST_WINDOW_DAYS")
+
+    # --- F21: нативная реклама ---
+    # Каждый N-й опубликованный обычный пост — рекламный. 0 = выключено.
+    ad_every_nth_post: int = Field(0, alias="AD_EVERY_NTH_POST")
+
+    # --- F22: growth-трекер (каркас — сбор данных + простой отчёт) ---
+    growth_tracking_enabled: bool = Field(False, alias="GROWTH_TRACKING_ENABLED")
+    growth_snapshot_interval_minutes: int = Field(360, alias="GROWTH_SNAPSHOT_INTERVAL_MINUTES")
+    growth_min_snapshots: int = Field(2, alias="GROWTH_MIN_SNAPSHOTS")
+    growth_report_window_days: int = Field(7, alias="GROWTH_REPORT_WINDOW_DAYS")
 
     @field_validator("filter_stop_words", "filter_required_words", mode="before")
     @classmethod

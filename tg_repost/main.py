@@ -19,6 +19,8 @@ from apscheduler.triggers.cron import CronTrigger
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
 from tg_repost.rewriter.client import RewriterClient
+from tg_repost.scheduler.digest import run_digest_job
+from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
 from tg_repost.scheduler.posting import parse_slot, publish_slot
 from tg_repost.scheduler.stats import collect_stats
@@ -94,6 +96,37 @@ async def run() -> None:
             id="collect_stats",
         )
         logger.info("Сбор статистики включён, период %d мин", settings.stats_interval_minutes)
+
+    # F20 — еженедельный авто-дайджест.
+    if settings.digest_enabled:
+        scheduler.add_job(
+            run_digest_job,
+            trigger=CronTrigger(
+                day_of_week=settings.digest_day_of_week,
+                hour=settings.digest_hour,
+                minute=settings.digest_minute,
+            ),
+            args=[rewriter, application],
+            max_instances=1,
+            coalesce=True,
+            id="digest_job",
+        )
+        logger.info("Авто-дайджест включён: %s %02d:%02d",
+                    settings.digest_day_of_week, settings.digest_hour, settings.digest_minute)
+
+    # F22 — периодический сбор снимков числа подписчиков.
+    if settings.growth_tracking_enabled:
+        scheduler.add_job(
+            collect_growth_snapshot,
+            trigger="interval",
+            minutes=settings.growth_snapshot_interval_minutes,
+            args=[tele_client],
+            max_instances=1,
+            coalesce=True,
+            id="collect_growth_snapshot",
+        )
+        logger.info("Growth-трекер включён, период %d мин",
+                    settings.growth_snapshot_interval_minutes)
 
     scheduler.start()
     logger.info("Пайплайн-тик каждые %d с (auto_post=%s, scheduled_posting=%s)",

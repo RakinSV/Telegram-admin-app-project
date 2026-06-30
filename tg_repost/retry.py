@@ -30,6 +30,9 @@ async def retry_async(
 
     Бросает последнее исключение, если все попытки исчерпаны.
     """
+    if attempts < 1:
+        raise ValueError(f"attempts должно быть >= 1, получено {attempts}")
+
     delay = base_delay
     last_exc: BaseException | None = None
 
@@ -47,5 +50,9 @@ async def retry_async(
             await asyncio.sleep(delay)
             delay = min(delay * 2, max_delay)
 
-    assert last_exc is not None
+    if last_exc is None:
+        # Недостижимо при attempts >= 1: цикл либо вернул значение, либо
+        # установил last_exc. Явная проверка вместо assert — assert вырезается
+        # при запуске с `python -O`, и `raise None` дал бы непонятный TypeError.
+        raise RuntimeError("retry_async: внутренняя ошибка — нет ни результата, ни исключения")
     raise last_exc

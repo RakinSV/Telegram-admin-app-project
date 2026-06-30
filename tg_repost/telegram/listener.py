@@ -7,7 +7,10 @@
 
 from __future__ import annotations
 
-import os
+import asyncio
+import re
+import uuid
+from pathlib import Path
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -27,6 +30,26 @@ logger = get_logger(__name__)
 # F17: почасовой лимит «тяжёлых» действий (скачивание медиа). Создаётся лениво,
 # чтобы настройки уже были загружены.
 _rate_limiter: HourlyRateLimiter | None = None
+
+# Допустимое расширение: точка + 1-8 латинских букв/цифр (например ".jpg").
+_SAFE_EXT_RE = re.compile(r"^\.[A-Za-z0-9]{1,8}$")
+
+
+def _safe_media_extension(message: events.NewMessage.Event) -> str:
+    """Безопасное расширение медиафайла (защита от path traversal, CWE-22).
+
+    `message.file.ext` Telethon вычисляет через `mimetypes.guess_extension()`
+    по MIME-типу вложения, а не из произвольного имени файла, присланного
+    автором поста — это уже безопасно, но дополнительно валидируем формат
+    как defense-in-depth на случай нестандартного значения.
+    """
+    try:
+        ext = message.file.ext if message.file else None
+    except Exception:  # noqa: BLE001
+        ext = None
+    if ext and _SAFE_EXT_RE.match(ext):
+        return ext
+    return ".bin"
 
 
 def _get_rate_limiter() -> HourlyRateLimiter:
@@ -184,18 +207,33 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
 
     # Скачивание медиа вне сессии (F17: под почасовым лимитом «тяжёлых» действий).
     if message.media:
-        os.makedirs(settings.media_dir, exist_ok=True)
         await _get_rate_limiter().acquire()
         try:
-            path = await message.download_media(file=settings.media_dir)
+            # Скачиваем В ПАМЯТЬ (file=bytes), а не доверяем Telethon выбор
+            # имени файла из вложения: при file=<директория> Telethon берёт имя
+            # из DocumentAttributeFilename, которое полностью контролируется
+            # автором исходного поста и может содержать `../../` — это привело
+            # бы к перезаписи произвольного файла за пределами media_dir
+            # (path traversal, CWE-22). Имя файла формируем сами ниже.
+            media_bytes = await message.download_media(file=bytes)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Не удалось скачать медиа поста %s: %s", message.id, exc)
-            path = None
-        if path:
+            media_bytes = None
+
+        if media_bytes:
+            ext = _safe_media_extension(message)
+            media_dir = Path(settings.media_dir)
+            dest = media_dir / f"media_{post_id}_{uuid.uuid4().hex}{ext}"
+
+            def _save(data: bytes = media_bytes, target: Path = dest) -> None:
+                media_dir.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+
+            await asyncio.to_thread(_save)
             with session_scope() as session:
                 saved = session.get(Post, post_id)
                 if saved is not None:
-                    saved.media_path = path
+                    saved.media_path = str(dest)
 
 
 async def start_listener(client: TelegramClient) -> None:

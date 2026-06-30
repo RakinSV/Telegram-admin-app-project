@@ -11,6 +11,14 @@ os.environ.setdefault("TG_API_ID", "1")
 os.environ.setdefault("TG_API_HASH", "test")
 os.environ.setdefault("TG_BOT_TOKEN", "test")
 os.environ.setdefault("TG_OWNER_USER_ID", "1")
-os.environ.setdefault("TG_TARGET_CHAT_ID", "-100")
 os.environ.setdefault("OPENAI_API_KEY", "test")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+
+# Схема для тестов, которые читают/пишут БД напрямую (Фаза 4: ads/growth).
+# sqlite:///:memory: в этом процессе использует один и тот же engine-синглтон
+# (tg_repost.db.session.engine создаётся один раз при первом импорте), поэтому
+# таблицы достаточно создать один раз здесь, до сбора тестов.
+from tg_repost.db.models import Base  # noqa: E402
+from tg_repost.db.session import engine  # noqa: E402
+
+Base.metadata.create_all(engine)

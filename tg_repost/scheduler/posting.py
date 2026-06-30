@@ -60,4 +60,11 @@ async def publish_slot(application: Application) -> None:
 
     logger.info("Слот публикации: публикую %d пост(ов)", len(post_ids))
     for post_id in post_ids:
-        await publish_post(application.bot, post_id)
+        try:
+            await publish_post(application.bot, post_id)
+        except Exception as exc:  # noqa: BLE001
+            # Изоляция ошибок: publish_post сам ловит сбои самой отправки
+            # (Telegram API), но это страхует от неожиданных исключений ДО
+            # них (например, в resolve_targets_for_post) — иначе один плохой
+            # пост молча обрывает публикацию остальных постов в этом слоте.
+            logger.exception("Слот публикации: пост %s провален: %s", post_id, exc)

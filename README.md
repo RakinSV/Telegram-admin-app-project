@@ -9,7 +9,9 @@
 ## Статус
 
 Реализовано: **Фаза 0** (каркас) + **Фаза 1** (MVP, F01–F10) +
-**Фаза 2** (расширение, F11–F14, F17) + **Фаза 3** (качество контента, F15–F16).
+**Фаза 2** (расширение, F11–F14, F17) + **Фаза 3** (качество контента, F15–F16) +
+**Фаза 4** (рост и монетизация, F18, F20, F21 полностью; F19, F22 — каркас).
+**Фаза 5 (F23, веб-UI)** — отдельный подпроект, не начат.
 
 ## Стек
 
@@ -39,8 +41,9 @@ cp .env.example .env   # затем заполнить значения
    Вставить вывод в `TG_SESSION_STRING`.
 3. `TG_BOT_TOKEN` — создать бота у @BotFather.
 4. `TG_OWNER_USER_ID` — свой user_id (узнать у @userinfobot).
-5. `TG_TARGET_CHAT_ID` — chat_id целевой группы/канала (бот должен быть админом).
-6. `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` — провайдер рерайта.
+5. `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `OPENAI_MODEL` — провайдер рерайта.
+6. Целевые группы публикации добавляются после инициализации БД через CLI
+   (`add-target`, см. ниже) — отдельной настройки в `.env` для этого нет.
 
 ## Инициализация БД
 
@@ -74,8 +77,17 @@ python -m tg_repost.cli set-source-style @some_channel news
 python -m tg_repost.cli set-source-enrich @some_channel on
 ```
 
-> `TG_TARGET_CHAT_ID` из `.env` — это значение по умолчанию для первого
-> запуска; целевые группы хранятся в БД и добавляются через `add-target`.
+## Управление рекламными брифами (F21)
+
+```bash
+python -m tg_repost.cli add-ad-brief "Скидка 20% у партнёра XYZ" --max-uses 5
+python -m tg_repost.cli list-ad-briefs
+python -m tg_repost.cli disable-ad-brief 1
+```
+
+> Целевые группы хранятся только в БД (таблица `target_groups`) и
+> добавляются исключительно через `add-target` — без этого шага публиковать
+> посты будет некуда.
 
 ## Проверка Telethon (критерий готовности Фазы 0)
 
@@ -141,6 +153,54 @@ LLM выделяет поисковый запрос, ищет в Brave Search, 
 `set-source-enrich @channel on|off|default`. При любой ошибке/отсутствии ключа
 пост рерайтится без блока — пайплайн не ломается.
 
+## Авто-обложки (F18)
+
+`ENABLE_AUTO_COVER=true` — если у поста нет своего медиа, LLM формулирует
+короткий запрос по теме и генерирует обложку:
+- `COVER_STRATEGY=unsplash` (по умолчанию) — стоковое фото по ключевым словам
+  через Unsplash API (`UNSPLASH_ACCESS_KEY`), быстро и бесплатно, но не уникально.
+- `COVER_STRATEGY=comfyui` — уникальная AI-генерация через локальный ComfyUI.
+  Нужен `COMFYUI_WORKFLOW_PATH` (экспорт workflow в API-формате: Settings →
+  Enable Dev mode → Save (API Format)) и `COMFYUI_POSITIVE_NODE_ID` — id узла
+  CLIPTextEncode в этом JSON, куда подставляется промпт. Эти два параметра
+  специфичны для конкретной установки (чекпойнт/сэмплер) — общего шаблона нет.
+
+Любая ошибка/не настроено → пост рерайтится без обложки, пайплайн не ломается.
+
+## Умное расписание — каркас (F19)
+
+Команда бота `/best_times` анализирует накопленную статистику просмотров
+(F14) и **рекомендует** часы публикации — но НЕ применяет их автоматически к
+`POSTING_SLOTS` (для надёжного вывода нужно реальное накопление: минимум
+`SMART_SCHEDULE_MIN_POSTS` опубликованных постов за `SMART_SCHEDULE_WINDOW_DAYS`
+дней). При недостатке данных команда честно сообщает об этом, а не выдаёт
+случайный результат. Час считается в UTC (без поправки на таймзону аудитории).
+
+## Авто-дайджест (F20)
+
+`DIGEST_ENABLED=true` — раз в неделю (`DIGEST_DAY_OF_WEEK`/`DIGEST_HOUR`/
+`DIGEST_MINUTE`) отбирает топ-`DIGEST_TOP_N` постов по просмотрам за
+`DIGEST_WINDOW_DAYS` дней, просит LLM собрать их в один сводный пост и ставит
+его в обычный пайплайн модерации/публикации (помечен «📰 ДАЙДЖЕСТ» в превью).
+
+## Нативная реклама (F21)
+
+`AD_EVERY_NTH_POST=N` (0 = выключено) — каждый N-й опубликованный обычный
+пост в очереди сопровождается рекламным, сгенерированным ИИ из активного
+брифа (round-robin по наименее использованному, см. `add-ad-brief` выше).
+Рекламный пост идёт по тому же пайплайну модерации/публикации, помечен
+«🎯 РЕКЛАМА» в превью. Промпт требует явной маркировки рекламы в тексте.
+
+## Growth-трекер — каркас (F22)
+
+`GROWTH_TRACKING_ENABLED=true` — раз в `GROWTH_SNAPSHOT_INTERVAL_MINUTES`
+снимает число подписчиков активных целевых каналов через Telethon в
+`channel_growth_snapshots`. Команда бота `/growth` показывает прирост за
+`GROWTH_REPORT_WINDOW_DAYS` дней и количество постов по стилям за тот же
+период — это **счётчики, не статистическая корреляция**: на малом объёме
+данных вычислять псевдо-корреляцию было бы вводящим в заблуждение. Полноценная
+корреляционная модель — следующий шаг, когда данных накопится достаточно.
+
 ## Тесты
 
 ```bash
@@ -156,31 +216,41 @@ tg_repost/
   retry.py             # ретрай сетевых вызовов
   antiban.py           # джиттер + почасовой лимит (F17)
   filtering.py         # фильтр ключевых слов (F03)
-  cli.py               # управление источниками/целями (F01, F12)
+  cli.py               # источники/цели/стили/брифы (F01, F12, F15, F16, F21)
   main.py              # точка входа
   db/
-    models.py          # ORM + статус-машина (F05), post_stats (F14)
+    models.py          # ORM, статус-машина (F05), PostKind (F18-F21), post_stats (F14)
     session.py
-    migrations/        # alembic (0001 + 0002 + 0003)
+    migrations/        # alembic (0001..0004)
   telegram/
     listener.py        # Telethon listener (F02-F04, F13, F17)
     publisher.py       # публикация (F08), per-source цели (F12)
-    moderation_bot.py  # модерация (F07), /stats (F14)
+    moderation_bot.py  # модерация (F07), /stats /best_times /growth
   rewriter/
-    client.py          # OpenAI-клиент: рерайт+стили (F06/F15), complete (F16), эмбеддинги (F13)
-    prompts/           # default, news, opinion, instruction, humor, keywords, select_sources
+    client.py          # OpenAI-клиент: рерайт+стили (F06/F15), complete (F16/F18/F20/F21), эмбеддинги (F13)
+    prompts/           # default/news/opinion/instruction/humor, keywords, select_sources,
+                        # cover_prompt (F18), digest (F20), native_ad (F21)
   dedup/
     hash_dedup.py      # хэш-дедуп (F04)
     semantic.py        # семантический дубль-чек (F13)
   enrichment/
     search.py          # клиент Brave Search (F16)
     enricher.py        # оркестрация добора источников (F16)
+  covers/
+    unsplash.py        # клиент Unsplash (F18)
+    comfyui.py          # клиент локального ComfyUI (F18)
+    dispatcher.py       # выбор стратегии, сохранение файла (F18)
+  ads/
+    injector.py         # периодичность + генерация рекламного поста (F21)
   scheduler/
-    jobs.py            # рерайт-джоба (стиль+обогащение), пайплайн-тик
-    posting.py         # авто-постинг по слотам (F11)
-    stats.py           # сбор статистики (F14)
+    jobs.py             # рерайт-джоба (стиль+обогащение+обложка+реклама), пайплайн-тик
+    posting.py          # авто-постинг по слотам (F11)
+    stats.py            # сбор статистики (F14)
+    digest.py           # авто-дайджест недели (F20)
+    smart_schedule.py   # рекомендация часов публикации, каркас (F19)
+    growth.py           # снимки подписчиков + отчёт, каркас (F22)
   tools/
     gen_session.py     # генерация Telethon session string
     check_telethon.py  # диагностика авторизации
-tests/                 # unit-тесты (F03/F04/F05/F11/F12/F13/F15/F16/F17)
+tests/                 # unit-тесты на все фичи F01-F22 (чистые функции + БД)
 ```

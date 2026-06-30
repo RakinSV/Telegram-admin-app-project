@@ -72,6 +72,20 @@ def test_failed_can_retry():
     assert post.status is PostStatus.REWRITING
 
 
+def test_rewritten_can_skip_pending_approval_for_auto_post():
+    # Используется _auto_publish_rewritten (AUTO_POST_ENABLED=true) — без
+    # ручной модерации REWRITTEN сразу становится APPROVED.
+    post = _make_post(PostStatus.REWRITTEN)
+    post.set_status(PostStatus.APPROVED)
+    assert post.status is PostStatus.APPROVED
+
+
+def test_rewritten_cannot_go_directly_to_rejected():
+    post = _make_post(PostStatus.REWRITTEN)
+    with pytest.raises(InvalidStatusTransition):
+        post.set_status(PostStatus.REJECTED)
+
+
 def test_terminal_flag():
     assert PostStatus.POSTED.is_terminal
     assert PostStatus.REJECTED.is_terminal

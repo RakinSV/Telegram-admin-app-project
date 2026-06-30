@@ -94,6 +94,21 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
 }
 
 
+class PostKind(str, enum.Enum):
+    """Происхождение поста — определяет, есть ли у него реальный источник.
+
+    SOURCE — обычный репост из Telegram-канала (F02). AD — сгенерированный
+    рекламный пост из брифа (F21). DIGEST — сводный пост недели (F20). Все три
+    вида проходят один и тот же пайплайн модерации/публикации (F05/F07/F08);
+    AD/DIGEST создаются сразу со статусом REWRITTEN, минуя NEW/дедуп — для них
+    нет «оригинала» для рерайта.
+    """
+
+    SOURCE = "source"
+    AD = "ad"
+    DIGEST = "digest"
+
+
 class InvalidStatusTransition(Exception):
     """Попытка недопустимого перехода статуса поста."""
 
@@ -149,18 +164,35 @@ class Post(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    source_id: Mapped[int] = mapped_column(ForeignKey("sources.id"), index=True)
-    source: Mapped["Source"] = relationship(back_populates="posts")
+    # Происхождение поста (F18-F21: AD/DIGEST не имеют реального источника).
+    kind: Mapped[PostKind] = mapped_column(
+        Enum(PostKind, native_enum=False, length=16),
+        default=PostKind.SOURCE,
+        nullable=False,
+    )
+
+    # NULL для AD/DIGEST постов — у них нет канала-источника.
+    source_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sources.id"), nullable=True, index=True
+    )
+    source: Mapped["Source | None"] = relationship(back_populates="posts")
 
     # ID сообщения в канале-источнике (для ссылки на оригинал и анти-дубля).
-    source_message_id: Mapped[int] = mapped_column(BigInteger)
+    # NULL для AD/DIGEST.
+    source_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     original_text: Mapped[str] = mapped_column(Text, default="")
     rewritten_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Хэш нормализованного оригинала для дедупликации (F04).
-    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    # Хэш нормализованного оригинала для дедупликации (F04). NULL для AD/DIGEST
+    # — дедупликация для синтетических постов не применима.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # F21: бриф, из которого сгенерирован рекламный пост (только для kind=AD).
+    ad_brief_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ad_briefs.id"), nullable=True
+    )
 
     # F13: эмбеддинг оригинала (вектор float32, упакованный в BLOB) для
     # семантического дубль-чека. NULL, если эмбеддинги выключены.
@@ -218,6 +250,31 @@ class PostStat(Base):
     view_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     forward_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reaction_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class AdBrief(Base):
+    """Бриф для нативной рекламы (F21): текст-задание, по которому ИИ пишет пост."""
+
+    __tablename__ = "ad_briefs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    brief_text: Mapped[str] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # NULL — без ограничения по числу использований.
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    times_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ChannelGrowthSnapshot(Base):
+    """Снимок числа подписчиков целевого канала во времени (F22)."""
+
+    __tablename__ = "channel_growth_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    subscriber_count: Mapped[int] = mapped_column(Integer)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
