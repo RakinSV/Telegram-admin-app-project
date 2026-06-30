@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Источник @{{ source.channel_username }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Источник @{{ source.channel_username }}</h1>
+<p class="muted">{{ source.channel_title or '' }}</p>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/sources/{{ source.id }}">
+    <div class="field-row">
+      <label for="style_profile">Стиль рерайта</label>
+      <select id="style_profile" name="style_profile" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+        <option value="" {{ 'selected' if not source.style_profile else '' }}>default</option>
+        {% for st in known_styles %}
+        <option value="{{ st }}" {{ 'selected' if source.style_profile == st else '' }}>{{ st }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="enrich_mode">Добор источников (F16)</label>
+      <select id="enrich_mode" name="enrich_mode" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+        <option value="default" {{ 'selected' if source.enrich_sources is none else '' }}>по глобальной настройке</option>
+        <option value="on" {{ 'selected' if source.enrich_sources == True else '' }}>включён</option>
+        <option value="off" {{ 'selected' if source.enrich_sources == False else '' }}>выключен</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="target_chat_ids">Цели (chat_id через запятую, F12)</label>
+      <input type="text" id="target_chat_ids" name="target_chat_ids" value="{{ source.target_chat_ids or '' }}" placeholder="пусто — во все активные">
+    </div>
+    <button type="submit">Сохранить</button>
+  </form>
+</div>
+
+<p><a href="/sources">&larr; К списку источников</a></p>
+{% endblock %}

@@ -2,11 +2,15 @@
 
 Периодически опрашивает просмотры/пересылки/реакции опубликованных постов
 через Telethon (юзер-сессия видит метрики каналов) и пишет снимки в
-`post_stats`. Команда бота `/stats` агрегирует данные за период.
+`post_stats`. Команда бота `/stats` и веб-страница `/stats` (Фаза 5.3)
+агрегируют данные за период через `compute_stats_summary` — структурированные
+данные отдельно от текстового форматирования, как и в `smart_schedule.py`/
+`growth.py`.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from telethon import TelegramClient
@@ -73,8 +77,21 @@ async def collect_stats(client: TelegramClient) -> int:
     return captured
 
 
-def stats_summary(window_days: int) -> str:
-    """Текстовая сводка для команды /stats за период (последние снимки на пост)."""
+@dataclass(frozen=True)
+class StatsSummary:
+    """Структурированная сводка статистики за период (для /stats и веб-страницы)."""
+
+    window_days: int
+    published: int
+    counted: int
+    total_views: int
+    avg_views: float
+    top_post_id: int | None
+    top_post_views: int
+
+
+def compute_stats_summary(window_days: int) -> StatsSummary:
+    """Сводка по опубликованным постам за период (последний снимок на пост)."""
     since = datetime.now(timezone.utc) - timedelta(days=window_days)
     with session_scope() as session:
         posts = (
@@ -83,7 +100,10 @@ def stats_summary(window_days: int) -> str:
             .all()
         )
         if not posts:
-            return f"За последние {window_days} дн. опубликованных постов нет."
+            return StatsSummary(
+                window_days=window_days, published=0, counted=0, total_views=0,
+                avg_views=0.0, top_post_id=None, top_post_views=0,
+            )
 
         total_views = 0
         counted = 0
@@ -102,15 +122,28 @@ def stats_summary(window_days: int) -> str:
                     best = (last.view_count, post.id)
 
         published = len(posts)
-        avg = total_views / counted if counted else 0
+        avg = total_views / counted if counted else 0.0
+
+    return StatsSummary(
+        window_days=window_days, published=published, counted=counted,
+        total_views=total_views, avg_views=avg,
+        top_post_id=best[1], top_post_views=best[0],
+    )
+
+
+def stats_summary(window_days: int) -> str:
+    """Текстовая сводка для команды бота /stats."""
+    summary = compute_stats_summary(window_days)
+    if summary.published == 0:
+        return f"За последние {window_days} дн. опубликованных постов нет."
 
     lines = [
         f"📊 Статистика за {window_days} дн.:",
-        f"• Опубликовано постов: {published}",
-        f"• С метриками просмотров: {counted}",
-        f"• Суммарно просмотров: {total_views}",
-        f"• В среднем на пост: {avg:.0f}",
+        f"• Опубликовано постов: {summary.published}",
+        f"• С метриками просмотров: {summary.counted}",
+        f"• Суммарно просмотров: {summary.total_views}",
+        f"• В среднем на пост: {summary.avg_views:.0f}",
     ]
-    if best[1] is not None:
-        lines.append(f"• Топ-пост: #{best[1]} ({best[0]} просмотров)")
+    if summary.top_post_id is not None:
+        lines.append(f"• Топ-пост: #{summary.top_post_id} ({summary.top_post_views} просмотров)")
     return "\n".join(lines)

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Источники — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Источники</h1>
+
+<div class="card">
+  <form method="post" action="/sources" style="display:flex; gap:8px;">
+    <input type="text" name="channel" placeholder="@username или t.me/channel" required style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>ID</th><th>Активен</th><th>Username</th><th>Стиль</th><th>Добор</th><th>Цели</th><th></th></tr>
+    {% for s in sources %}
+    <tr>
+      <td>{{ s.id }}</td>
+      <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ 'да' if s.is_active else 'нет' }}</span></td>
+      <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a></td>
+      <td>{{ s.style_profile or 'default' }}</td>
+      <td>{{ {True: 'on', False: 'off', None: 'глоб.'}[s.enrich_sources] }}</td>
+      <td>{{ s.target_chat_ids or 'все' }}</td>
+      <td>
+        <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline;">
+          <button type="submit" class="secondary">Деактивировать</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Источников нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

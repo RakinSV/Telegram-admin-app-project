@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Лучшее время публикации — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Лучшее время публикации</h1>
+
+{% if not rec.enough_data %}
+<div class="card">
+  <p class="muted">📈 Недостаточно данных: проанализировано {{ rec.posts_analyzed }} постов,
+  нужно минимум {{ rec.min_required }}.</p>
+</div>
+{% else %}
+<div class="card">
+  <p>Проанализировано постов: {{ rec.posts_analyzed }}</p>
+  <p>Рекомендуемые часы публикации (UTC):</p>
+  <p>
+    {% for slot in rec.recommended_slots %}
+    <span class="badge ok">{{ slot }}</span>
+    {% endfor %}
+  </p>
+  <p class="muted">Это рекомендация — POSTING_SLOTS автоматически не меняется, обнови вручную в настройках, если согласен.</p>
+</div>
+{% endif %}
+
+<p><a href="/stats">&larr; К статистике</a></p>
+{% endblock %}

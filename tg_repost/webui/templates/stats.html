@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Статистика — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Статистика</h1>
+<p class="muted">За последние {{ summary.window_days }} дн.</p>
+
+<div class="grid">
+  <div class="card stat">
+    <div class="num">{{ summary.published }}</div>
+    <div class="label">опубликовано</div>
+  </div>
+  <div class="card stat">
+    <div class="num">{{ summary.counted }}</div>
+    <div class="label">учтено в статистике</div>
+  </div>
+  <div class="card stat">
+    <div class="num">{{ summary.total_views }}</div>
+    <div class="label">суммарно просмотров</div>
+  </div>
+  <div class="card stat">
+    <div class="num">{{ "%.1f"|format(summary.avg_views) }}</div>
+    <div class="label">среднее просмотров/пост</div>
+  </div>
+</div>
+
+<div class="card">
+  {% if summary.top_post_id %}
+  <p>🏆 Топ пост: <a href="/moderation/{{ summary.top_post_id }}">#{{ summary.top_post_id }}</a> — {{ summary.top_post_views }} просмотров</p>
+  {% else %}
+  <p class="muted">Нет данных по топ-посту.</p>
+  {% endif %}
+</div>
+
+<p>
+  <a href="/stats/best-times">Лучшее время публикации &rarr;</a> &nbsp;·&nbsp;
+  <a href="/stats/growth">Отчёт о росте &rarr;</a>
+</p>
+{% endblock %}

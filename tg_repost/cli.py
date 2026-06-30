@@ -1,5 +1,9 @@
 """CLI управления источниками и целевыми группами (F01).
 
+Тонкие обёртки над repo-модулями (`sources_repo.py`, `targets_repo.py`,
+`ads/repo.py`) — те же функции переиспользует веб-админка (Фаза 5.3), здесь
+только парсинг аргументов и текстовый вывод.
+
 Примеры:
     python -m tg_repost.cli add-source @durov
     python -m tg_repost.cli list-sources
@@ -14,63 +18,46 @@ from __future__ import annotations
 import argparse
 import sys
 
-from tg_repost.db.models import AdBrief, Base, Source, TargetGroup
-from tg_repost.db.session import engine, session_scope
+from tg_repost import sources_repo, targets_repo
+from tg_repost.ads import repo as ads_repo
+from tg_repost.db.models import Base
+from tg_repost.db.session import engine
 from tg_repost.logging_conf import setup_logging
 
 
-def _normalize_username(raw: str) -> str:
-    """Привести @name / https://t.me/name к виду 'name'."""
-    raw = raw.strip()
-    raw = raw.removeprefix("https://t.me/").removeprefix("t.me/")
-    raw = raw.lstrip("@")
-    return raw
-
-
 def cmd_add_source(args: argparse.Namespace) -> int:
-    username = _normalize_username(args.channel)
-    with session_scope() as session:
-        existing = (
-            session.query(Source).filter(Source.channel_username == username).one_or_none()
-        )
-        if existing:
-            existing.is_active = True
-            print(f"Источник @{username} уже есть — активирован.")
-            return 0
-        session.add(Source(channel_username=username, is_active=True))
-    print(f"✅ Источник @{username} добавлен.")
+    source, created = sources_repo.add_source(args.channel)
+    if created:
+        print(f"✅ Источник @{source.channel_username} добавлен.")
+    else:
+        print(f"Источник @{source.channel_username} уже есть — активирован.")
     return 0
 
 
 def cmd_remove_source(args: argparse.Namespace) -> int:
-    username = _normalize_username(args.channel)
-    with session_scope() as session:
-        source = (
-            session.query(Source).filter(Source.channel_username == username).one_or_none()
-        )
-        if source is None:
-            print(f"Источник @{username} не найден.")
-            return 1
-        source.is_active = False
-    print(f"✅ Источник @{username} деактивирован.")
+    source = sources_repo.find_source_by_username(args.channel)
+    if source is None:
+        print(f"Источник @{sources_repo.normalize_username(args.channel)} не найден.")
+        return 1
+    sources_repo.deactivate_source(source.id)
+    print(f"✅ Источник @{source.channel_username} деактивирован.")
     return 0
 
 
 def cmd_list_sources(_: argparse.Namespace) -> int:
-    with session_scope() as session:
-        sources = session.query(Source).order_by(Source.id).all()
-        if not sources:
-            print("Источников нет.")
-            return 0
-        print(f"{'ID':<4} {'Акт':<4} {'Username':<22} {'Стиль':<12} "
-              f"{'Добор':<8} {'Цели':<18} {'Title'}")
-        for s in sources:
-            targets = s.target_chat_ids or "все"
-            style = s.style_profile or "default"
-            enrich = {True: "on", False: "off", None: "глоб."}[s.enrich_sources]
-            print(f"{s.id:<4} {'да' if s.is_active else 'нет':<4} "
-                  f"@{s.channel_username:<21} {style:<12} {enrich:<8} "
-                  f"{targets:<18} {s.channel_title or ''}")
+    sources = sources_repo.list_sources()
+    if not sources:
+        print("Источников нет.")
+        return 0
+    print(f"{'ID':<4} {'Акт':<4} {'Username':<22} {'Стиль':<12} "
+          f"{'Добор':<8} {'Цели':<18} {'Title'}")
+    for s in sources:
+        targets = s.target_chat_ids or "все"
+        style = s.style_profile or "default"
+        enrich = {True: "on", False: "off", None: "глоб."}[s.enrich_sources]
+        print(f"{s.id:<4} {'да' if s.is_active else 'нет':<4} "
+              f"@{s.channel_username:<21} {style:<12} {enrich:<8} "
+              f"{targets:<18} {s.channel_title or ''}")
     return 0
 
 
@@ -78,127 +65,96 @@ def cmd_set_source_style(args: argparse.Namespace) -> int:
     """F15 — задать стиль-профиль рерайта для источника."""
     from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 
-    username = _normalize_username(args.channel)
     style = args.style.strip().lower()
     if not prompt_exists(style):
         print(f"Неизвестный стиль '{style}'. Доступны: {', '.join(KNOWN_STYLES)}")
         return 1
-    with session_scope() as session:
-        source = (
-            session.query(Source).filter(Source.channel_username == username).one_or_none()
-        )
-        if source is None:
-            print(f"Источник @{username} не найден.")
-            return 1
-        source.style_profile = style
-    print(f"✅ Источник @{username} → стиль '{style}'")
+    source = sources_repo.find_source_by_username(args.channel)
+    if source is None:
+        print(f"Источник @{sources_repo.normalize_username(args.channel)} не найден.")
+        return 1
+    sources_repo.set_source_style(source.id, style)
+    print(f"✅ Источник @{source.channel_username} → стиль '{style}'")
     return 0
 
 
 def cmd_set_source_enrich(args: argparse.Namespace) -> int:
     """F16 — включить/выключить добор источников для канала."""
-    username = _normalize_username(args.channel)
-    mapping = {"on": True, "off": False, "default": None}
-    value = mapping[args.mode]
-    with session_scope() as session:
-        source = (
-            session.query(Source).filter(Source.channel_username == username).one_or_none()
-        )
-        if source is None:
-            print(f"Источник @{username} не найден.")
-            return 1
-        source.enrich_sources = value
+    source = sources_repo.find_source_by_username(args.channel)
+    if source is None:
+        print(f"Источник @{sources_repo.normalize_username(args.channel)} не найден.")
+        return 1
+    sources_repo.set_source_enrich(source.id, args.mode)
     human = {"on": "включён", "off": "выключен", "default": "по глобальной настройке"}
-    print(f"✅ Добор источников для @{username}: {human[args.mode]}")
+    print(f"✅ Добор источников для @{source.channel_username}: {human[args.mode]}")
     return 0
 
 
 def cmd_set_source_targets(args: argparse.Namespace) -> int:
     """F12 — задать/очистить переопределение целей для источника."""
-    username = _normalize_username(args.channel)
-    with session_scope() as session:
-        source = (
-            session.query(Source).filter(Source.channel_username == username).one_or_none()
-        )
-        if source is None:
-            print(f"Источник @{username} не найден.")
-            return 1
-        if args.clear:
-            source.target_chat_ids = None
-            print(f"✅ Переопределение целей для @{username} очищено (идёт во все).")
-            return 0
-        # Валидируем, что переданы числа.
-        ids = [c.strip() for c in args.chat_ids.split(",") if c.strip()]
-        for c in ids:
-            int(c)  # бросит ValueError при мусоре
-        source.target_chat_ids = ",".join(ids)
-    print(f"✅ Источник @{username} → цели {args.chat_ids}")
+    source = sources_repo.find_source_by_username(args.channel)
+    if source is None:
+        print(f"Источник @{sources_repo.normalize_username(args.channel)} не найден.")
+        return 1
+    if args.clear:
+        sources_repo.set_source_targets(source.id, None)
+        print(f"✅ Переопределение целей для @{source.channel_username} очищено (идёт во все).")
+        return 0
+    try:
+        sources_repo.set_source_targets(source.id, args.chat_ids)
+    except ValueError:
+        print("Ошибка: chat_ids должны быть числами через запятую.")
+        return 1
+    print(f"✅ Источник @{source.channel_username} → цели {args.chat_ids}")
     return 0
 
 
 def cmd_add_target(args: argparse.Namespace) -> int:
-    with session_scope() as session:
-        existing = (
-            session.query(TargetGroup)
-            .filter(TargetGroup.chat_id == args.chat_id)
-            .one_or_none()
-        )
-        if existing:
-            existing.is_active = True
-            if args.title:
-                existing.title = args.title
-            print(f"Цель {args.chat_id} уже есть — активирована.")
-            return 0
-        session.add(TargetGroup(chat_id=args.chat_id, title=args.title, is_active=True))
-    print(f"✅ Целевая группа {args.chat_id} добавлена.")
+    target, created = targets_repo.add_target(args.chat_id, args.title)
+    if created:
+        print(f"✅ Целевая группа {target.chat_id} добавлена.")
+    else:
+        print(f"Цель {target.chat_id} уже есть — активирована.")
     return 0
 
 
 def cmd_list_targets(_: argparse.Namespace) -> int:
-    with session_scope() as session:
-        targets = session.query(TargetGroup).order_by(TargetGroup.id).all()
-        if not targets:
-            print("Целевых групп нет.")
-            return 0
-        print(f"{'ID':<4} {'Активна':<8} {'chat_id':<16} {'Title'}")
-        for t in targets:
-            print(f"{t.id:<4} {'да' if t.is_active else 'нет':<8} "
-                  f"{t.chat_id:<16} {t.title or ''}")
+    targets = targets_repo.list_targets()
+    if not targets:
+        print("Целевых групп нет.")
+        return 0
+    print(f"{'ID':<4} {'Активна':<8} {'chat_id':<16} {'Title'}")
+    for t in targets:
+        print(f"{t.id:<4} {'да' if t.is_active else 'нет':<8} "
+              f"{t.chat_id:<16} {t.title or ''}")
     return 0
 
 
 def cmd_add_ad_brief(args: argparse.Namespace) -> int:
     """F21 — добавить бриф нативной рекламы."""
-    with session_scope() as session:
-        session.add(
-            AdBrief(brief_text=args.brief_text, is_active=True, max_uses=args.max_uses)
-        )
+    ads_repo.add_brief(args.brief_text, args.max_uses)
     print("✅ Бриф добавлен.")
     return 0
 
 
 def cmd_list_ad_briefs(_: argparse.Namespace) -> int:
-    with session_scope() as session:
-        briefs = session.query(AdBrief).order_by(AdBrief.id).all()
-        if not briefs:
-            print("Брифов нет.")
-            return 0
-        print(f"{'ID':<4} {'Акт':<4} {'Использован':<14} {'Лимит':<8} Текст")
-        for b in briefs:
-            preview = b.brief_text[:60].replace("\n", " ")
-            limit = str(b.max_uses) if b.max_uses is not None else "∞"
-            print(f"{b.id:<4} {'да' if b.is_active else 'нет':<4} "
-                  f"{b.times_used:<14} {limit:<8} {preview}")
+    briefs = ads_repo.list_briefs()
+    if not briefs:
+        print("Брифов нет.")
+        return 0
+    print(f"{'ID':<4} {'Акт':<4} {'Использован':<14} {'Лимит':<8} Текст")
+    for b in briefs:
+        preview = b.brief_text[:60].replace("\n", " ")
+        limit = str(b.max_uses) if b.max_uses is not None else "∞"
+        print(f"{b.id:<4} {'да' if b.is_active else 'нет':<4} "
+              f"{b.times_used:<14} {limit:<8} {preview}")
     return 0
 
 
 def cmd_disable_ad_brief(args: argparse.Namespace) -> int:
-    with session_scope() as session:
-        brief = session.get(AdBrief, args.brief_id)
-        if brief is None:
-            print(f"Бриф #{args.brief_id} не найден.")
-            return 1
-        brief.is_active = False
+    if not ads_repo.disable_brief(args.brief_id):
+        print(f"Бриф #{args.brief_id} не найден.")
+        return 1
     print(f"✅ Бриф #{args.brief_id} деактивирован.")
     return 0
 

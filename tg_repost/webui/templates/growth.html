@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Рост — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Отчёт о росте</h1>
+<p class="muted">За последние {{ window_days }} дн.</p>
+
+{% if not report.enough_data %}
+<div class="card">
+  <p class="muted">📊 Недостаточно данных: {{ report.snapshots_count }} снимков, нужно минимум {{ report.min_required }}.
+  Включи отслеживание роста в настройках и подожди накопления.</p>
+</div>
+{% else %}
+<div class="grid">
+  <div class="card stat">
+    <div class="num">{{ report.first_count }}</div>
+    <div class="label">подписчиков было</div>
+  </div>
+  <div class="card stat">
+    <div class="num">{{ report.last_count }}</div>
+    <div class="label">подписчиков стало</div>
+  </div>
+  <div class="card stat">
+    <div class="num">{{ "%+d"|format(report.delta) if report.delta is not none else 'н/д' }}</div>
+    <div class="label">изменение</div>
+  </div>
+</div>
+
+{% if report.posts_by_style %}
+<div class="card">
+  <h2>Постов по стилям за период</h2>
+  <table>
+    <tr><th>Стиль</th><th>Постов</th></tr>
+    {% for style, count in report.posts_by_style.items()|sort %}
+    <tr><td>{{ style }}</td><td>{{ count }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<p class="muted">⚠️ Это счётчики, не статистическая корреляция — для выводов о причинности нужно намного больше данных.</p>
+{% endif %}
+
+<p><a href="/stats">&larr; К статистике</a></p>
+{% endblock %}

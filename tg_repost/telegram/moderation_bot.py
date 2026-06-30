@@ -22,10 +22,10 @@ from telegram.ext import (
 )
 
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostKind, PostStatus
+from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
-from tg_repost.telegram.publisher import publish_post
+from tg_repost.moderation import approve_post, edit_post_text, reject_post
 
 logger = get_logger(__name__)
 
@@ -136,42 +136,25 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def _approve(query, context: ContextTypes.DEFAULT_TYPE, post_id: int) -> None:
-    settings = get_settings()
-    with session_scope() as session:
-        post = session.get(Post, post_id)
-        if post is None:
-            await query.edit_message_text(f"Пост #{post_id} не найден.")
-            return
-        try:
-            post.set_status(PostStatus.APPROVED)
-        except Exception as exc:  # noqa: BLE001
-            await query.edit_message_text(f"Пост #{post_id}: {exc}")
-            return
-
-    # F11: при расписании по слотам — не публикуем мгновенно, ставим в очередь.
-    if settings.scheduled_posting_enabled:
-        await query.edit_message_text(
-            f"✅ Пост #{post_id} одобрен и поставлен в очередь публикации "
-            f"(слоты: {', '.join(settings.posting_slots) or 'не заданы'})."
-        )
+    """Одобрить пост через общую логику `tg_repost.moderation` (Фаза 5.3) —
+    та же функция, что использует и веб-админка (`/moderation`)."""
+    try:
+        outcome = await approve_post(context.application.bot, post_id)
+    except InvalidStatusTransition as exc:
+        await query.edit_message_text(f"Пост #{post_id}: {exc}")
         return
-
-    await query.edit_message_text(f"✅ Пост #{post_id} одобрен, публикую…")
-    await publish_post(context.application.bot, post_id)
-
-    with session_scope() as session:
-        post = session.get(Post, post_id)
-        status = post.status.value if post else "?"
-    await query.edit_message_text(f"✅ Пост #{post_id}: статус {status}.")
+    await query.edit_message_text(f"✅ Пост #{post_id}: {outcome}.")
 
 
 async def _reject(query, post_id: int) -> None:
-    with session_scope() as session:
-        post = session.get(Post, post_id)
-        if post is None:
-            await query.edit_message_text(f"Пост #{post_id} не найден.")
-            return
-        post.set_status(PostStatus.REJECTED, reason="отклонено вручную")
+    try:
+        found = reject_post(post_id)
+    except InvalidStatusTransition as exc:
+        await query.edit_message_text(f"Пост #{post_id}: {exc}")
+        return
+    if not found:
+        await query.edit_message_text(f"Пост #{post_id} не найден.")
+        return
     await query.edit_message_text(f"❌ Пост #{post_id} отклонён.")
 
 
@@ -181,14 +164,10 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if post_id is None or update.message is None or not update.message.text:
         return
 
-    new_text = update.message.text
-    with session_scope() as session:
-        post = session.get(Post, post_id)
-        if post is None:
-            await update.message.reply_text(f"Пост #{post_id} не найден.")
-            context.user_data.pop(_EDIT_KEY, None)
-            return
-        post.rewritten_text = new_text
+    if not edit_post_text(post_id, update.message.text):
+        await update.message.reply_text(f"Пост #{post_id} не найден.")
+        context.user_data.pop(_EDIT_KEY, None)
+        return
 
     context.user_data.pop(_EDIT_KEY, None)
     await update.message.reply_text(

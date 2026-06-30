@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Целевые группы — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Целевые группы</h1>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/targets" style="display:flex; gap:8px;">
+    <input type="text" name="chat_id" placeholder="chat_id (напр. -1001234567890)" required style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+    <input type="text" name="title" placeholder="название (опц.)" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>ID</th><th>Активна</th><th>chat_id</th><th>Title</th><th></th></tr>
+    {% for t in targets %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td><span class="badge {{ 'ok' if t.is_active else 'muted' }}">{{ 'да' if t.is_active else 'нет' }}</span></td>
+      <td>{{ t.chat_id }}</td>
+      <td>{{ t.title or '' }}</td>
+      <td>
+        <form method="post" action="/targets/{{ t.id }}/toggle" style="display:inline;">
+          <button type="submit" class="secondary">{{ 'Деактивировать' if t.is_active else 'Активировать' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Целевых групп нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

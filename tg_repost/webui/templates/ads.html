@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Реклама — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Брифы нативной рекламы</h1>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/ads">
+    <div class="field-row">
+      <label for="brief_text">Текст брифа</label>
+      <input type="text" id="brief_text" name="brief_text" required>
+    </div>
+    <div class="field-row">
+      <label for="max_uses">Лимит показов (пусто — без лимита)</label>
+      <input type="text" id="max_uses" name="max_uses" placeholder="∞">
+    </div>
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>ID</th><th>Активен</th><th>Использован</th><th>Лимит</th><th>Текст</th><th></th></tr>
+    {% for b in briefs %}
+    <tr>
+      <td>{{ b.id }}</td>
+      <td><span class="badge {{ 'ok' if b.is_active else 'muted' }}">{{ 'да' if b.is_active else 'нет' }}</span></td>
+      <td>{{ b.times_used }}</td>
+      <td>{{ b.max_uses if b.max_uses is not none else '∞' }}</td>
+      <td>{{ b.brief_text[:80] }}{{ '…' if b.brief_text|length > 80 else '' }}</td>
+      <td>
+        {% if b.is_active %}
+        <form method="post" action="/ads/{{ b.id }}/disable" style="display:inline;">
+          <button type="submit" class="secondary">Деактивировать</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Брифов нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

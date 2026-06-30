@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Пост #{{ post.id }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Пост #{{ post.id }}</h1>
+<p class="muted">{{ post.kind.value }} · <span class="badge warn">{{ post.status.value }}</span></p>
+
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/moderation/{{ post.id }}/edit">
+    <textarea name="rewritten_text" rows="14" style="width:100%; background:#11131a; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; font-family:inherit;">{{ post.rewritten_text or post.original_text or '' }}</textarea>
+    <div style="margin-top:10px;">
+      <button type="submit">Сохранить текст</button>
+    </div>
+  </form>
+</div>
+
+{% if post.source_link %}
+<p class="muted">🔗 <a href="{{ post.source_link }}" target="_blank" rel="noopener noreferrer">Источник</a></p>
+{% endif %}
+{% if post.media_path %}<p class="muted">🖼 Есть медиа</p>{% endif %}
+
+<div class="card" style="display:flex; gap:10px;">
+  <form method="post" action="/moderation/{{ post.id }}/approve">
+    <button type="submit">✅ Одобрить</button>
+  </form>
+  <form method="post" action="/moderation/{{ post.id }}/reject">
+    <button type="submit" class="secondary">❌ Отклонить</button>
+  </form>
+</div>
+
+<p><a href="/moderation">&larr; К очереди модерации</a></p>
+{% endblock %}
