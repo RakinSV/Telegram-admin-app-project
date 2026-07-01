@@ -1,0 +1,35 @@
+# Быстрый деплой:
+#   1) cp .env.example .env   (обязательно ДО первого запуска — bind mount
+#      несуществующего файла .env заставит Docker создать на его месте
+#      директорию, а не файл; заполнить .env можно и после через /setup)
+#   2) заполнить .env реальными TG_API_ID/HASH/BOT_TOKEN/OWNER_ID/OPENAI_API_KEY
+#      (либо оставить пустым и настроить позже через веб-визард /setup)
+#   3) docker compose up -d --build
+#
+# WEBUI_MASTER_KEY/WEBUI_SESSION_SECRET сгенерируются автоматически при первом
+# сохранении секрета и допишутся в этот же смонтированный .env — теряя volume
+# с .env, теряешь возможность расшифровать секреты в БД (см. README/CLAUDE.md).
+
+services:
+  tg_repost:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Инфраструктурные переопределения, специфичные для Docker — приоритет
+      # выше значений из .env (см. main.py::WEBUI_HOST/PORT).
+      WEBUI_HOST: "0.0.0.0"
+      WEBUI_PORT: "8000"
+      DATABASE_URL: "sqlite:///db/tg_repost.db"
+    ports:
+      # Публикуем ТОЛЬКО на loopback хоста — тот же localhost/VPN-only
+      # периметр, что и при запуске без Docker (см. план Фазы 5, раздел
+      # "Аутентификация"). Не открывать на 0.0.0.0:8000 без reverse-proxy и
+      # доп. укрепления.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./.env:/app/.env
+      - ./data/db:/app/db
+      - ./data/logs:/app/logs
+      - ./data/media:/app/media

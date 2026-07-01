@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import uvicorn
 
@@ -31,8 +32,16 @@ from tg_repost.webui.supervisor import get_components, start_components, stop_co
 
 logger = get_logger(__name__)
 
-WEBUI_HOST = "127.0.0.1"
-WEBUI_PORT = 8000
+# Настраиваются через окружение (не через Settings/БД-оверлей — это адрес
+# самого uvicorn-сокета, меняется только перезапуском процесса, а не живым
+# ресинком, поэтому обычные переменные окружения достаточны). По умолчанию
+# 127.0.0.1 — как раньше, для локального запуска без Docker. В Docker
+# (docker-compose.yml) выставляется WEBUI_HOST=0.0.0.0, чтобы порт был
+# доступен снаружи контейнера через `-p 127.0.0.1:8000:8000` — сам
+# localhost-only периметр обеспечивается публикацией порта Docker'ом, а не
+# биндом приложения.
+WEBUI_HOST = os.environ.get("WEBUI_HOST", "127.0.0.1")
+WEBUI_PORT = int(os.environ.get("WEBUI_PORT", "8000"))
 
 
 async def run() -> None:
