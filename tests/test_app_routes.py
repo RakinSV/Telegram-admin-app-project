@@ -12,7 +12,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source
+from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.webui import app as app_module
 from tg_repost.webui import auth, setup_token
@@ -47,6 +47,7 @@ def _isolated_env(tmp_path, monkeypatch):
         session.query(AppSetting).delete()
         session.query(Secret).delete()
         session.query(Source).delete()
+        session.query(TelethonSession).delete()
     os.environ.pop("WEBUI_MASTER_KEY", None)
     os.environ.pop("WEBUI_SESSION_SECRET", None)
     setup_token._token = None
@@ -241,3 +242,37 @@ def test_protected_route_rejects_expired_session(monkeypatch):
     r = client.get("/", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/login"
+
+
+def test_telethon_sessions_add_list_disable_round_trip():
+    """F26: страница управления доп. Telethon-сессиями — маска, не полное
+    значение, показывается в списке; значение никогда не возвращается."""
+    client = _client()
+    _bootstrap(client)
+
+    r = client.post(
+        "/telethon-sessions",
+        data={"label": "account-2", "session_string": "1BVtsOK-fake-session-value"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    r = client.get("/telethon-sessions")
+    assert r.status_code == 200
+    assert "account-2" in r.text
+    assert "1BVtsOK-fake-session-value" not in r.text  # write-only — не отдаётся обратно
+
+    from tg_repost import telethon_sessions_repo
+    row = telethon_sessions_repo.list_sessions()[0]
+
+    r = client.post(f"/telethon-sessions/{row.id}/disable", follow_redirects=False)
+    assert r.status_code == 303
+    r = client.get("/telethon-sessions")
+    assert "нет" in r.text  # активна: нет
+
+
+def test_telethon_sessions_rejects_empty_session_string():
+    client = _client()
+    _bootstrap(client)
+    r = client.post("/telethon-sessions", data={"label": "account-2", "session_string": "   "})
+    assert r.status_code == 400

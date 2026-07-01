@@ -5,7 +5,7 @@ import os
 import pytest
 
 from tg_repost.config import get_settings, invalidate_settings_cache
-from tg_repost.db.models import AppSetting, Secret
+from tg_repost.db.models import AppSetting, Secret, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.webui import settings_store
 
@@ -14,7 +14,7 @@ from tg_repost.webui import settings_store
 def _isolated_env(tmp_path, monkeypatch):
     """Изоляция для каждого теста этого файла:
 
-    1. CWD переключается на временный каталог — `_ensure_master_key()`/
+    1. CWD переключается на временный каталог — `ensure_master_key()`/
        `crypto.append_env_var()` пишут `WEBUI_MASTER_KEY` в `./.env` ОТНОСИТЕЛЬНО
        CWD по дизайну (так и должно быть в проде). Без этой изоляции тест,
        вызывающий `set_secret()`, реально записал бы ключ в `.env` корня
@@ -26,6 +26,7 @@ def _isolated_env(tmp_path, monkeypatch):
     with session_scope() as session:
         session.query(AppSetting).delete()
         session.query(Secret).delete()
+        session.query(TelethonSession).delete()
     os.environ.pop("WEBUI_MASTER_KEY", None)
     invalidate_settings_cache()
     yield
@@ -114,12 +115,12 @@ def test_ensure_master_key_generates_once_and_persists(tmp_path):
     # tmp_path здесь — тот же каталог, что и в autouse-фикстуре (pytest
     # переиспользует один tmp_path на тест при множественных запросах).
     env_path = tmp_path / ".env"
-    key1 = settings_store._ensure_master_key()
+    key1 = settings_store.ensure_master_key()
     assert env_path.exists()
     assert "WEBUI_MASTER_KEY=" in env_path.read_text(encoding="utf-8")
 
     # Повторный вызов не генерирует новый ключ — возвращает уже заданный.
-    key2 = settings_store._ensure_master_key()
+    key2 = settings_store.ensure_master_key()
     assert key1 == key2
 
 
@@ -129,4 +130,15 @@ def test_ensure_master_key_raises_if_secrets_exist_without_key():
     with session_scope() as session:
         session.add(Secret(key="openai_api_key", encrypted_value="irrelevant", masked_hint="••••0000"))
     with pytest.raises(RuntimeError):
-        settings_store._ensure_master_key()
+        settings_store.ensure_master_key()
+
+
+def test_ensure_master_key_raises_if_telethon_sessions_exist_without_key():
+    """F26: дополнительные Telethon-сессии шифруются тем же ключом — та же
+    защита от "ключ потерян, БД осталась", что и для обычных секретов."""
+    with session_scope() as session:
+        session.add(TelethonSession(
+            label="account-2", encrypted_session_string="irrelevant", masked_hint="••••0000",
+        ))
+    with pytest.raises(RuntimeError):
+        settings_store.ensure_master_key()

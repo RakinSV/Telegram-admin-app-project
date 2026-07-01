@@ -1,9 +1,13 @@
-"""Тесты обогащения источниками (F16): чистые хелперы."""
+"""Тесты обогащения источниками (F16) и сравнения версий (F24)."""
+
+from unittest.mock import AsyncMock
 
 from tg_repost.enrichment.enricher import (
+    compare_source_versions,
     detect_language,
     format_sources_block,
     parse_indices,
+    split_by_language,
 )
 from tg_repost.enrichment.search import SearchResult
 
@@ -63,3 +67,76 @@ def test_format_sources_block_only_ru():
     block = format_sources_block(selected)
     assert "Рус." in block
     assert "Англ." not in block
+
+
+def test_split_by_language():
+    ru_item = SearchResult(title="Новость", url="https://ru.example/1", description="текст")
+    en_item = SearchResult(title="News", url="https://en.example/2", description="text")
+    ru, en = split_by_language([ru_item, en_item])
+    assert ru == [ru_item]
+    assert en == [en_item]
+
+
+def test_split_by_language_empty():
+    assert split_by_language([]) == ([], [])
+
+
+async def test_compare_source_versions_empty_without_ru():
+    rewriter = AsyncMock()
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", [], en)
+    assert result == ""
+    rewriter.complete.assert_not_called()
+
+
+async def test_compare_source_versions_empty_without_en():
+    rewriter = AsyncMock()
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, [])
+    assert result == ""
+    rewriter.complete.assert_not_called()
+
+
+async def test_compare_source_versions_no_discrepancy():
+    rewriter = AsyncMock()
+    rewriter.complete.return_value = "НЕТ"
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, en)
+    assert result == ""
+
+
+async def test_compare_source_versions_lowercase_net():
+    rewriter = AsyncMock()
+    rewriter.complete.return_value = "нет расхождений"
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, en)
+    assert result == ""
+
+
+async def test_compare_source_versions_finds_discrepancy():
+    rewriter = AsyncMock()
+    rewriter.complete.return_value = "русские источники называют причиной аварию, английские — саботаж"
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, en)
+    assert "саботаж" in result
+
+
+async def test_compare_source_versions_empty_answer():
+    rewriter = AsyncMock()
+    rewriter.complete.return_value = "   "
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, en)
+    assert result == ""
+
+
+async def test_compare_source_versions_fails_soft_on_exception():
+    rewriter = AsyncMock()
+    rewriter.complete.side_effect = RuntimeError("LLM недоступен")
+    ru = [SearchResult(title="Новость", url="https://ru.example/1")]
+    en = [SearchResult(title="News", url="https://en.example/1")]
+    result = await compare_source_versions(rewriter, "текст", ru, en)
+    assert result == ""

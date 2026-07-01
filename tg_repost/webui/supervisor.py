@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -33,7 +33,7 @@ from tg_repost.scheduler.jobs import pipeline_tick
 from tg_repost.scheduler.posting import parse_slot, publish_slot
 from tg_repost.scheduler.smart_schedule import auto_apply_slots_job
 from tg_repost.scheduler.stats import collect_stats
-from tg_repost.telegram.listener import build_client, start_listener
+from tg_repost.telegram.listener import build_client, build_extra_clients, start_listeners
 from tg_repost.telegram.moderation_bot import build_application
 from tg_repost.webui import runtime_state
 
@@ -43,9 +43,16 @@ logger = get_logger(__name__)
 @dataclass
 class RunningComponents:
     """Текущие живые экземпляры (если запущены) — единые на процесс, чтобы
-    main.py и веб-роуты /components работали с одними и теми же объектами."""
+    main.py и веб-роуты /components работали с одними и теми же объектами.
+
+    `tele_client` — ОСНОВНОЙ Telethon-клиент, используется везде за пределами
+    listener-а (сбор статистики F14, growth-снимки F22) как и раньше.
+    `extra_tele_clients` — дополнительные клиенты F26, используются ТОЛЬКО
+    listener-ом для распределения источников; остальным компонентам не нужны.
+    """
 
     tele_client: TelegramClient | None = None
+    extra_tele_clients: list[TelegramClient] = field(default_factory=list)
     application: Application | None = None
     scheduler: AsyncIOScheduler | None = None
     rewriter: RewriterClient | None = None
@@ -134,7 +141,7 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
 
     _resync_optional_job(
         scheduler, "collect_stats", settings.stats_enabled,
-        collect_stats, [tele_client],
+        collect_stats, [tele_client, application],
         IntervalTrigger(minutes=settings.stats_interval_minutes),
     )
     _resync_optional_job(
@@ -163,7 +170,8 @@ async def start_components(settings: Settings | None = None) -> None:
     settings = settings or get_settings()
 
     _components.tele_client = build_client()
-    await start_listener(_components.tele_client)
+    _components.extra_tele_clients = build_extra_clients()
+    await start_listeners([_components.tele_client, *_components.extra_tele_clients])
     runtime_state.set_component_status("listener", True)
 
     _components.application = build_application()
@@ -203,26 +211,36 @@ async def stop_components() -> None:
         await _components.tele_client.disconnect()
         runtime_state.set_component_status("listener", False)
         _components.tele_client = None
+    for extra in _components.extra_tele_clients:
+        await extra.disconnect()
+    _components.extra_tele_clients = []
     _components.rewriter = None
     logger.info("Telegram-компоненты остановлены")
 
 
 async def restart_telethon_listener() -> None:
-    """Пересобрать Telethon-клиент (например, после смены TG_SESSION_STRING
-    через /secrets) — без остановки бота/планировщика. Зависимые джобы
-    (collect_stats, collect_growth_snapshot) автоматически получают свежую
-    ссылку через `_sync_jobs`."""
+    """Пересобрать Telethon-клиент(ы) (например, после смены TG_SESSION_STRING
+    через /secrets или добавления/отключения доп. сессий F26) — без остановки
+    бота/планировщика. Зависимые джобы (collect_stats, collect_growth_snapshot,
+    используют только ОСНОВНОЙ клиент) автоматически получают свежую ссылку
+    через `_sync_jobs`."""
     if not _components.is_running:
         logger.warning("restart_telethon_listener: компоненты не запущены")
         return
     if _components.tele_client is not None:
         await _components.tele_client.disconnect()
+    for extra in _components.extra_tele_clients:
+        await extra.disconnect()
+
     _components.tele_client = build_client()
-    await start_listener(_components.tele_client)
+    _components.extra_tele_clients = build_extra_clients()
+    await start_listeners([_components.tele_client, *_components.extra_tele_clients])
     runtime_state.set_component_status("listener", True)
     if _components.scheduler is not None:
         _sync_jobs(_components.scheduler, get_settings())
-    logger.info("Telethon listener перезапущен")
+    logger.info(
+        "Telethon listener перезапущен (%d доп. сессий)", len(_components.extra_tele_clients),
+    )
 
 
 async def restart_moderation_bot() -> None:

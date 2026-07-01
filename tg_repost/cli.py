@@ -16,9 +16,10 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import sys
 
-from tg_repost import sources_repo, targets_repo
+from tg_repost import sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost.ads import repo as ads_repo
 from tg_repost.db.models import Base
 from tg_repost.db.session import engine
@@ -159,6 +160,49 @@ def cmd_disable_ad_brief(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_add_telethon_session(args: argparse.Namespace) -> int:
+    """F26 — добавить дополнительную Telethon-сессию (уже сгенерированную
+    через `python -m tg_repost.tools.gen_session`).
+
+    Session string вводится ИНТЕРАКТИВНО (`getpass`), а не аргументом
+    командной строки — иначе секрет, эквивалентный полному доступу к
+    Telegram-аккаунту, попал бы в историю шелла (`.bash_history`/PSReadLine)
+    и был бы виден в выводе `ps`/диспетчера задач на всё время выполнения
+    команды (найдено при security-аудите Фазы 5+, тот же класс риска, что
+    для TG_SESSION_STRING основной сессии — `tools/gen_session.py` тоже
+    никогда не принимает сессию аргументом).
+    """
+    session_string = getpass.getpass("Session string (ввод не отображается): ")
+    try:
+        row = telethon_sessions_repo.add_session(args.label, session_string)
+    except ValueError as exc:
+        print(f"Ошибка: {exc}")
+        return 1
+    print(f"✅ Сессия '{row.label}' добавлена (id={row.id}). Перезапусти listener "
+          f"(веб-админка → Компоненты), чтобы источники распределились с её учётом.")
+    return 0
+
+
+def cmd_list_telethon_sessions(_: argparse.Namespace) -> int:
+    sessions = telethon_sessions_repo.list_sessions()
+    if not sessions:
+        print("Дополнительных сессий нет — используется только основная (TG_SESSION_STRING).")
+        return 0
+    print(f"{'ID':<4} {'Акт':<4} {'Метка':<20} Маска")
+    for s in sessions:
+        print(f"{s.id:<4} {'да' if s.is_active else 'нет':<4} {s.label:<20} {s.masked_hint}")
+    return 0
+
+
+def cmd_disable_telethon_session(args: argparse.Namespace) -> int:
+    if not telethon_sessions_repo.deactivate_session(args.session_id):
+        print(f"Сессия #{args.session_id} не найдена.")
+        return 1
+    print(f"✅ Сессия #{args.session_id} деактивирована. Перезапусти listener, "
+          f"чтобы применить.")
+    return 0
+
+
 def cmd_init_db(_: argparse.Namespace) -> int:
     """Создать таблицы напрямую (для dev; в проде — alembic upgrade head)."""
     Base.metadata.create_all(engine)
@@ -217,6 +261,20 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("disable-ad-brief", help="F21: деактивировать бриф")
     p.add_argument("brief_id", type=int)
     p.set_defaults(func=cmd_disable_ad_brief)
+
+    p = sub.add_parser(
+        "add-telethon-session",
+        help="F26: добавить доп. Telethon-сессию (session string запросится интерактивно)",
+    )
+    p.add_argument("label", help="метка для сессии, напр. account-2")
+    p.set_defaults(func=cmd_add_telethon_session)
+
+    p = sub.add_parser("list-telethon-sessions", help="F26: список доп. Telethon-сессий")
+    p.set_defaults(func=cmd_list_telethon_sessions)
+
+    p = sub.add_parser("disable-telethon-session", help="F26: деактивировать доп. сессию")
+    p.add_argument("session_id", type=int)
+    p.set_defaults(func=cmd_disable_telethon_session)
 
     p = sub.add_parser("init-db", help="Создать таблицы (dev, без alembic)")
     p.set_defaults(func=cmd_init_db)

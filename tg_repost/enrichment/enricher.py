@@ -46,12 +46,18 @@ def parse_indices(answer: str, total: int) -> list[int]:
     return result
 
 
+def split_by_language(selected: list[SearchResult]) -> tuple[list[SearchResult], list[SearchResult]]:
+    """Разделить отобранные источники на (русскоязычные, англоязычные)."""
+    ru = [s for s in selected if detect_language(f"{s.title} {s.description}") == "ru"]
+    en = [s for s in selected if s not in ru]
+    return ru, en
+
+
 def format_sources_block(selected: list[SearchResult]) -> str:
     """Оформить блок «Источники:» со ссылками, разделёнными по языку."""
     if not selected:
         return ""
-    ru = [s for s in selected if detect_language(f"{s.title} {s.description}") == "ru"]
-    en = [s for s in selected if s not in ru]
+    ru, en = split_by_language(selected)
 
     lines = ["", "📚 Источники:"]
     if ru:
@@ -61,6 +67,48 @@ def format_sources_block(selected: list[SearchResult]) -> str:
         lines.append("🌐 Англ.:")
         lines.extend(f"• {s.title} — {s.url}" for s in en)
     return "\n".join(lines)
+
+
+_MAX_DISCREPANCY_LEN = 300
+
+
+async def compare_source_versions(
+    rewriter: RewriterClient,
+    original_text: str,
+    ru_sources: list[SearchResult],
+    en_sources: list[SearchResult],
+) -> str:
+    """Спросить LLM, расходятся ли ru/en источники в трактовке события (F24).
+
+    Возвращает короткую фразу о сути расхождения, либо пустую строку — если
+    расхождений нет, источников одного из языков нет (сравнивать не с чем),
+    или запрос не удался (не критично — как и остальное обогащение, F16).
+    """
+    if not ru_sources or not en_sources:
+        return ""
+    try:
+        answer = await rewriter.complete(
+            load_prompt("compare_sources").format(
+                post_text=original_text,
+                ru_sources=_format_results_for_prompt(ru_sources),
+                en_sources=_format_results_for_prompt(en_sources),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Сравнение версий источников не удалось: %s", exc)
+        return ""
+    answer = answer.strip()
+    if not answer or answer.lower().startswith("нет"):
+        return ""
+    # Промпт просит короткую фразу, но LLM-ответ ничем не гарантирован по
+    # длине (в т.ч. потенциальный prompt injection через содержимое
+    # источников) — обрезаем, чтобы не вытеснить сам рерайченный текст поста
+    # за пределы лимита Telegram при финальной отправке (найдено при код-
+    # ревью Фазы 5+, тот же паттерн, что `_MAX_DETAIL_LEN`/`_MAX_LINE_LEN`
+    # в audit.py/log_broadcast.py).
+    if len(answer) > _MAX_DISCREPANCY_LEN:
+        answer = answer[:_MAX_DISCREPANCY_LEN] + "…"
+    return answer
 
 
 def _format_results_for_prompt(results: list[SearchResult]) -> str:
@@ -116,6 +164,17 @@ async def enrich_post(rewriter: RewriterClient, original_text: str) -> str:
         if block:
             logger.info("Обогащение: добавлено источников %d (запрос '%s')",
                         len(selected), query)
+
+        # F24 — сравнение версий: доп. LLM-вызов, только если есть источники
+        # ОБОИХ языков (иначе сравнивать не с чем) и явно включено в настройках
+        # (не критично для пайплайна — как и остальное обогащение).
+        if block and settings.version_comparison_enabled:
+            ru, en = split_by_language(selected)
+            discrepancy = await compare_source_versions(rewriter, original_text, ru, en)
+            if discrepancy:
+                logger.info("F24: обнаружено расхождение версий источников: %s", discrepancy)
+                block = f"\n⚠️ Разные версии события: {discrepancy}\n{block}"
+
         return block
     except Exception as exc:  # noqa: BLE001
         logger.warning("Обогащение источниками не удалось: %s", exc)

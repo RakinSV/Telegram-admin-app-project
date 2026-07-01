@@ -3,6 +3,16 @@
 Подключается под юзер-сессией, подписывается на `events.NewMessage` для
 каналов из таблицы `sources`, применяет фильтр (F03) и хэш-дедупликацию (F04),
 сохраняет пост в `posts` с корректным начальным статусом.
+
+F26 — распределение источников между НЕСКОЛЬКИМИ Telethon-аккаунтами (снижает
+риск ограничений при большом числе источников на одном аккаунте): основной
+клиент (`build_client()`) плюс опциональные дополнительные из
+`telethon_sessions_repo`. `_handle_new_message` не меняется вообще — он не
+привязан к конкретному клиенту (работает через `event`), поэтому регистрируется
+как есть на каждом клиенте с его собственным подмножеством источников
+(`start_listeners`). Почасовой лимит «тяжёлых» действий (F17) — ОТДЕЛЬНЫЙ на
+каждый клиент (`event.client`), а не общий на всех — иначе объединение
+нескольких аккаунтов не увеличивало бы реальную пропускную способность.
 """
 
 from __future__ import annotations
@@ -15,6 +25,7 @@ from pathlib import Path
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
+from tg_repost import telethon_sessions_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStatus, Source
@@ -27,9 +38,10 @@ from tg_repost.rewriter.client import get_rewriter
 
 logger = get_logger(__name__)
 
-# F17: почасовой лимит «тяжёлых» действий (скачивание медиа). Создаётся лениво,
-# чтобы настройки уже были загружены.
-_rate_limiter: HourlyRateLimiter | None = None
+# F17/F26: почасовой лимит «тяжёлых» действий (скачивание медиа) — ОТДЕЛЬНЫЙ
+# на каждый Telethon-клиент (ключ — id(client)), создаётся лениво при первом
+# обращении для этого клиента.
+_rate_limiters: dict[int, HourlyRateLimiter] = {}
 
 # Допустимое расширение: точка + 1-8 латинских букв/цифр (например ".jpg").
 _SAFE_EXT_RE = re.compile(r"^\.[A-Za-z0-9]{1,8}$")
@@ -52,15 +64,18 @@ def _safe_media_extension(message: events.NewMessage.Event) -> str:
     return ".bin"
 
 
-def _get_rate_limiter() -> HourlyRateLimiter:
-    global _rate_limiter
-    if _rate_limiter is None:
-        _rate_limiter = HourlyRateLimiter(get_settings().max_reads_per_hour)
-    return _rate_limiter
+def _get_rate_limiter(client: TelegramClient) -> HourlyRateLimiter:
+    """Лимитер конкретного клиента (F26) — свой почасовой бюджет на аккаунт."""
+    key = id(client)
+    limiter = _rate_limiters.get(key)
+    if limiter is None:
+        limiter = HourlyRateLimiter(get_settings().max_reads_per_hour)
+        _rate_limiters[key] = limiter
+    return limiter
 
 
 def build_client() -> TelegramClient:
-    """Создать Telethon-клиент из настроек (без подключения)."""
+    """Создать ОСНОВНОЙ Telethon-клиент из настроек (без подключения)."""
     settings = get_settings()
     return TelegramClient(
         StringSession(settings.tg_session_string),
@@ -69,11 +84,49 @@ def build_client() -> TelegramClient:
     )
 
 
+def build_extra_clients() -> list[TelegramClient]:
+    """Собрать ДОПОЛНИТЕЛЬНЫЕ Telethon-клиенты (F26) — по одному на каждую
+    активную и успешно расшифрованную запись `telethon_sessions_repo`.
+    Основной клиент (`build_client()`) сюда не входит."""
+    settings = get_settings()
+    active_count = sum(1 for s in telethon_sessions_repo.list_sessions() if s.is_active)
+    decrypted = telethon_sessions_repo.list_active_decrypted_sessions()
+    if len(decrypted) < active_count:
+        # Найдено при security-аудите Фазы 5+: одна повреждённая/нерасшифро-
+        # ванная сессия и так не блокирует остальные (список просто короче),
+        # но иначе это осталось бы заметно только по строке warning на
+        # КАЖДУЮ пропущенную запись в общем логе — легко пропустить.
+        logger.warning(
+            "F26: %d из %d доп. Telethon-сессий не удалось расшифровать — "
+            "проверь WEBUI_MASTER_KEY. Источники этих аккаунтов временно "
+            "распределяются только между оставшимися сессиями.",
+            active_count - len(decrypted), active_count,
+        )
+    clients = []
+    for _label, session_string in decrypted:
+        clients.append(
+            TelegramClient(StringSession(session_string), settings.tg_api_id, settings.tg_api_hash)
+        )
+    return clients
+
+
 def _load_active_source_entities() -> list[str]:
     """Список username активных источников для подписки на события."""
     with session_scope() as session:
-        sources = session.query(Source).filter(Source.is_active.is_(True)).all()
+        sources = session.query(Source).filter(Source.is_active.is_(True)).order_by(Source.id).all()
         return [s.channel_username for s in sources]
+
+
+def partition_sources(usernames: list[str], partition_count: int) -> list[list[str]]:
+    """Разбить список источников на `partition_count` групп round-robin по
+    порядку (F26) — чистая функция, вынесена для тестируемости отдельно от
+    Telethon-подключений."""
+    if partition_count < 1:
+        raise ValueError("partition_count должен быть >= 1")
+    partitions: list[list[str]] = [[] for _ in range(partition_count)]
+    for i, username in enumerate(usernames):
+        partitions[i % partition_count].append(username)
+    return partitions
 
 
 def _find_source_id(channel_id: int, channel_username: str | None) -> int | None:
@@ -205,9 +258,10 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
         post_id = post.id
         logger.info("Новый пост в очереди: source_id=%s msg=%s", source_id, message.id)
 
-    # Скачивание медиа вне сессии (F17: под почасовым лимитом «тяжёлых» действий).
+    # Скачивание медиа вне сессии (F17: под почасовым лимитом «тяжёлых» действий,
+    # свой лимит на каждый клиент — F26).
     if message.media:
-        await _get_rate_limiter().acquire()
+        await _get_rate_limiter(event.client).acquire()
         try:
             # Скачиваем В ПАМЯТЬ (file=bytes), а не доверяем Telethon выбор
             # имени файла из вложения: при file=<директория> Telethon берёт имя
@@ -236,26 +290,67 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
                     saved.media_path = str(dest)
 
 
-async def start_listener(client: TelegramClient) -> None:
-    """Подключить клиент и зарегистрировать обработчик новых сообщений.
+async def start_listeners(clients: list[TelegramClient]) -> None:
+    """Подключить N клиентов и распределить активные источники между ними
+    round-robin по id (F26). Каждый клиент должен быть уже авторизован
+    (валидный session string).
 
-    Клиент должен быть уже авторизован (валидный session string в .env).
+    При ОДНОМ клиенте (обычный случай без дополнительных сессий) поведение
+    идентично прежнему: пустой список источников → `chats=None` (слушаем всё,
+    фильтр — внутри `_handle_new_message`). При НЕСКОЛЬКИХ клиентах пустая
+    партиция НЕ получает `chats=None` — иначе такой клиент слушал бы вообще
+    все свои диалоги, и сообщение источника, назначенного ДРУГОМУ клиенту,
+    могло бы обработаться дважды (гонка/дублирование).
     """
-    await client.connect()
-    if not await client.is_user_authorized():
-        raise RuntimeError(
-            "Telethon не авторизован. Сгенерируй session string: "
-            "python -m tg_repost.tools.gen_session"
-        )
+    if not clients:
+        raise ValueError("Нужен хотя бы один Telethon-клиент")
+
+    # `_rate_limiters` ключуется по `id(client)` — без явной очистки при
+    # каждом (пере)старте лимитеры отключённых клиентов из предыдущего
+    # запуска копились бы бесконечно, а после сборки мусора их `id()` мог бы
+    # СОВПАСТЬ с id нового клиента, незаметно унаследовавшего чужой остаток
+    # почасового бюджета (найдено при код-ревью Фазы 5+). Свежий старт —
+    # свежие лимитеры для всех клиентов.
+    _rate_limiters.clear()
 
     entities = _load_active_source_entities()
-    me = await client.get_me()
-    logger.info("Telethon авторизован как %s, источников: %d",
-                getattr(me, "username", me.id), len(entities))
+    partitions = partition_sources(entities, len(clients))
+    assert len(partitions) == len(clients)
 
-    # Подписываемся на все каналы (если список пуст — слушаем всё, но фильтруем
-    # по наличию источника в БД внутри обработчика).
-    chats = entities or None
-    client.add_event_handler(_handle_new_message, events.NewMessage(chats=chats))
-    logger.info("Listener запущен, слушаю %s",
-                "указанные источники" if chats else "все диалоги (фильтр в БД)")
+    for idx, client in enumerate(clients):
+        await client.connect()
+        if not await client.is_user_authorized():
+            raise RuntimeError(
+                f"Telethon-клиент #{idx} не авторизован. Сгенерируй session string: "
+                "python -m tg_repost.tools.gen_session"
+            )
+        me = await client.get_me()
+        partition = partitions[idx]
+
+        if len(clients) == 1:
+            chats = partition or None
+        elif partition:
+            chats = partition
+        else:
+            logger.info(
+                "Telethon-клиент #%d (%s): нет назначенных источников — "
+                "обработчик не регистрируется", idx, getattr(me, "username", me.id),
+            )
+            continue
+
+        client.add_event_handler(_handle_new_message, events.NewMessage(chats=chats))
+        logger.info(
+            "Telethon-клиент #%d авторизован как %s, слушает %s",
+            idx, getattr(me, "username", me.id),
+            f"{len(partition)} источник(ов)" if chats else "все диалоги (фильтр в БД)",
+        )
+
+    logger.info(
+        "Listener запущен: %d клиент(ов), %d активных источников",
+        len(clients), len(entities),
+    )
+
+
+async def start_listener(client: TelegramClient) -> None:
+    """Обратная совместимость (один клиент, все источники) — см. `start_listeners`."""
+    await start_listeners([client])

@@ -20,7 +20,7 @@ from tg_repost.config import (
     get_settings,
     invalidate_settings_cache,
 )
-from tg_repost.db.models import AppSetting, Secret
+from tg_repost.db.models import AppSetting, Secret, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 
@@ -85,6 +85,13 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         SettingField("stats_interval_minutes", "Период опроса, мин", "int", needs_resync=True),
         SettingField("stats_window_days", "Окно для /stats, дней", "int"),
     )),
+    SettingsGroup("negative_reactions", "Реакция на негатив — F25", (
+        SettingField(
+            "negative_reaction_threshold", "Порог негативных реакций (0 = выкл.)", "int",
+        ),
+        SettingField("auto_delete_on_negative", "Авто-удалять пост при превышении", "bool"),
+        SettingField("max_auto_deletes_per_hour", "Потолок авто-удалений в час", "int"),
+    )),
     SettingsGroup("style_profiles", "Стиль-профили — F15", (
         SettingField("default_style_profile", "Профиль по умолчанию", "str"),
     )),
@@ -93,6 +100,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         SettingField("brave_search_url", "Brave Search URL", "str"),
         SettingField("enrichment_max_results", "Макс. результатов поиска", "int"),
         SettingField("enrichment_max_sources", "Макс. источников в посте", "int"),
+        SettingField(
+            "version_comparison_enabled", "Сравнение версий источников — F24", "bool",
+        ),
     )),
     SettingsGroup("covers", "Авто-обложки — F18", (
         SettingField("enable_auto_cover", "Включены", "bool"),
@@ -196,17 +206,25 @@ def list_secret_status() -> list[SecretStatus]:
     return result
 
 
-def _ensure_master_key() -> str:
+def ensure_master_key() -> str:
     """Вернуть текущий WEBUI_MASTER_KEY, сгенерировав его при самом первом
     сохранении секрета. Бросает, если ключа нет, а секреты в БД уже есть —
     это значило бы, что .env потерял ключ независимо от БД (см. план Фазы 5,
-    раздел "Архитектурное решение: секреты")."""
+    раздел "Архитектурное решение: секреты").
+
+    Без подчёркивания в имени (было `_ensure_master_key`) — переиспользуется
+    `telethon_sessions_repo.py` (F26), не только этим модулем: дополнительные
+    Telethon-сессии шифруются тем же ключом, что и обычные секреты.
+    """
     settings = get_settings()
     if settings.webui_master_key:
         return settings.webui_master_key
 
     with session_scope() as session:
         existing_count = session.query(Secret).count()
+        # F26: дополнительные Telethon-сессии шифруются тем же ключом — та же
+        # защита от "ключ потерян, а зашифрованные данные в БД остались".
+        existing_count += session.query(TelethonSession).count()
     if existing_count > 0:
         raise RuntimeError(
             "WEBUI_MASTER_KEY отсутствует, но в БД уже есть зашифрованные "
@@ -229,7 +247,7 @@ def set_secret(key: str, plaintext: str) -> None:
     if not plaintext:
         raise ValueError("Пустое значение секрета не сохраняется")
 
-    master_key = _ensure_master_key()
+    master_key = ensure_master_key()
     encrypted = crypto.encrypt(plaintext, master_key)
     masked_hint = crypto.mask(plaintext)
 

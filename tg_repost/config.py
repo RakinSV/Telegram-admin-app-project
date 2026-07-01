@@ -98,6 +98,18 @@ class Settings(BaseSettings):
     stats_interval_minutes: int = Field(60, alias="STATS_INTERVAL_MINUTES")
     stats_window_days: int = Field(7, alias="STATS_WINDOW_DAYS")
 
+    # --- F25: авто-реакция на негативные реакции ---
+    # 0 — выключено (порог не может быть достигнут отрицательным/нулевым числом реакций).
+    negative_reaction_threshold: int = Field(0, alias="NEGATIVE_REACTION_THRESHOLD")
+    auto_delete_on_negative: bool = Field(False, alias="AUTO_DELETE_ON_NEGATIVE")
+    # Потолок автоматических удалений в час — защита от скоординированного
+    # всплеска негативных реакций (бригадинг), который иначе мог бы вызвать
+    # массовое необратимое удаление легитимных постов за один цикл сбора
+    # статистики (найдено при security-аудите Фазы 5+). При достижении
+    # потолка пост всё равно уведомляется владельцу, просто НЕ удаляется
+    # автоматически — решение остаётся за человеком.
+    max_auto_deletes_per_hour: int = Field(5, alias="MAX_AUTO_DELETES_PER_HOUR")
+
     # --- F15: стиль-профили рерайта ---
     # Профиль по умолчанию, если у источника не задан свой (имя файла промпта).
     default_style_profile: str = Field("default", alias="DEFAULT_STYLE_PROFILE")
@@ -111,6 +123,9 @@ class Settings(BaseSettings):
     # Сколько результатов запрашивать у Brave и сколько максимум вставлять в пост.
     enrichment_max_results: int = Field(8, alias="ENRICHMENT_MAX_RESULTS")
     enrichment_max_sources: int = Field(3, alias="ENRICHMENT_MAX_SOURCES")
+
+    # --- F24: сравнение версий источников (доп. LLM-вызов, поэтому опционально) ---
+    version_comparison_enabled: bool = Field(False, alias="VERSION_COMPARISON_ENABLED")
 
     # --- F18: авто-обложки ---
     enable_auto_cover: bool = Field(False, alias="ENABLE_AUTO_COVER")

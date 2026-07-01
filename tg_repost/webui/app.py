@@ -57,7 +57,7 @@ def _ensure_session_secret() -> str:
     """WEBUI_SESSION_SECRET нужен ДО первого запроса (параметр конструктора
     SessionMiddleware) — генерируется сразу при сборке приложения, в отличие
     от WEBUI_MASTER_KEY, который ждёт первого реального секрета (см.
-    `settings_store._ensure_master_key`). Потеря сессионного ключа не теряет
+    `settings_store.ensure_master_key`). Потеря сессионного ключа не теряет
     данные (просто разлогинивает), поэтому безопасно генерировать eagerly.
     """
     settings = get_settings()

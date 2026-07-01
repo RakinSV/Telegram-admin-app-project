@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from tg_repost import sources_repo, targets_repo
+from tg_repost import sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
 from tg_repost.config import get_settings
@@ -151,6 +151,34 @@ def build_crud_router() -> APIRouter:
         if new_state is not None:
             audit.record_audit("target_toggle", target=f"#{target_id}", detail=f"active={new_state}")
         return RedirectResponse(url="/targets", status_code=303)
+
+    # --- Доп. Telethon-сессии (F26) ---
+
+    @router.get("/telethon-sessions", response_class=HTMLResponse)
+    async def telethon_sessions_list(request: Request) -> Response:
+        return _templates.TemplateResponse(request, "telethon_sessions.html", {
+            "sessions": telethon_sessions_repo.list_sessions(), "error": None,
+        })
+
+    @router.post("/telethon-sessions")
+    async def telethon_sessions_create(
+        request: Request, label: str = Form(...), session_string: str = Form(...),
+    ) -> Response:
+        try:
+            row = telethon_sessions_repo.add_session(label, session_string)
+        except ValueError as exc:
+            return _templates.TemplateResponse(request, "telethon_sessions.html", {
+                "sessions": telethon_sessions_repo.list_sessions(), "error": str(exc),
+            }, status_code=400)
+        audit.record_audit("telethon_session_add", target=row.label)
+        return RedirectResponse(url="/telethon-sessions", status_code=303)
+
+    @router.post("/telethon-sessions/{session_id}/disable")
+    async def telethon_sessions_disable(request: Request, session_id: int) -> Response:
+        del request
+        if telethon_sessions_repo.deactivate_session(session_id):
+            audit.record_audit("telethon_session_disable", target=f"#{session_id}")
+        return RedirectResponse(url="/telethon-sessions", status_code=303)
 
     # --- Модерация (F07) ---
 

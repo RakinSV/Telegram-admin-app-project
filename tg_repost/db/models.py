@@ -220,6 +220,10 @@ class Post(Base):
     # Чат, где лежит posted_message_id (для сбора статистики F14).
     posted_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
+    # F25 — уведомление владельцу о негативных реакциях уже отправлено (не
+    # слать повторно на каждый цикл сбора статистики, пока порог превышен).
+    negative_alert_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # Индекс — дашборд (`webui/dashboard.py`) фильтрует/сортирует по этому
     # полю на каждой загрузке (recent_posts, todays_rewrite_tokens,
     # error_rate); без индекса это full table scan при росте `posts`,
@@ -283,6 +287,28 @@ class ChannelGrowthSnapshot(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
     subscriber_count: Mapped[int] = mapped_column(Integer)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class TelethonSession(Base):
+    """Дополнительная Telethon-сессия для распределения источников между
+    несколькими аккаунтами (F26) — снижает риск ограничений на один
+    аккаунт при большом числе источников.
+
+    Основная сессия (`TG_SESSION_STRING`, единственная в Фазах 0-5) остаётся
+    как есть в `secrets`/`.env` — эта таблица только для ДОПОЛНИТЕЛЬНЫХ,
+    добавляемых по мере роста числа источников. `encrypted_session_string` —
+    Fernet-токен тем же `WEBUI_MASTER_KEY`, что и обычные секреты (см.
+    `webui/crypto.py`), никогда не отдаётся обратно в браузер.
+    """
+
+    __tablename__ = "telethon_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    label: Mapped[str] = mapped_column(String(64))
+    encrypted_session_string: Mapped[str] = mapped_column(Text)
+    masked_hint: Mapped[str] = mapped_column(String(16))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class AppSetting(Base):
