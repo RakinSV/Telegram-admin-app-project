@@ -31,6 +31,7 @@ from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
 from tg_repost.scheduler.posting import parse_slot, publish_slot
+from tg_repost.scheduler.smart_schedule import auto_apply_slots_job
 from tg_repost.scheduler.stats import collect_stats
 from tg_repost.telegram.listener import build_client, start_listener
 from tg_repost.telegram.moderation_bot import build_application
@@ -146,6 +147,11 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         scheduler, "collect_growth_snapshot", settings.growth_tracking_enabled,
         collect_growth_snapshot, [tele_client],
         IntervalTrigger(minutes=settings.growth_snapshot_interval_minutes),
+    )
+    _resync_optional_job(
+        scheduler, "smart_schedule_auto_apply", settings.smart_schedule_auto_apply,
+        auto_apply_slots_job, [],
+        IntervalTrigger(hours=24),
     )
 
 

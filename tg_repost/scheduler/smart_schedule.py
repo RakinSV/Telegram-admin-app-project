@@ -132,6 +132,52 @@ def best_times_summary() -> str:
     return (
         f"📈 Рекомендуемые часы публикации (по {rec.posts_analyzed} постам, "
         f"UTC): {slots_str}\n"
-        f"Это рекомендация, POSTING_SLOTS автоматически не меняется — "
-        f"обнови вручную в .env, если согласен."
+        f"Применить можно кнопкой «Применить сейчас» на /stats/best-times в "
+        f"веб-админке, либо включить автоприменение раз в сутки в настройках."
     )
+
+
+def apply_recommended_slots(rec: ScheduleRecommendation) -> bool:
+    """Применить рекомендованные слоты к `posting_slots`, если данных
+    достаточно и рекомендация реально отличается от текущих слотов.
+
+    Возвращает True, если слоты были изменены (вызывающий код должен
+    вызвать `resync_scheduler_jobs()`, чтобы пересобрать `slot_*`-джобы —
+    здесь этого не делаем: у вызова два разных источника — периодическая
+    джоба и ручная кнопка «Применить сейчас», каждый сам решает, когда и
+    как резинкать планировщик).
+    """
+    if not rec.enough_data or not rec.recommended_slots:
+        return False
+    from tg_repost.webui import settings_store
+
+    settings = get_settings()
+    if sorted(rec.recommended_slots) == sorted(settings.posting_slots):
+        return False
+    settings_store.save_setting("posting_slots", rec.recommended_slots, "csv_list")
+    logger.info(
+        "F19: слоты публикации обновлены автоматически: %s -> %s",
+        settings.posting_slots, rec.recommended_slots,
+    )
+    return True
+
+
+async def auto_apply_slots_job() -> None:
+    """Периодическая джоба планировщика (раз в сутки, см. `webui/
+    supervisor.py::_sync_jobs`) — применяет рекомендацию к `posting_slots`,
+    если включена настройка `smart_schedule_auto_apply`, и сразу
+    пересинхронизирует `slot_*`-джобы под новые значения."""
+    settings = get_settings()
+    if not settings.smart_schedule_auto_apply:
+        return
+    rec = compute_recommended_slots(
+        settings.smart_schedule_window_days, settings.smart_schedule_top_n,
+        settings.smart_schedule_min_posts,
+    )
+    if apply_recommended_slots(rec):
+        # Локальный импорт — resync_scheduler_jobs живёт в webui.supervisor,
+        # который сам импортирует эту джобу для регистрации в APScheduler
+        # (см. _sync_jobs) — импорт на уровне модуля создал бы цикл.
+        from tg_repost.webui.supervisor import resync_scheduler_jobs
+
+        await resync_scheduler_jobs()

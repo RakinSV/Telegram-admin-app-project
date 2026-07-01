@@ -3,6 +3,8 @@
 {% block content %}
 <h1>Лучшее время публикации</h1>
 
+{% if just_applied %}<div class="card" style="border-color: var(--ok);">✅ Слоты публикации обновлены.</div>{% endif %}
+
 {% if not rec.enough_data %}
 <div class="card">
   <p class="muted">📈 Недостаточно данных: проанализировано {{ rec.posts_analyzed }} постов,
@@ -17,7 +19,13 @@
     <span class="badge ok">{{ slot }}</span>
     {% endfor %}
   </p>
-  <p class="muted">Это рекомендация — POSTING_SLOTS автоматически не меняется, обнови вручную в настройках, если согласен.</p>
+  <form method="post" action="/stats/best-times/apply">
+    <button type="submit">Применить сейчас</button>
+  </form>
+  <p class="muted" style="margin-top:8px;">
+    Можно также включить автоприменение раз в сутки в настройках
+    (группа «Умное расписание — F19»).
+  </p>
 </div>
 {% endif %}
 

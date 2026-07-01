@@ -128,10 +128,15 @@ class Settings(BaseSettings):
     comfyui_poll_attempts: int = Field(60, alias="COMFYUI_POLL_ATTEMPTS")
     comfyui_poll_interval_seconds: float = Field(2.0, alias="COMFYUI_POLL_INTERVAL_SECONDS")
 
-    # --- F19: умное расписание (каркас — только рекомендация, без автоприменения) ---
+    # --- F19: умное расписание ---
     smart_schedule_min_posts: int = Field(20, alias="SMART_SCHEDULE_MIN_POSTS")
     smart_schedule_top_n: int = Field(3, alias="SMART_SCHEDULE_TOP_N")
     smart_schedule_window_days: int = Field(21, alias="SMART_SCHEDULE_WINDOW_DAYS")
+    # По умолчанию выключено — рекомендация видна на /best_times и
+    # /stats/best-times, применяется вручную кнопкой «Применить сейчас» или
+    # (если явно включено) периодической джобой раз в сутки, см.
+    # scheduler/smart_schedule.py::auto_apply_slots_job (аудит Фазы 5+).
+    smart_schedule_auto_apply: bool = Field(False, alias="SMART_SCHEDULE_AUTO_APPLY")
 
     # --- F20: авто-дайджест ---
     digest_enabled: bool = Field(False, alias="DIGEST_ENABLED")

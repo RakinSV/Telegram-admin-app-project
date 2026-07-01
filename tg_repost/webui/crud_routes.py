@@ -27,11 +27,11 @@ from tg_repost.db.models import InvalidStatusTransition
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
-from tg_repost.scheduler.smart_schedule import compute_recommended_slots
+from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
 from tg_repost.webui import audit, log_broadcast
 from tg_repost.webui.auth import require_login
-from tg_repost.webui.supervisor import get_components
+from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs
 
 _SSE_HEARTBEAT_SECONDS = 15.0
 # Совпадает с дефолтным `limit` в sources_repo.list_sources/targets_repo.
@@ -257,14 +257,42 @@ def build_crud_router() -> APIRouter:
         return _templates.TemplateResponse(request, "stats.html", {"summary": summary})
 
     @router.get("/stats/best-times", response_class=HTMLResponse)
-    async def stats_best_times(request: Request) -> Response:
+    async def stats_best_times(request: Request, applied: int = 0) -> Response:
         settings = get_settings()
         rec = compute_recommended_slots(
             settings.smart_schedule_window_days,
             settings.smart_schedule_top_n,
             settings.smart_schedule_min_posts,
         )
-        return _templates.TemplateResponse(request, "best_times.html", {"rec": rec})
+        return _templates.TemplateResponse(
+            request, "best_times.html", {"rec": rec, "just_applied": bool(applied)},
+        )
+
+    @router.post("/stats/best-times/apply")
+    async def stats_best_times_apply(request: Request) -> Response:
+        """Применить текущую рекомендацию к `posting_slots` вручную, не
+        дожидаясь ежедневной автоматической джобы (F19, доделка Фазы 4) —
+        всегда доступно администратору, независимо от настройки
+        `smart_schedule_auto_apply` (та управляет только периодическим
+        автоприменением)."""
+        del request
+        settings = get_settings()
+        rec = compute_recommended_slots(
+            settings.smart_schedule_window_days,
+            settings.smart_schedule_top_n,
+            settings.smart_schedule_min_posts,
+        )
+        applied = apply_recommended_slots(rec)
+        if applied:
+            audit.record_audit(
+                "setting_set", target="posting_slots",
+                detail=", ".join(rec.recommended_slots) + " (умное расписание)",
+            )
+            if get_components().is_running:
+                await resync_scheduler_jobs()
+        return RedirectResponse(
+            url=f"/stats/best-times?applied={int(applied)}", status_code=303,
+        )
 
     @router.get("/stats/growth", response_class=HTMLResponse)
     async def stats_growth(request: Request) -> Response:

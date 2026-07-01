@@ -12,7 +12,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from tg_repost.db.models import AdminUser, AppSetting, Secret, Source
+from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source
 from tg_repost.db.session import session_scope
 from tg_repost.webui import app as app_module
 from tg_repost.webui import auth, setup_token
@@ -206,6 +206,24 @@ def test_sources_create_and_list_round_trip():
     r = client.get("/sources")
     assert r.status_code == 200
     assert "integration_test_chan" in r.text
+
+
+def test_best_times_apply_without_data_redirects_with_applied_zero():
+    """F19 доделка: кнопка «Применить сейчас» на /stats/best-times не должна
+    падать, если данных недостаточно — просто редиректит без изменений.
+    Явно чистим posts/post_stats — общий sqlite-engine на весь
+    pytest-процесс, другие файлы (test_smart_schedule.py и т.д.) могли
+    оставить там опубликованные посты, что дало бы enough_data=True здесь."""
+    with session_scope() as session:
+        session.query(PostStat).delete()
+        session.query(Post).delete()
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/stats/best-times")
+    assert r.status_code == 200
+    r = client.post("/stats/best-times/apply", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/stats/best-times?applied=0"
 
 
 def test_protected_route_rejects_expired_session(monkeypatch):

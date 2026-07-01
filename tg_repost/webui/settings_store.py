@@ -108,6 +108,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         SettingField("smart_schedule_min_posts", "Мин. постов для рекомендации", "int"),
         SettingField("smart_schedule_top_n", "Топ-N часов", "int"),
         SettingField("smart_schedule_window_days", "Окно анализа, дней", "int"),
+        SettingField(
+            "smart_schedule_auto_apply", "Автоприменение раз в сутки", "bool", needs_resync=True,
+        ),
     )),
     SettingsGroup("digest", "Авто-дайджест — F20", (
         SettingField("digest_enabled", "Включён", "bool", needs_resync=True),

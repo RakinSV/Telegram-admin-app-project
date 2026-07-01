@@ -85,6 +85,28 @@ def test_sync_jobs_no_optional_jobs_by_default():
     assert "collect_stats" not in job_ids
     assert "digest_job" not in job_ids
     assert "collect_growth_snapshot" not in job_ids
+    assert "smart_schedule_auto_apply" not in job_ids
+
+
+def test_sync_jobs_creates_smart_schedule_auto_apply_when_enabled():
+    """F19 доделка: автоприменение рекомендации к POSTING_SLOTS раз в сутки,
+    только если явно включено (по умолчанию — только ручная кнопка)."""
+    settings = Settings()
+    settings.smart_schedule_auto_apply = True
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("smart_schedule_auto_apply") is not None
+
+
+def test_sync_jobs_removes_smart_schedule_auto_apply_when_disabled_again():
+    settings = Settings()
+    settings.smart_schedule_auto_apply = True
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("smart_schedule_auto_apply") is not None
+    settings.smart_schedule_auto_apply = False
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("smart_schedule_auto_apply") is None
 
 
 def test_sync_jobs_creates_optional_job_when_enabled():
