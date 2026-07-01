@@ -32,3 +32,6 @@ cryptography==49.0.0          # Fernet — шифрование секретов
 passlib[argon2]==1.7.4        # хэширование пароля админа
 argon2-cffi==25.1.0
 sse-starlette==3.4.5          # живые логи (Server-Sent Events)
+
+# --- Guardian: бот-модератор группового чата (guardian/) ---
+aiogram==3.29.0                # FSM для многошаговой верификации при вступлении

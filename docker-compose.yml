@@ -33,3 +33,20 @@ services:
       - ./data/db:/app/db
       - ./data/logs:/app/logs
       - ./data/media:/app/media
+
+  guardian:
+    # Отдельный бот от tg_repost (модерация группы, не публикация контента —
+    # см. guardian/GUARDIAN.md), тот же образ, свой entrypoint/команда и своя
+    # БД (GUARDIAN_DATABASE_URL) — независим от tg_repost, можно
+    # останавливать/обновлять по отдельности.
+    build: .
+    entrypoint: ["./docker-entrypoint-guardian.sh"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      GUARDIAN_DATABASE_URL: "sqlite:///db/guardian.db"
+    volumes:
+      - ./.env:/app/.env
+      - ./data/db:/app/db
+      - ./data/logs:/app/logs
