@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Настройки Guardian — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Настройки Guardian</h1>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+<p class="muted">
+  Применяются без перезапуска Guardian: мгновенно, если бот уже читает
+  настройку заново на каждое сообщение/команду, и в течение минуты для
+  стоп-слов/whitelist доменов/порогов антифлуда — их держат отдельные
+  синглтоны в процессе Guardian, синхронизируются периодической джобой
+  (см. <code>guardian/bot.py::_reload_filters</code>). Идентичность бота
+  (токен, БД) и OpenAI-ключ сюда не входят — правятся в <code>.env</code>
+  (последний — на странице <a href="/secrets">«Секреты»</a> репост-бота, ключ общий).
+</p>
+
+{% for group in groups %}
+<div class="settings-group">
+  <h2>{{ group.title }}</h2>
+  <div class="card">
+    <form method="post" action="/guardian/settings/{{ group.key }}">
+      {% for field in group.fields %}
+      <div class="field-row">
+        <label for="guardian-{{ field.name }}">{{ field.label }}</label>
+        {% if field.choices %}
+          <select id="guardian-{{ field.name }}" name="{{ field.name }}">
+            {% for choice in field.choices %}
+            <option value="{{ choice }}" {{ "selected" if field.value == choice else "" }}>{{ choice }}</option>
+            {% endfor %}
+          </select>
+        {% elif field.value_type == "bool" %}
+          <input type="checkbox" id="guardian-{{ field.name }}" name="{{ field.name }}" {{ "checked" if field.value else "" }}>
+        {% elif field.value_type in ("int", "float") %}
+          <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="guardian-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+        {% else %}
+          <input type="text" id="guardian-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+      <button type="submit">Сохранить группу</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

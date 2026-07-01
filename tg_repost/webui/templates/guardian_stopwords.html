@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Стоп-слова Guardian — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Стоп-слова Guardian</h1>
+<p class="muted">
+  Сообщение с любым из этих слов/фраз (с учётом нормализации — латиница
+  вместо кириллицы, zero-width символы, буквы через разделители — все
+  ловятся как попытка обойти фильтр) удаляется, автор получает варн.
+</p>
+
+<div class="card">
+  <form method="post" action="/guardian/stopwords">
+    <div class="field-row">
+      <label for="word">Слово или фраза</label>
+      <input type="text" id="word" name="word" required>
+    </div>
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Слово</th><th></th></tr>
+    {% for word in words %}
+    <tr>
+      <td>{{ word }}</td>
+      <td>
+        <form method="post" action="/guardian/stopwords/delete" style="display:inline;">
+          <input type="hidden" name="word" value="{{ word }}">
+          <button type="submit" class="secondary">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="2" class="muted">Стоп-слов нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

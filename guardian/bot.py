@@ -15,6 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from guardian.config import get_guardian_settings
 from guardian.db.models import StopWord, TrustedUser
@@ -26,6 +27,30 @@ from guardian.services.warn_system import reset_expired_warns
 logger = get_logger(__name__)
 
 _STOPWORDS_SEED_PATH = "guardian/data/stopwords_default.txt"
+# Стоп-слова/whitelist доменов могут меняться НЕ только Telegram-командами
+# Guardian (те дёргают `.reload()` сами сразу после записи), но и веб-
+# админкой tg_repost — а это ДРУГОЙ ОС-процесс, у него нет способа
+# уведомить синглтоны `keyword_filter`/`link_filter` в процессе Guardian
+# напрямую. Периодический опрос — самое простое решение, одинаково
+# работающее независимо от источника изменения (см. guardian/config.py про
+# тот же выбор для настроек).
+_FILTER_RELOAD_INTERVAL_SECONDS = 60
+
+
+def _reload_filters() -> None:
+    with session_scope() as session:
+        messages.keyword_filter.reload(session)
+        messages.link_filter.reload(session)
+    # flood_filter не хранит своё состояние в БД (только пороги — часть
+    # GuardianSettings/bot_config), но у него, в отличие от keyword_filter/
+    # link_filter, нет собственного reload(session) — пороги применяются
+    # через update_limits(). Раньше эта джоба его не трогала вообще, и
+    # /guardian/settings/flood молча ничего не применял без перезапуска
+    # процесса (найдено при код-ревью).
+    settings = get_guardian_settings()
+    messages.flood_filter.update_limits(
+        settings.flood_max_messages, settings.flood_window_seconds
+    )
 
 
 def _seed_stopwords_if_empty() -> None:
@@ -126,9 +151,7 @@ async def main() -> None:
         return
 
     _seed_stopwords_if_empty()
-    with session_scope() as session:
-        messages.keyword_filter.reload(session)
-        messages.link_filter.reload(session)
+    _reload_filters()
 
     bot = Bot(
         token=settings.guardian_bot_token,
@@ -147,6 +170,11 @@ async def main() -> None:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         reset_expired_warns, CronTrigger(hour=3, minute=0), id="warn_ttl_reset"
+    )
+    scheduler.add_job(
+        _reload_filters,
+        IntervalTrigger(seconds=_FILTER_RELOAD_INTERVAL_SECONDS),
+        id="filter_reload",
     )
     scheduler.start()
 

@@ -39,6 +39,8 @@ from tg_repost.webui.auth import (
     verify_login,
 )
 from tg_repost.webui.crud_routes import build_crud_router
+from tg_repost.webui.form_utils import coerce_form_value
+from tg_repost.webui.guardian_routes import build_guardian_router
 from tg_repost.webui.supervisor import (
     get_components,
     resync_scheduler_jobs,
@@ -98,28 +100,6 @@ def require_setup_token(request: Request, token: str | None = None) -> None:
     raise SetupTokenRequiredError()
 
 
-def _coerce_form_value(value_type: str, raw: object) -> object:
-    """Привести значение HTML-формы к типу настройки (чистая функция).
-
-    Чекбоксы (bool) при снятой галке вообще не попадают в form-data — `raw`
-    будет None, что корректно означает False.
-
-    Бросает `ValueError` на нечисловой ввод для int/float — раньше это было
-    необработанным исключением прямо в роуте (голый 500 вместо чистой формы
-    с ошибкой), найдено при security-аудите Фазы 5.
-    """
-    if value_type == "bool":
-        return raw is not None and str(raw).strip().lower() in {"on", "true", "1"}
-    text = "" if raw is None else str(raw)
-    if value_type == "int":
-        return int(text) if text.strip() else 0
-    if value_type == "float":
-        return float(text) if text.strip() else 0.0
-    if value_type == "csv_list":
-        return [s.strip() for s in text.split(",") if s.strip()]
-    return text
-
-
 def _settings_groups_context() -> list[dict]:
     """Собрать контекст `groups` для `settings.html` — переиспользуется GET
     `/settings` и обработчиком ошибки валидации в POST `/settings/{group}`."""
@@ -167,13 +147,18 @@ def _telethon_wizard_routes(
 
     def _ctx(step: str, *, error: str | None = None) -> dict:
         return {
-            "step": step, "base_path": base_path, "success_redirect": success_redirect,
-            "base_template": base_template, "error": error,
+            "step": step,
+            "base_path": base_path,
+            "success_redirect": success_redirect,
+            "base_template": base_template,
+            "error": error,
         }
 
     @router.get(base_path, response_class=HTMLResponse, dependencies=_deps)
     async def telethon_phone_form(request: Request) -> Response:
-        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("phone"))
+        return _templates.TemplateResponse(
+            request, "telethon_login.html", _ctx("phone")
+        )
 
     @router.post(base_path, dependencies=_deps)
     async def telethon_phone_submit(
@@ -187,7 +172,8 @@ def _telethon_wizard_routes(
         final_api_hash = api_hash.strip() or settings.tg_api_hash
         if not final_api_id or not final_api_hash:
             return _templates.TemplateResponse(
-                request, "telethon_login.html",
+                request,
+                "telethon_login.html",
                 _ctx("phone", error="Укажи TG_API_ID и TG_API_HASH."),
                 status_code=400,
             )
@@ -199,10 +185,15 @@ def _telethon_wizard_routes(
         if api_hash.strip():
             settings_store.set_secret("tg_api_hash", final_api_hash)
 
-        ok, message = await telethon_login.begin(final_api_id, final_api_hash, phone.strip())
+        ok, message = await telethon_login.begin(
+            final_api_id, final_api_hash, phone.strip()
+        )
         if not ok:
             return _templates.TemplateResponse(
-                request, "telethon_login.html", _ctx("phone", error=message), status_code=400,
+                request,
+                "telethon_login.html",
+                _ctx("phone", error=message),
+                status_code=400,
             )
         return RedirectResponse(url=f"{base_path}/code", status_code=303)
 
@@ -217,7 +208,10 @@ def _telethon_wizard_routes(
         status, payload = await telethon_login.submit_code(code.strip())
         if status == "error":
             return _templates.TemplateResponse(
-                request, "telethon_login.html", _ctx("code", error=payload), status_code=400,
+                request,
+                "telethon_login.html",
+                _ctx("code", error=payload),
+                status_code=400,
             )
         if status == "need_password":
             return RedirectResponse(url=f"{base_path}/password", status_code=303)
@@ -228,18 +222,27 @@ def _telethon_wizard_routes(
         audit.record_audit("telethon_session_set", target=base_path)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
 
-    @router.get(f"{base_path}/password", response_class=HTMLResponse, dependencies=_deps)
+    @router.get(
+        f"{base_path}/password", response_class=HTMLResponse, dependencies=_deps
+    )
     async def telethon_password_form(request: Request) -> Response:
         if not telethon_login.awaiting_password():
             return RedirectResponse(url=base_path, status_code=303)
-        return _templates.TemplateResponse(request, "telethon_login.html", _ctx("password"))
+        return _templates.TemplateResponse(
+            request, "telethon_login.html", _ctx("password")
+        )
 
     @router.post(f"{base_path}/password", dependencies=_deps)
-    async def telethon_password_submit(request: Request, password: str = Form(...)) -> Response:
+    async def telethon_password_submit(
+        request: Request, password: str = Form(...)
+    ) -> Response:
         status, payload = await telethon_login.submit_password(password)
         if status == "error":
             return _templates.TemplateResponse(
-                request, "telethon_login.html", _ctx("password", error=payload), status_code=400,
+                request,
+                "telethon_login.html",
+                _ctx("password", error=payload),
+                status_code=400,
             )
         # status == "done" — единственный оставшийся случай по контракту
         # telethon_login.submit_password, payload гарантированно не None.
@@ -264,10 +267,18 @@ def _public_router() -> APIRouter:
     """Роуты без авторизации: бутстрап-визард и логин."""
     router = APIRouter()
     _telethon_wizard_routes(
-        router, "/setup/telethon", "/setup", "auth_base.html", require_token=True,
+        router,
+        "/setup/telethon",
+        "/setup",
+        "auth_base.html",
+        require_token=True,
     )
 
-    @router.get("/setup", response_class=HTMLResponse, dependencies=[Depends(require_setup_token)])
+    @router.get(
+        "/setup",
+        response_class=HTMLResponse,
+        dependencies=[Depends(require_setup_token)],
+    )
     async def setup_form(request: Request) -> Response:
         if is_bootstrapped():
             return RedirectResponse(url="/login", status_code=303)
@@ -276,7 +287,9 @@ def _public_router() -> APIRouter:
             for s in settings_store.list_secret_status()
         )
         return _templates.TemplateResponse(
-            request, "setup.html", {"error": None, "telethon_connected": telethon_connected},
+            request,
+            "setup.html",
+            {"error": None, "telethon_connected": telethon_connected},
         )
 
     @router.post("/setup", dependencies=[Depends(require_setup_token)])
@@ -298,9 +311,12 @@ def _public_router() -> APIRouter:
                 for s in settings_store.list_secret_status()
             )
             return _templates.TemplateResponse(
-                request, "setup.html",
-                {"error": "Пароли не совпадают или короче 8 символов",
-                 "telethon_connected": telethon_connected},
+                request,
+                "setup.html",
+                {
+                    "error": "Пароли не совпадают или короче 8 символов",
+                    "telethon_connected": telethon_connected,
+                },
                 status_code=400,
             )
 
@@ -312,7 +328,9 @@ def _public_router() -> APIRouter:
             # POST — см. security-аудит Фазы 5, теперь ловим на уровне БД
             # через IntegrityError внутри create_admin).
             return RedirectResponse(url="/login", status_code=303)
-        audit.record_audit("setup_completed", detail="первичная настройка администратора")
+        audit.record_audit(
+            "setup_completed", detail="первичная настройка администратора"
+        )
 
         # Секреты — write-only, тем же путём, что и обычное редактирование.
         # tg_session_string сюда НЕ входит — он получается только через
@@ -328,11 +346,17 @@ def _public_router() -> APIRouter:
 
         if tg_api_id.strip().isdigit():
             settings_store.save_setting("tg_api_id", int(tg_api_id), "int")
-            audit.record_audit("setting_set", target="tg_api_id", detail=tg_api_id.strip())
-        if tg_owner_user_id.strip().isdigit():
-            settings_store.save_setting("tg_owner_user_id", int(tg_owner_user_id), "int")
             audit.record_audit(
-                "setting_set", target="tg_owner_user_id", detail=tg_owner_user_id.strip(),
+                "setting_set", target="tg_api_id", detail=tg_api_id.strip()
+            )
+        if tg_owner_user_id.strip().isdigit():
+            settings_store.save_setting(
+                "tg_owner_user_id", int(tg_owner_user_id), "int"
+            )
+            audit.record_audit(
+                "setting_set",
+                target="tg_owner_user_id",
+                detail=tg_owner_user_id.strip(),
             )
 
         log_in(request)
@@ -358,14 +382,20 @@ def _public_router() -> APIRouter:
         client_key = request.client.host if request.client else "unknown"
         if is_login_locked(client_key):
             return _templates.TemplateResponse(
-                request, "login.html",
-                {"error": "Слишком много неудачных попыток — подожди немного и попробуй снова."},
+                request,
+                "login.html",
+                {
+                    "error": "Слишком много неудачных попыток — подожди немного и попробуй снова."
+                },
                 status_code=429,
             )
         if not verify_login(password):
             register_failed_login(client_key)
             return _templates.TemplateResponse(
-                request, "login.html", {"error": "Неверный пароль"}, status_code=401,
+                request,
+                "login.html",
+                {"error": "Неверный пароль"},
+                status_code=401,
             )
         clear_failed_logins(client_key)
         log_in(request)
@@ -399,12 +429,16 @@ def _protected_router() -> APIRouter:
     @router.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> Response:
         return _templates.TemplateResponse(
-            request, "settings.html", {"groups": _settings_groups_context(), "error": None},
+            request,
+            "settings.html",
+            {"groups": _settings_groups_context(), "error": None},
         )
 
     @router.post("/settings/{group_key}")
     async def settings_save(request: Request, group_key: str) -> Response:
-        group = next((g for g in settings_store.SETTINGS_GROUPS if g.key == group_key), None)
+        group = next(
+            (g for g in settings_store.SETTINGS_GROUPS if g.key == group_key), None
+        )
         if group is not None:
             form = await request.form()
             # Сначала валидируем/приводим ВСЕ поля группы и только потом
@@ -414,23 +448,35 @@ def _protected_router() -> APIRouter:
             # необработанный 500 (найдено при security-аудите Фазы 5).
             try:
                 coerced = {
-                    field.name: _coerce_form_value(field.value_type, form.get(field.name))
+                    field.name: coerce_form_value(
+                        field.value_type, form.get(field.name)
+                    )
                     for field in group.fields
                 }
             except ValueError:
                 return _templates.TemplateResponse(
-                    request, "settings.html",
-                    {"groups": _settings_groups_context(),
-                     "error": f"Некорректное значение в группе «{group.title}» — "
-                              f"числовое поле должно содержать число."},
+                    request,
+                    "settings.html",
+                    {
+                        "groups": _settings_groups_context(),
+                        "error": f"Некорректное значение в группе «{group.title}» — "
+                        f"числовое поле должно содержать число.",
+                    },
                     status_code=400,
                 )
             for field in group.fields:
-                settings_store.save_setting(field.name, coerced[field.name], field.value_type)
-                audit.record_audit("setting_set", target=field.name, detail=str(coerced[field.name]))
+                settings_store.save_setting(
+                    field.name, coerced[field.name], field.value_type
+                )
+                audit.record_audit(
+                    "setting_set", target=field.name, detail=str(coerced[field.name])
+                )
             # F19/Фаза 5.2: поля с needs_resync меняют состав/параметры джобов
             # планировщика — применяем сразу, если компоненты уже запущены.
-            if any(f.needs_resync for f in group.fields) and get_components().is_running:
+            if (
+                any(f.needs_resync for f in group.fields)
+                and get_components().is_running
+            ):
                 await resync_scheduler_jobs()
                 audit.record_audit("component_resync", target="scheduler")
         return RedirectResponse(url="/settings", status_code=303)
@@ -438,11 +484,15 @@ def _protected_router() -> APIRouter:
     @router.get("/secrets", response_class=HTMLResponse)
     async def secrets_page(request: Request) -> Response:
         return _templates.TemplateResponse(
-            request, "secrets.html", {"secrets": settings_store.list_secret_status()},
+            request,
+            "secrets.html",
+            {"secrets": settings_store.list_secret_status()},
         )
 
     @router.post("/secrets/{key}")
-    async def secrets_save(request: Request, key: str, value: str = Form("")) -> Response:
+    async def secrets_save(
+        request: Request, key: str, value: str = Form("")
+    ) -> Response:
         if value.strip():
             try:
                 settings_store.set_secret(key, value.strip())
@@ -454,11 +504,15 @@ def _protected_router() -> APIRouter:
     @router.get("/components", response_class=HTMLResponse)
     async def components_page(request: Request) -> Response:
         settings = get_settings()
-        return _templates.TemplateResponse(request, "components.html", {
-            "status": runtime_state.get_component_status(),
-            "is_running": get_components().is_running,
-            "is_minimally_configured": settings.is_minimally_configured,
-        })
+        return _templates.TemplateResponse(
+            request,
+            "components.html",
+            {
+                "status": runtime_state.get_component_status(),
+                "is_running": get_components().is_running,
+                "is_minimally_configured": settings.is_minimally_configured,
+            },
+        )
 
     @router.post("/components/start")
     async def components_start(request: Request) -> Response:
@@ -504,9 +558,13 @@ def create_app() -> FastAPI:
         same_site="lax",
         https_only=False,  # localhost/VPN-доступ без TLS, см. план Фазы 5
     )
-    app.mount("/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="static")
+    app.mount(
+        "/static", StaticFiles(directory=str(_BASE_DIR / "static")), name="static"
+    )
 
-    async def _not_authenticated_handler(request: Request, exc: Exception) -> RedirectResponse:
+    async def _not_authenticated_handler(
+        request: Request, exc: Exception
+    ) -> RedirectResponse:
         # Сигнатура — `Exception`, а не `NotAuthenticatedError`, чтобы совпадать
         # с типом, который ожидает `add_exception_handler` (Starlette диспетчит
         # по зарегистрированному классу — сюда реально попадёт только
@@ -517,13 +575,18 @@ def create_app() -> FastAPI:
 
     app.add_exception_handler(NotAuthenticatedError, _not_authenticated_handler)
 
-    async def _setup_token_required_handler(request: Request, exc: Exception) -> Response:
+    async def _setup_token_required_handler(
+        request: Request, exc: Exception
+    ) -> Response:
         del exc
-        return _templates.TemplateResponse(request, "setup_locked.html", {}, status_code=403)
+        return _templates.TemplateResponse(
+            request, "setup_locked.html", {}, status_code=403
+        )
 
     app.add_exception_handler(SetupTokenRequiredError, _setup_token_required_handler)
 
     app.include_router(_public_router())
     app.include_router(_protected_router())
     app.include_router(build_crud_router())
+    app.include_router(build_guardian_router())
     return app

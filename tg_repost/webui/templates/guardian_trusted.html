@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Исключения Guardian — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Доверенные пользователи (исключения)</h1>
+<p class="muted">
+  Доверенный пользователь полностью обходит спам-/линк-/антифлуд-фильтры —
+  варны не выдаются. Репост-бот (<code>REPOST_BOT_ID</code>) уже здесь
+  автоматически — без этого его посты со ссылками удалялись бы фильтром.
+  Добавляй сюда только реально доверенных людей: привилегия полная.
+</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if chat_id_missing %}
+<div class="card" style="border-color: var(--warn);">
+  ⚠️ GUARDIAN_GROUP_ID не задан — добавлять доверенных пока некуда (не с чем
+  связать запись). Настрой Guardian в <code>.env</code> сначала.
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/guardian/trusted">
+    <div class="field-row">
+      <label for="user_id">user_id</label>
+      <input type="text" id="user_id" name="user_id" placeholder="123456789" required>
+    </div>
+    <div class="field-row">
+      <label for="reason">Причина (необязательно)</label>
+      <input type="text" id="reason" name="reason">
+    </div>
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>user_id</th><th>Добавлен</th><th>Кем</th><th>Причина</th><th></th></tr>
+    {% for t in trusted %}
+    <tr>
+      <td>{{ t.user_id }}</td>
+      <td>{{ t.added_at.strftime("%Y-%m-%d %H:%M") if t.added_at else "" }}</td>
+      <td>{{ t.added_by }}</td>
+      <td>{{ t.reason or "" }}</td>
+      <td>
+        <form method="post" action="/guardian/trusted/{{ t.user_id }}/delete" style="display:inline;">
+          <button type="submit" class="secondary">Убрать</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Доверенных пользователей нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

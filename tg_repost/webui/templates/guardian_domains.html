@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Whitelist доменов Guardian — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Whitelist доменов Guardian</h1>
+<p class="muted">
+  Ссылки (видимые и скрытые за текстом кнопки/слова) на домены НЕ из этого
+  списка удаляются, автор получает варн. Пустой список — под удаление
+  попадает любая ссылка.
+</p>
+
+<div class="card">
+  <form method="post" action="/guardian/domains">
+    <div class="field-row">
+      <label for="domain">Домен</label>
+      <input type="text" id="domain" name="domain" placeholder="example.com" required>
+    </div>
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Домен</th><th></th></tr>
+    {% for domain in domains %}
+    <tr>
+      <td>{{ domain }}</td>
+      <td>
+        <form method="post" action="/guardian/domains/delete" style="display:inline;">
+          <input type="hidden" name="domain" value="{{ domain }}">
+          <button type="submit" class="secondary">Удалить</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="2" class="muted">Whitelist пуст — любая ссылка считается нарушением.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

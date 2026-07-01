@@ -5,10 +5,21 @@
 Читает тот же файл `.env`, что и репост-бот (общий docker-compose), но
 только свои `GUARDIAN_*`/специфичные для Guardian поля — `extra="ignore"`
 не даёт полям репост-бота мешать валидации.
-"""
+
+С добавлением веб-админки (см. `guardian/settings_store.py`) часть полей
+живёт с оверлеем поверх .env — значениями из таблицы `bot_config`
+(изменяются командами Guardian ИЛИ веб-панелью tg_repost). В отличие от
+`tg_repost.config.get_settings()` (см. комментарий там про `@lru_cache` +
+`invalidate_settings_cache()`), здесь оверлей пере-читается из БД НА КАЖДЫЙ
+вызов, не кэшируется целиком: Guardian и веб-админка tg_repost — РАЗНЫЕ ОС-
+процессы (разные контейнеры), поэтому явная инвалидация кэша из процесса
+веб-панели никак не достучится до процесса Guardian. Свежее чтение из
+SQLite — единственный вариант, одинаково корректный независимо от того, кто
+записал изменение."""
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 
 from pydantic import Field, field_validator
@@ -89,11 +100,54 @@ class GuardianSettings(BaseSettings):
 
 
 @lru_cache
-def get_guardian_settings() -> GuardianSettings:
+def _env_settings() -> GuardianSettings:
+    """Только .env-часть, кэшируется — .env не меняется в рантайме процесса
+    (в отличие от `bot_config`, см. docstring модуля)."""
     return GuardianSettings()  # type: ignore[call-arg]
 
 
+def _db_overrides() -> dict[str, object]:
+    """Оверлей значений `bot_config` поверх .env-дефолтов — ТОЛЬКО для ключей,
+    совпадающих с полями `GuardianSettings` (в `bot_config` есть и другие
+    записи не про настройки — `captcha_questions`/`allowed_domains`, они
+    сюда не попадают, т.к. таких полей у `GuardianSettings` нет). Любая
+    ошибка (БД недоступна/таблицы ещё нет) не должна ронять процесс —
+    работаем на чистых .env-дефолтах, тот же приём что и в `tg_repost.config`."""
+    try:
+        from guardian.db.models import BotConfig
+        from guardian.db.session import session_scope
+
+        with session_scope() as session:
+            rows = [(r.key, r.value) for r in session.query(BotConfig).all()]
+    except Exception:  # noqa: BLE001
+        return {}
+
+    base = _env_settings()
+    overrides: dict[str, object] = {}
+    for key, raw_value in rows:
+        if key not in base.model_fields:
+            continue
+        try:
+            overrides[key] = json.loads(raw_value)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return overrides
+
+
+def get_guardian_settings() -> GuardianSettings:
+    """Настройки: .env-дефолты + свежий оверлей из `bot_config` на каждый
+    вызов (см. docstring модуля про кросс-процессную свежесть). `model_copy`
+    не перевалидирует поля — запись в БД ожидается уже правильно типизированной
+    (см. `guardian/settings_store.py::save_setting`), так же как `bot_config.
+    value` — JSON-сериализованное значение того же типа, что и .env-поле."""
+    overrides = _db_overrides()
+    base = _env_settings()
+    return base.model_copy(update=overrides) if overrides else base
+
+
 def invalidate_settings_cache() -> None:
-    """Сбросить `lru_cache` — нужно после смены `os.environ` в тестах, иначе
-    следующий `get_guardian_settings()` вернёт закэшированный старый объект."""
-    get_guardian_settings.cache_clear()
+    """Сбросить `lru_cache` .env-части — нужно после смены `os.environ` в
+    тестах, иначе следующий вызов вернёт закэшированный старый объект.
+    Оверлей `bot_config` в кэше не участвует (см. `_db_overrides`), сбрасывать
+    нечего."""
+    _env_settings.cache_clear()

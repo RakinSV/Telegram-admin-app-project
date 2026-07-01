@@ -12,7 +12,6 @@ user_id первым аргументом: `/ban 123456789 причина`.
 
 from __future__ import annotations
 
-import json
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -22,15 +21,9 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject
 from aiogram.types import ChatPermissions, Message
 
+from guardian import domains_repo, stopwords_repo, trusted_repo
 from guardian.config import get_guardian_settings
-from guardian.db.models import (
-    BotConfig,
-    Member,
-    ModerationLog,
-    StopWord,
-    TrustedUser,
-    Warning,
-)
+from guardian.db.models import Member, ModerationLog, Warning
 from guardian.db.session import session_scope
 from guardian.handlers import messages as messages_handlers
 from guardian.logging_conf import get_logger
@@ -113,6 +106,16 @@ async def _require_admin(message: Message, bot: Bot) -> int | None:
         await message.reply("Команда доступна только администраторам группы.")
         return None
     return message.from_user.id
+
+
+def _reload_keyword_filter() -> None:
+    with session_scope() as session:
+        messages_handlers.keyword_filter.reload(session)
+
+
+def _reload_link_filter() -> None:
+    with session_scope() as session:
+        messages_handlers.link_filter.reload(session)
 
 
 @router.message(Command("warn"))
@@ -378,11 +381,13 @@ async def cmd_addword(message: Message, command: CommandObject, bot: Bot) -> Non
     if not word:
         await message.reply("Использование: /addword <слово или фраза>")
         return
-    with session_scope() as session:
-        if session.query(StopWord).filter(StopWord.word == word).one_or_none() is None:
-            session.add(StopWord(word=word, added_by=str(actor_id)))
-        messages_handlers.keyword_filter.reload(session)
-    await message.reply(f"Стоп-слово «{word}» добавлено.")
+    added = stopwords_repo.add_stopword(word, added_by=str(actor_id))
+    _reload_keyword_filter()
+    await message.reply(
+        f"Стоп-слово «{word}» добавлено."
+        if added
+        else f"Стоп-слово «{word}» уже было в списке."
+    )
 
 
 @router.message(Command("delword"))
@@ -394,9 +399,8 @@ async def cmd_delword(message: Message, command: CommandObject, bot: Bot) -> Non
     if not word:
         await message.reply("Использование: /delword <слово или фраза>")
         return
-    with session_scope() as session:
-        session.query(StopWord).filter(StopWord.word == word).delete()
-        messages_handlers.keyword_filter.reload(session)
+    stopwords_repo.remove_stopword(word)
+    _reload_keyword_filter()
     await message.reply(f"Стоп-слово «{word}» удалено (если было).")
 
 
@@ -404,10 +408,7 @@ async def cmd_delword(message: Message, command: CommandObject, bot: Bot) -> Non
 async def cmd_listwords(message: Message, bot: Bot) -> None:
     if await _require_admin(message, bot) is None:
         return
-    with session_scope() as session:
-        words = [
-            row.word for row in session.query(StopWord).order_by(StopWord.word).all()
-        ]
+    words = stopwords_repo.list_stopwords()
     await message.reply("Стоп-слова:\n" + ("\n".join(words) if words else "(пусто)"))
 
 
@@ -422,47 +423,18 @@ async def cmd_trust(message: Message, command: CommandObject, bot: Bot) -> None:
             "Использование: ответь на сообщение пользователя командой /trust [причина]"
         )
         return
-    with session_scope() as session:
-        exists = (
-            session.query(TrustedUser)
-            .filter(
-                TrustedUser.user_id == user_id, TrustedUser.chat_id == message.chat.id
-            )
-            .one_or_none()
-        )
-        if exists is None:
-            session.add(
-                TrustedUser(
-                    user_id=user_id,
-                    chat_id=message.chat.id,
-                    added_by=str(actor_id),
-                    reason=reason or None,
-                )
-            )
-        member = (
-            session.query(Member)
-            .filter(Member.user_id == user_id, Member.chat_id == message.chat.id)
-            .one_or_none()
-        )
-        if member is not None:
-            member.is_trusted = True
-        session.add(
-            ModerationLog(
-                action="trust",
-                user_id=user_id,
-                chat_id=message.chat.id,
-                reason=reason or None,
-                actor=str(actor_id),
-            )
-        )
-    await log_action(
-        bot,
-        "trust",
-        user_id=user_id,
-        chat_id=message.chat.id,
-        reason=reason or "вручную",
+    added = trusted_repo.add_trusted(
+        user_id, message.chat.id, str(actor_id), reason or None
     )
-    await message.reply("Добавлен в доверенные.")
+    if added:
+        await log_action(
+            bot,
+            "trust",
+            user_id=user_id,
+            chat_id=message.chat.id,
+            reason=reason or "вручную",
+        )
+    await message.reply("Добавлен в доверенные." if added else "Уже был доверенным.")
 
 
 @router.message(Command("untrust"))
@@ -476,29 +448,12 @@ async def cmd_untrust(message: Message, command: CommandObject, bot: Bot) -> Non
             "Использование: ответь на сообщение пользователя командой /untrust"
         )
         return
-    with session_scope() as session:
-        session.query(TrustedUser).filter(
-            TrustedUser.user_id == user_id, TrustedUser.chat_id == message.chat.id
-        ).delete()
-        member = (
-            session.query(Member)
-            .filter(Member.user_id == user_id, Member.chat_id == message.chat.id)
-            .one_or_none()
+    removed = trusted_repo.remove_trusted(user_id, message.chat.id, str(actor_id))
+    if removed:
+        await log_action(
+            bot, "untrust", user_id=user_id, chat_id=message.chat.id, reason="вручную"
         )
-        if member is not None:
-            member.is_trusted = False
-        session.add(
-            ModerationLog(
-                action="untrust",
-                user_id=user_id,
-                chat_id=message.chat.id,
-                actor=str(actor_id),
-            )
-        )
-    await log_action(
-        bot, "untrust", user_id=user_id, chat_id=message.chat.id, reason="вручную"
-    )
-    await message.reply("Убран из доверенных.")
+    await message.reply("Убран из доверенных." if removed else "Не был доверенным.")
 
 
 @router.message(Command("addomain"))
@@ -506,27 +461,17 @@ async def cmd_addomain(message: Message, command: CommandObject, bot: Bot) -> No
     actor_id = await _require_admin(message, bot)
     if actor_id is None:
         return
-    domain = (command.args or "").strip().lower().removeprefix("www.")
-    if not domain:
+    raw_domain = (command.args or "").strip()
+    if not raw_domain:
         await message.reply("Использование: /addomain <домен>")
         return
-    with session_scope() as session:
-        row = (
-            session.query(BotConfig)
-            .filter(BotConfig.key == "allowed_domains")
-            .one_or_none()
+    domain = domains_repo.add_allowed_domain(raw_domain, str(actor_id))
+    if not domain:
+        await message.reply(
+            "Пустой домен (например, только «www.») — нечего добавлять."
         )
-        current = set(json.loads(row.value)) if row is not None else set()
-        current.add(domain)
-        value = json.dumps(sorted(current))
-        if row is None:
-            session.add(
-                BotConfig(key="allowed_domains", value=value, updated_by=str(actor_id))
-            )
-        else:
-            row.value = value
-            row.updated_by = str(actor_id)
-        messages_handlers.link_filter.reload(session)
+        return
+    _reload_link_filter()
     await message.reply(f"Домен «{domain}» добавлен в whitelist.")
 
 
@@ -535,36 +480,20 @@ async def cmd_deldomain(message: Message, command: CommandObject, bot: Bot) -> N
     actor_id = await _require_admin(message, bot)
     if actor_id is None:
         return
-    domain = (command.args or "").strip().lower().removeprefix("www.")
-    if not domain:
+    raw_domain = (command.args or "").strip()
+    if not raw_domain:
         await message.reply("Использование: /deldomain <домен>")
         return
-    with session_scope() as session:
-        row = (
-            session.query(BotConfig)
-            .filter(BotConfig.key == "allowed_domains")
-            .one_or_none()
-        )
-        if row is not None:
-            current = set(json.loads(row.value))
-            current.discard(domain)
-            row.value = json.dumps(sorted(current))
-            row.updated_by = str(actor_id)
-        messages_handlers.link_filter.reload(session)
-    await message.reply(f"Домен «{domain}» удалён из whitelist (если был).")
+    domains_repo.remove_allowed_domain(raw_domain, str(actor_id))
+    _reload_link_filter()
+    await message.reply(f"Домен «{raw_domain}» удалён из whitelist (если был).")
 
 
 @router.message(Command("listdomains"))
 async def cmd_listdomains(message: Message, bot: Bot) -> None:
     if await _require_admin(message, bot) is None:
         return
-    with session_scope() as session:
-        row = (
-            session.query(BotConfig)
-            .filter(BotConfig.key == "allowed_domains")
-            .one_or_none()
-        )
-        domains = sorted(json.loads(row.value)) if row is not None else []
+    domains = domains_repo.list_allowed_domains()
     await message.reply(
         "Whitelist доменов:\n" + ("\n".join(domains) if domains else "(пусто)")
     )

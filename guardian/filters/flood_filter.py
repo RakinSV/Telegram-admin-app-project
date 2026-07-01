@@ -15,6 +15,15 @@ class FloodFilter:
         self._timestamps: dict[int, deque[float]] = defaultdict(deque)
         self._last_text: dict[int, str] = {}
 
+    def update_limits(self, max_messages: int, window_seconds: int) -> None:
+        """Применить новые пороги без потери накопленного состояния —
+        вызывается периодической джобой `bot.py::_reload_filters`, чтобы
+        изменения `flood_max_messages`/`flood_window_seconds` из
+        `bot_config` (веб-админка или будущие Telegram-команды) применялись
+        без пересоздания синглтона и без потери текущих окон пользователей."""
+        self._max_messages = max_messages
+        self._window_seconds = window_seconds
+
     def check_flood(self, user_id: int, now: float | None = None) -> bool:
         """True, если пользователь превысил `max_messages` за `window_seconds`."""
         now = now if now is not None else time.monotonic()
