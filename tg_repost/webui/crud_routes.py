@@ -34,6 +34,11 @@ from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components
 
 _SSE_HEARTBEAT_SECONDS = 15.0
+# Совпадает с дефолтным `limit` в sources_repo.list_sources/targets_repo.
+# list_targets/ads.repo.list_briefs — используется только для индикации
+# «список мог быть обрезан» в шаблонах (аудит Фазы 5), сам лимит задаётся
+# в repo-функциях.
+_LIST_LIMIT = 500
 
 logger = get_logger(__name__)
 
@@ -49,9 +54,10 @@ def build_crud_router() -> APIRouter:
 
     @router.get("/sources", response_class=HTMLResponse)
     async def sources_list(request: Request) -> Response:
-        return _templates.TemplateResponse(
-            request, "sources.html", {"sources": sources_repo.list_sources()},
-        )
+        sources = sources_repo.list_sources()
+        return _templates.TemplateResponse(request, "sources.html", {
+            "sources": sources, "truncated": len(sources) >= _LIST_LIMIT,
+        })
 
     @router.post("/sources")
     async def sources_create(request: Request, channel: str = Form(...)) -> Response:
@@ -118,9 +124,10 @@ def build_crud_router() -> APIRouter:
 
     @router.get("/targets", response_class=HTMLResponse)
     async def targets_list(request: Request) -> Response:
-        return _templates.TemplateResponse(
-            request, "targets.html", {"targets": targets_repo.list_targets()},
-        )
+        targets = targets_repo.list_targets()
+        return _templates.TemplateResponse(request, "targets.html", {
+            "targets": targets, "truncated": len(targets) >= _LIST_LIMIT, "error": None,
+        })
 
     @router.post("/targets")
     async def targets_create(
@@ -211,9 +218,10 @@ def build_crud_router() -> APIRouter:
 
     @router.get("/ads", response_class=HTMLResponse)
     async def ads_list(request: Request) -> Response:
-        return _templates.TemplateResponse(
-            request, "ads.html", {"briefs": ads_repo.list_briefs()},
-        )
+        briefs = ads_repo.list_briefs()
+        return _templates.TemplateResponse(request, "ads.html", {
+            "briefs": briefs, "truncated": len(briefs) >= _LIST_LIMIT, "error": None,
+        })
 
     @router.post("/ads")
     async def ads_create(
@@ -272,10 +280,17 @@ def build_crud_router() -> APIRouter:
     # --- Журнал изменений + живые логи (F23, Фаза 5.4) ---
 
     @router.get("/audit", response_class=HTMLResponse)
-    async def audit_page(request: Request) -> Response:
-        return _templates.TemplateResponse(
-            request, "audit.html", {"entries": audit.list_audit_log()},
+    async def audit_page(request: Request, page: int = 1) -> Response:
+        page = max(page, 1)
+        total = audit.count_audit_log()
+        pages = max((total + audit.PAGE_SIZE - 1) // audit.PAGE_SIZE, 1)
+        page = min(page, pages)
+        entries = audit.list_audit_log(
+            limit=audit.PAGE_SIZE, offset=(page - 1) * audit.PAGE_SIZE,
         )
+        return _templates.TemplateResponse(request, "audit.html", {
+            "entries": entries, "page": page, "pages": pages, "total": total,
+        })
 
     @router.get("/logs", response_class=HTMLResponse)
     async def logs_page(request: Request) -> Response:

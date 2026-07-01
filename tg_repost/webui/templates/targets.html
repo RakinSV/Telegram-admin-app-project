@@ -2,6 +2,7 @@
 {% block title %}Целевые группы — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Целевые группы</h1>
+{% if truncated %}<p class="muted">Показаны первые 500 записей.</p>{% endif %}
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 

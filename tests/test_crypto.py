@@ -1,8 +1,13 @@
-"""Тесты шифрования секретов at rest (F23, Фаза 5.1)."""
+"""Тесты шифрования секретов at rest (F23, Фаза 5.1; Фаза 5-аудит: права
+доступа на .env)."""
+
+import stat
+import sys
 
 import pytest
 from cryptography.fernet import InvalidToken
 
+from tg_repost import crypto
 from tg_repost.crypto import append_env_var, decrypt, encrypt, generate_key, mask
 
 
@@ -73,3 +78,26 @@ def test_append_env_var_appends_to_existing_with_trailing_newline(tmp_path):
     append_env_var("NEW_VAR", "value", env_path=str(env_path))
     content = env_path.read_text(encoding="utf-8")
     assert content == "EXISTING=1\nNEW_VAR=value\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="os.chmod не даёт POSIX-семантики на Windows")
+def test_append_env_var_restricts_permissions_on_posix(tmp_path):
+    """`.env` содержит бутстрап-ключи шифрования — на Linux/VPS права по
+    умолчанию зависят от umask процесса, а не гарантированно ограничены
+    (найдено при аудите Фазы 5)."""
+    env_path = tmp_path / ".env"
+    append_env_var("FOO", "bar", env_path=str(env_path))
+    mode = stat.S_IMODE(env_path.stat().st_mode)
+    assert mode == 0o600
+
+
+def test_append_env_var_tolerates_chmod_failure(tmp_path, monkeypatch):
+    """Если `os.chmod` недоступен/падает (необычная ФС, права окружения) —
+    запись .env всё равно должна пройти, а не свалиться с OSError."""
+    def _raise(*args, **kwargs):
+        raise OSError("simulated chmod failure")
+
+    monkeypatch.setattr(crypto.os, "chmod", _raise)
+    env_path = tmp_path / ".env"
+    append_env_var("FOO", "bar", env_path=str(env_path))
+    assert env_path.read_text(encoding="utf-8") == "FOO=bar\n"

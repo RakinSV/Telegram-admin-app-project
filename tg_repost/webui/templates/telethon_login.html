@@ -39,7 +39,9 @@
   {% endif %}
 
   {% if step != "done" %}
-  <p class="muted" style="margin-top: 16px;"><a href="{{ success_redirect }}">← Назад</a></p>
+  <form method="post" action="{{ base_path }}/cancel" style="margin-top: 16px;">
+    <button type="submit" class="secondary">← Отменить и назад</button>
+  </form>
   {% endif %}
 </div>
 {% endblock %}

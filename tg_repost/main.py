@@ -25,6 +25,8 @@ import uvicorn
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
 from tg_repost.webui.app import create_app
+from tg_repost.webui.auth import is_bootstrapped
+from tg_repost.webui.setup_token import get_or_create_setup_token
 from tg_repost.webui.supervisor import get_components, start_components, stop_components
 
 logger = get_logger(__name__)
@@ -52,6 +54,19 @@ async def run() -> None:
     # за `uv_server.should_exit`, чтобы синхронно остановить и Telegram-часть.
     web_task = asyncio.create_task(uv_server.serve())
     logger.info("Веб-админка: http://%s:%d", WEBUI_HOST, WEBUI_PORT)
+
+    # /setup/telethon может привязать живую Telethon-сессию без пароля —
+    # до создания администратора это самый «дорогой» неавторизованный
+    # эндпоинт (найдено при аудите Фазы 5). Токен гейтит /setup* и печатается
+    # только пока администратора ещё нет — доступ к логу процесса уже
+    # подразумевает доверие.
+    if not is_bootstrapped():
+        token = get_or_create_setup_token()
+        logger.warning(
+            "Администратор ещё не создан. Открой для настройки: "
+            "http://%s:%d/setup?token=%s",
+            WEBUI_HOST, WEBUI_PORT, token,
+        )
 
     # --- Telethon listener / бот / планировщик — только если хватает секретов ---
     if settings.is_minimally_configured:

@@ -2,6 +2,7 @@
 {% block title %}Журнал изменений — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Журнал изменений</h1>
+<p class="muted">Всего записей: {{ total }} · страница {{ page }} из {{ pages }}</p>
 
 <div class="card">
   <table>
@@ -18,4 +19,12 @@
     {% endfor %}
   </table>
 </div>
+
+{% if pages > 1 %}
+<p>
+  {% if page > 1 %}<a href="/audit?page={{ page - 1 }}">&larr; Новее</a>{% endif %}
+  {% if page > 1 and page < pages %} · {% endif %}
+  {% if page < pages %}<a href="/audit?page={{ page + 1 }}">Старее &rarr;</a>{% endif %}
+</p>
+{% endif %}
 {% endblock %}

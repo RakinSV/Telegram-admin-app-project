@@ -2,6 +2,7 @@
 {% block title %}Настройки — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Настройки</h1>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
 <p class="muted">
   Большинство значений применяются сразу. Поля с пометкой
   <span class="badge warn">resync</span> меняют состав/расписание задач

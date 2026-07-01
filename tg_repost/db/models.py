@@ -220,7 +220,14 @@ class Post(Base):
     # Чат, где лежит posted_message_id (для сбора статистики F14).
     posted_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Индекс — дашборд (`webui/dashboard.py`) фильтрует/сортирует по этому
+    # полю на каждой загрузке (recent_posts, todays_rewrite_tokens,
+    # error_rate); без индекса это full table scan при росте `posts`,
+    # выполняемый прямо в общем event loop (найдено при аудите Фазы 5,
+    # см. миграцию 0006).
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )

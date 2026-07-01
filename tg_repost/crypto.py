@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -62,6 +64,13 @@ def append_env_var(name: str, value: str, env_path: str = ".env") -> None:
         if needs_newline:
             fh.write("\n")
         fh.write(f"{name}={value}\n")
+    # `.env` содержит бутстрап-ключи шифрования секретов — на Linux/VPS
+    # (см. роадмап в CLAUDE.md) права по умолчанию зависят от umask
+    # процесса, а не гарантированно ограничены. На Windows `os.chmod` не
+    # даёт POSIX-семантики (только снимает read-only), но и не вредит —
+    # реальная защита там через NTFS ACL. Найдено при аудите Фазы 5.
+    with contextlib.suppress(OSError):
+        os.chmod(path, 0o600)
 
 
 __all__ = [

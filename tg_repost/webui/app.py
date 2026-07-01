@@ -18,13 +18,23 @@ from starlette.middleware.sessions import SessionMiddleware
 from tg_repost import crypto
 from tg_repost.config import get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
-from tg_repost.webui import audit, dashboard, runtime_state, settings_store, telethon_login
+from tg_repost.webui import (
+    audit,
+    dashboard,
+    runtime_state,
+    settings_store,
+    setup_token,
+    telethon_login,
+)
 from tg_repost.webui.auth import (
     NotAuthenticatedError,
+    clear_failed_logins,
     create_admin,
     is_bootstrapped,
+    is_login_locked,
     log_in,
     log_out,
+    register_failed_login,
     require_login,
     verify_login,
 )
@@ -60,11 +70,43 @@ def _ensure_session_secret() -> str:
     return new_secret
 
 
+class SetupTokenRequiredError(Exception):
+    """`/setup*` запрошен без валидного токена (до создания администратора).
+
+    Отдельный класс, а не `NotAuthenticatedError` — тот редиректит на
+    `/login`, а `/login` до бутстрапа сам редиректит на `/setup`, что дало
+    бы бесконечный редирект-луп. См. `webui/setup_token.py` и security-аудит
+    Фазы 5: `/setup/telethon` может привязать живую Telethon-сессию без
+    пароля, поэтому до бутстрапа это самый «дорогой» неавторизованный
+    эндпоинт всей админки.
+    """
+
+
+def require_setup_token(request: Request, token: str | None = None) -> None:
+    """FastAPI-зависимость на `/setup*`: пропускает, если админ уже создан
+    (сценарий первичного бутстрапа неактуален), либо токен уже подтверждён
+    в этой браузерной сессии, либо передан верный `?token=` в запросе —
+    подтверждение запоминается в сессии, чтобы не таскать токен в каждой
+    ссылке визарда."""
+    if is_bootstrapped():
+        return
+    if request.session.get("setup_token_ok"):
+        return
+    if setup_token.verify_setup_token(token):
+        request.session["setup_token_ok"] = True
+        return
+    raise SetupTokenRequiredError()
+
+
 def _coerce_form_value(value_type: str, raw: object) -> object:
     """Привести значение HTML-формы к типу настройки (чистая функция).
 
     Чекбоксы (bool) при снятой галке вообще не попадают в form-data — `raw`
     будет None, что корректно означает False.
+
+    Бросает `ValueError` на нечисловой ввод для int/float — раньше это было
+    необработанным исключением прямо в роуте (голый 500 вместо чистой формы
+    с ошибкой), найдено при security-аудите Фазы 5.
     """
     if value_type == "bool":
         return raw is not None and str(raw).strip().lower() in {"on", "true", "1"}
@@ -78,8 +120,35 @@ def _coerce_form_value(value_type: str, raw: object) -> object:
     return text
 
 
+def _settings_groups_context() -> list[dict]:
+    """Собрать контекст `groups` для `settings.html` — переиспользуется GET
+    `/settings` и обработчиком ошибки валидации в POST `/settings/{group}`."""
+    return [
+        {
+            "key": group.key,
+            "title": group.title,
+            "fields": [
+                {
+                    "name": f.name,
+                    "label": f.label,
+                    "value_type": f.value_type,
+                    "needs_resync": f.needs_resync,
+                    "value": settings_store.effective_value(f),
+                }
+                for f in group.fields
+            ],
+        }
+        for group in settings_store.SETTINGS_GROUPS
+    ]
+
+
 def _telethon_wizard_routes(
-    router: APIRouter, base_path: str, success_redirect: str, base_template: str
+    router: APIRouter,
+    base_path: str,
+    success_redirect: str,
+    base_template: str,
+    *,
+    require_token: bool = False,
 ) -> None:
     """Зарегистрировать 3-шаговый визард Telethon-логина (телефон → код →
     опционально пароль 2FA) на переданном роутере (F23, Фаза 5.2).
@@ -88,7 +157,13 @@ def _telethon_wizard_routes(
     нужен для самого первого подключения) и `/components/telethon` (после
     бутстрапа, с авторизацией — для повторного входа/смены аккаунта). Логика
     шагов — в `webui/telethon_login.py`, эта функция только рендерит формы.
+
+    `require_token=True` — только для `/setup/telethon` (до бутстрапа): см.
+    `require_setup_token`/`webui/setup_token.py` (аудит Фазы 5). Для
+    `/components/telethon` не нужен — тот роутер уже целиком под
+    `require_login`.
     """
+    _deps = [Depends(require_setup_token)] if require_token else []
 
     def _ctx(step: str, *, error: str | None = None) -> dict:
         return {
@@ -96,11 +171,11 @@ def _telethon_wizard_routes(
             "base_template": base_template, "error": error,
         }
 
-    @router.get(base_path, response_class=HTMLResponse)
+    @router.get(base_path, response_class=HTMLResponse, dependencies=_deps)
     async def telethon_phone_form(request: Request) -> Response:
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("phone"))
 
-    @router.post(base_path)
+    @router.post(base_path, dependencies=_deps)
     async def telethon_phone_submit(
         request: Request,
         phone: str = Form(...),
@@ -131,13 +206,13 @@ def _telethon_wizard_routes(
             )
         return RedirectResponse(url=f"{base_path}/code", status_code=303)
 
-    @router.get(f"{base_path}/code", response_class=HTMLResponse)
+    @router.get(f"{base_path}/code", response_class=HTMLResponse, dependencies=_deps)
     async def telethon_code_form(request: Request) -> Response:
         if not telethon_login.is_in_progress():
             return RedirectResponse(url=base_path, status_code=303)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("code"))
 
-    @router.post(f"{base_path}/code")
+    @router.post(f"{base_path}/code", dependencies=_deps)
     async def telethon_code_submit(request: Request, code: str = Form(...)) -> Response:
         status, payload = await telethon_login.submit_code(code.strip())
         if status == "error":
@@ -153,13 +228,13 @@ def _telethon_wizard_routes(
         audit.record_audit("telethon_session_set", target=base_path)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
 
-    @router.get(f"{base_path}/password", response_class=HTMLResponse)
+    @router.get(f"{base_path}/password", response_class=HTMLResponse, dependencies=_deps)
     async def telethon_password_form(request: Request) -> Response:
         if not telethon_login.awaiting_password():
             return RedirectResponse(url=base_path, status_code=303)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("password"))
 
-    @router.post(f"{base_path}/password")
+    @router.post(f"{base_path}/password", dependencies=_deps)
     async def telethon_password_submit(request: Request, password: str = Form(...)) -> Response:
         status, payload = await telethon_login.submit_password(password)
         if status == "error":
@@ -173,13 +248,26 @@ def _telethon_wizard_routes(
         audit.record_audit("telethon_session_set", target=base_path)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
 
+    @router.post(f"{base_path}/cancel", dependencies=_deps)
+    async def telethon_cancel(request: Request) -> Response:
+        """Отменить незавершённый вход и закрыть Telethon-клиент (F23,
+        аудит Фазы 5): раньше `telethon_login.cancel()` не был нигде
+        подключён — если админ бросал визард на середине (закрыл вкладку
+        после ввода телефона), живое соединение висело в памяти до
+        следующей попытки логина или рестарта процесса."""
+        del request
+        await telethon_login.cancel()
+        return RedirectResponse(url=success_redirect, status_code=303)
+
 
 def _public_router() -> APIRouter:
     """Роуты без авторизации: бутстрап-визард и логин."""
     router = APIRouter()
-    _telethon_wizard_routes(router, "/setup/telethon", "/setup", "auth_base.html")
+    _telethon_wizard_routes(
+        router, "/setup/telethon", "/setup", "auth_base.html", require_token=True,
+    )
 
-    @router.get("/setup", response_class=HTMLResponse)
+    @router.get("/setup", response_class=HTMLResponse, dependencies=[Depends(require_setup_token)])
     async def setup_form(request: Request) -> Response:
         if is_bootstrapped():
             return RedirectResponse(url="/login", status_code=303)
@@ -191,7 +279,7 @@ def _public_router() -> APIRouter:
             request, "setup.html", {"error": None, "telethon_connected": telethon_connected},
         )
 
-    @router.post("/setup")
+    @router.post("/setup", dependencies=[Depends(require_setup_token)])
     async def setup_submit(
         request: Request,
         password: str = Form(...),
@@ -216,7 +304,14 @@ def _public_router() -> APIRouter:
                 status_code=400,
             )
 
-        create_admin(password)
+        try:
+            create_admin(password)
+        except RuntimeError:
+            # Гонка: другой запрос успел создать администратора первым
+            # (TOCTOU-проверка выше не защищает от двух одновременных
+            # POST — см. security-аудит Фазы 5, теперь ловим на уровне БД
+            # через IntegrityError внутри create_admin).
+            return RedirectResponse(url="/login", status_code=303)
         audit.record_audit("setup_completed", detail="первичная настройка администратора")
 
         # Секреты — write-only, тем же путём, что и обычное редактирование.
@@ -260,10 +355,19 @@ def _public_router() -> APIRouter:
 
     @router.post("/login")
     async def login_submit(request: Request, password: str = Form(...)) -> Response:
+        client_key = request.client.host if request.client else "unknown"
+        if is_login_locked(client_key):
+            return _templates.TemplateResponse(
+                request, "login.html",
+                {"error": "Слишком много неудачных попыток — подожди немного и попробуй снова."},
+                status_code=429,
+            )
         if not verify_login(password):
+            register_failed_login(client_key)
             return _templates.TemplateResponse(
                 request, "login.html", {"error": "Неверный пароль"}, status_code=401,
             )
+        clear_failed_logins(client_key)
         log_in(request)
         return RedirectResponse(url="/", status_code=303)
 
@@ -294,34 +398,36 @@ def _protected_router() -> APIRouter:
 
     @router.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> Response:
-        groups = [
-            {
-                "key": group.key,
-                "title": group.title,
-                "fields": [
-                    {
-                        "name": f.name,
-                        "label": f.label,
-                        "value_type": f.value_type,
-                        "needs_resync": f.needs_resync,
-                        "value": settings_store.effective_value(f),
-                    }
-                    for f in group.fields
-                ],
-            }
-            for group in settings_store.SETTINGS_GROUPS
-        ]
-        return _templates.TemplateResponse(request, "settings.html", {"groups": groups})
+        return _templates.TemplateResponse(
+            request, "settings.html", {"groups": _settings_groups_context(), "error": None},
+        )
 
     @router.post("/settings/{group_key}")
     async def settings_save(request: Request, group_key: str) -> Response:
         group = next((g for g in settings_store.SETTINGS_GROUPS if g.key == group_key), None)
         if group is not None:
             form = await request.form()
+            # Сначала валидируем/приводим ВСЕ поля группы и только потом
+            # пишем — иначе плохое значение в поле №3 из 5 оставляло бы
+            # поля 1-2 уже сохранёнными, а 3-5 нет (частичное применение
+            # формы), плюс сам ValueError раньше долетал до FastAPI как
+            # необработанный 500 (найдено при security-аудите Фазы 5).
+            try:
+                coerced = {
+                    field.name: _coerce_form_value(field.value_type, form.get(field.name))
+                    for field in group.fields
+                }
+            except ValueError:
+                return _templates.TemplateResponse(
+                    request, "settings.html",
+                    {"groups": _settings_groups_context(),
+                     "error": f"Некорректное значение в группе «{group.title}» — "
+                              f"числовое поле должно содержать число."},
+                    status_code=400,
+                )
             for field in group.fields:
-                value = _coerce_form_value(field.value_type, form.get(field.name))
-                settings_store.save_setting(field.name, value, field.value_type)
-                audit.record_audit("setting_set", target=field.name, detail=str(value))
+                settings_store.save_setting(field.name, coerced[field.name], field.value_type)
+                audit.record_audit("setting_set", target=field.name, detail=str(coerced[field.name]))
             # F19/Фаза 5.2: поля с needs_resync меняют состав/параметры джобов
             # планировщика — применяем сразу, если компоненты уже запущены.
             if any(f.needs_resync for f in group.fields) and get_components().is_running:
@@ -410,6 +516,12 @@ def create_app() -> FastAPI:
         return RedirectResponse(url="/login", status_code=303)
 
     app.add_exception_handler(NotAuthenticatedError, _not_authenticated_handler)
+
+    async def _setup_token_required_handler(request: Request, exc: Exception) -> Response:
+        del exc
+        return _templates.TemplateResponse(request, "setup_locked.html", {}, status_code=403)
+
+    app.add_exception_handler(SetupTokenRequiredError, _setup_token_required_handler)
 
     app.include_router(_public_router())
     app.include_router(_protected_router())

@@ -37,8 +37,13 @@ def record_audit(action: str, target: str | None = None, detail: str | None = No
     )
 
 
-def list_audit_log(limit: int = 200) -> list[AuditLog]:
-    """Последние записи журнала, новые сверху.
+# Публичная константа (без подчёркивания) — переиспользуется роутом
+# `/audit` в `crud_routes.py` для расчёта числа страниц.
+PAGE_SIZE = 50
+
+
+def list_audit_log(limit: int = 200, offset: int = 0) -> list[AuditLog]:
+    """Записи журнала, новые сверху, с пагинацией (`offset`/`limit`).
 
     Сортировка по `id`, а НЕ по `created_at` — один HTTP-запрос может писать
     несколько записей подряд (например `settings_save` по каждому полю
@@ -46,11 +51,22 @@ def list_audit_log(limit: int = 200) -> list[AuditLog]:
     `datetime.now()` грубее, чем интервал между вызовами) — при сортировке по
     времени порядок между такими записями не гарантирован. `id` монотонно
     растёт при вставке всегда, независимо от точности часов.
+
+    Раньше `limit` был жёстко зашит в 200 без способа посмотреть более
+    старые записи из UI (они оставались в БД, но были недоступны из
+    `/audit`) — найдено при аудите Фазы 5, добавлена пагинация.
     """
     with session_scope() as session:
         return (
             session.query(AuditLog)
             .order_by(AuditLog.id.desc())
+            .offset(offset)
             .limit(limit)
             .all()
         )
+
+
+def count_audit_log() -> int:
+    """Общее число записей журнала (для пагинации в `/audit`)."""
+    with session_scope() as session:
+        return session.query(AuditLog).count()
