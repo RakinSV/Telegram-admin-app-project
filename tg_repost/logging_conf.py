@@ -58,6 +58,15 @@ def setup_logging(level: str = "INFO") -> None:
     file_handler.setFormatter(formatter)
     root.addHandler(file_handler)
 
+    # SSE-хендлер веб-админки (F23, Фаза 5.4) — рассылает записи подписчикам
+    # /logs/stream. Регистрируется всегда (в т.ч. для cli.py), но без живых
+    # подписчиков просто копит ring-buffer в памяти — дёшево и безопасно.
+    from tg_repost.webui.log_broadcast import SSELogHandler
+
+    sse_handler = SSELogHandler()
+    sse_handler.setFormatter(formatter)
+    root.addHandler(sse_handler)
+
     # Приглушаем болтливые библиотеки.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telethon").setLevel(logging.WARNING)

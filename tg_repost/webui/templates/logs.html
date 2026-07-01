@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Логи — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Логи <span id="conn-status" class="badge muted">подключение…</span></h1>
+
+<div class="card">
+  <pre id="log-view" style="max-height:70vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:12px; margin:0;">{% for line in recent %}{{ line }}
+{% endfor %}</pre>
+</div>
+
+<script>
+(function () {
+  var view = document.getElementById("log-view");
+  var status = document.getElementById("conn-status");
+  view.scrollTop = view.scrollHeight;
+
+  var source = new EventSource("/logs/stream");
+  source.onopen = function () {
+    status.textContent = "живо";
+    status.className = "badge ok";
+  };
+  source.onerror = function () {
+    status.textContent = "переподключение…";
+    status.className = "badge warn";
+  };
+  source.onmessage = function (event) {
+    var atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 20;
+    view.textContent += event.data + "\n";
+    if (atBottom) {
+      view.scrollTop = view.scrollHeight;
+    }
+  };
+})();
+</script>
+{% endblock %}

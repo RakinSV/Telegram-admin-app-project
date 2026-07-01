@@ -18,7 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from tg_repost import crypto
 from tg_repost.config import get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
-from tg_repost.webui import dashboard, runtime_state, settings_store, telethon_login
+from tg_repost.webui import audit, dashboard, runtime_state, settings_store, telethon_login
 from tg_repost.webui.auth import (
     NotAuthenticatedError,
     create_admin,
@@ -150,6 +150,7 @@ def _telethon_wizard_routes(
         # единственный оставшийся случай, и только в нём payload не None.
         assert payload is not None
         settings_store.set_secret("tg_session_string", payload)
+        audit.record_audit("telethon_session_set", target=base_path)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
 
     @router.get(f"{base_path}/password", response_class=HTMLResponse)
@@ -169,6 +170,7 @@ def _telethon_wizard_routes(
         # telethon_login.submit_password, payload гарантированно не None.
         assert payload is not None
         settings_store.set_secret("tg_session_string", payload)
+        audit.record_audit("telethon_session_set", target=base_path)
         return _templates.TemplateResponse(request, "telethon_login.html", _ctx("done"))
 
 
@@ -215,6 +217,7 @@ def _public_router() -> APIRouter:
             )
 
         create_admin(password)
+        audit.record_audit("setup_completed", detail="первичная настройка администратора")
 
         # Секреты — write-only, тем же путём, что и обычное редактирование.
         # tg_session_string сюда НЕ входит — он получается только через
@@ -226,11 +229,16 @@ def _public_router() -> APIRouter:
         ):
             if value.strip():
                 settings_store.set_secret(key, value.strip())
+                audit.record_audit("secret_set", target=key)
 
         if tg_api_id.strip().isdigit():
             settings_store.save_setting("tg_api_id", int(tg_api_id), "int")
+            audit.record_audit("setting_set", target="tg_api_id", detail=tg_api_id.strip())
         if tg_owner_user_id.strip().isdigit():
             settings_store.save_setting("tg_owner_user_id", int(tg_owner_user_id), "int")
+            audit.record_audit(
+                "setting_set", target="tg_owner_user_id", detail=tg_owner_user_id.strip(),
+            )
 
         log_in(request)
 
@@ -240,6 +248,7 @@ def _public_router() -> APIRouter:
         settings = get_settings()
         if settings.is_minimally_configured and not get_components().is_running:
             await start_components(settings)
+            audit.record_audit("component_start")
 
         return RedirectResponse(url="/", status_code=303)
 
@@ -312,10 +321,12 @@ def _protected_router() -> APIRouter:
             for field in group.fields:
                 value = _coerce_form_value(field.value_type, form.get(field.name))
                 settings_store.save_setting(field.name, value, field.value_type)
+                audit.record_audit("setting_set", target=field.name, detail=str(value))
             # F19/Фаза 5.2: поля с needs_resync меняют состав/параметры джобов
             # планировщика — применяем сразу, если компоненты уже запущены.
             if any(f.needs_resync for f in group.fields) and get_components().is_running:
                 await resync_scheduler_jobs()
+                audit.record_audit("component_resync", target="scheduler")
         return RedirectResponse(url="/settings", status_code=303)
 
     @router.get("/secrets", response_class=HTMLResponse)
@@ -329,6 +340,7 @@ def _protected_router() -> APIRouter:
         if value.strip():
             try:
                 settings_store.set_secret(key, value.strip())
+                audit.record_audit("secret_set", target=key)
             except ValueError as exc:
                 logger.warning("Не удалось сохранить секрет '%s': %s", key, exc)
         return RedirectResponse(url="/secrets", status_code=303)
@@ -348,24 +360,28 @@ def _protected_router() -> APIRouter:
         settings = get_settings()
         if settings.is_minimally_configured and not get_components().is_running:
             await start_components(settings)
+            audit.record_audit("component_start")
         return RedirectResponse(url="/components", status_code=303)
 
     @router.post("/components/listener/restart")
     async def components_restart_listener(request: Request) -> Response:
         del request
         await restart_telethon_listener()
+        audit.record_audit("component_restart", target="telethon_listener")
         return RedirectResponse(url="/components", status_code=303)
 
     @router.post("/components/bot/restart")
     async def components_restart_bot(request: Request) -> Response:
         del request
         await restart_moderation_bot()
+        audit.record_audit("component_restart", target="moderation_bot")
         return RedirectResponse(url="/components", status_code=303)
 
     @router.post("/components/scheduler/resync")
     async def components_resync_scheduler(request: Request) -> Response:
         del request
         await resync_scheduler_jobs()
+        audit.record_audit("component_resync", target="scheduler")
         return RedirectResponse(url="/components", status_code=303)
 
     _telethon_wizard_routes(router, "/components/telethon", "/components", "base.html")

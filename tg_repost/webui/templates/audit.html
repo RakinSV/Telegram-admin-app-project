@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Журнал изменений — tg_repost admin{% endblock %}
+{% block content %}
+<h1>Журнал изменений</h1>
+
+<div class="card">
+  <table>
+    <tr><th>Время</th><th>Действие</th><th>Объект</th><th>Детали</th></tr>
+    {% for e in entries %}
+    <tr>
+      <td class="muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }}</td>
+      <td>{{ e.action }}</td>
+      <td>{{ e.target or '' }}</td>
+      <td>{{ e.detail or '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">Записей нет.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

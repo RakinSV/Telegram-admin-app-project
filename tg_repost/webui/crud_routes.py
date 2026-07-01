@@ -12,10 +12,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from tg_repost import sources_repo, targets_repo
@@ -28,8 +29,11 @@ from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
+from tg_repost.webui import audit, log_broadcast
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components
+
+_SSE_HEARTBEAT_SECONDS = 15.0
 
 logger = get_logger(__name__)
 
@@ -52,7 +56,10 @@ def build_crud_router() -> APIRouter:
     @router.post("/sources")
     async def sources_create(request: Request, channel: str = Form(...)) -> Response:
         del request
-        sources_repo.add_source(channel)
+        source, created = sources_repo.add_source(channel)
+        audit.record_audit(
+            "source_add" if created else "source_reactivate", target=f"@{source.channel_username}",
+        )
         return RedirectResponse(url="/sources", status_code=303)
 
     @router.get("/sources/{source_id}", response_class=HTMLResponse)
@@ -93,12 +100,18 @@ def build_crud_router() -> APIRouter:
                 "known_styles": KNOWN_STYLES,
                 "error": "Цели должны быть числами (chat_id) через запятую.",
             }, status_code=400)
+        audit.record_audit(
+            "source_update", target=f"#{source_id}",
+            detail=f"style={style or 'default'}, enrich={enrich_mode}, "
+                   f"targets={target_chat_ids.strip() or 'все'}",
+        )
         return RedirectResponse(url=f"/sources/{source_id}", status_code=303)
 
     @router.post("/sources/{source_id}/delete")
     async def source_delete(request: Request, source_id: int) -> Response:
         del request
-        sources_repo.deactivate_source(source_id)
+        if sources_repo.deactivate_source(source_id):
+            audit.record_audit("source_deactivate", target=f"#{source_id}")
         return RedirectResponse(url="/sources", status_code=303)
 
     # --- Целевые группы (F08, F12) ---
@@ -121,12 +134,15 @@ def build_crud_router() -> APIRouter:
                 "error": "chat_id должен быть целым числом.",
             }, status_code=400)
         targets_repo.add_target(chat_id_int, title.strip() or None)
+        audit.record_audit("target_add", target=str(chat_id_int))
         return RedirectResponse(url="/targets", status_code=303)
 
     @router.post("/targets/{target_id}/toggle")
     async def targets_toggle(request: Request, target_id: int) -> Response:
         del request
-        targets_repo.toggle_target(target_id)
+        new_state = targets_repo.toggle_target(target_id)
+        if new_state is not None:
+            audit.record_audit("target_toggle", target=f"#{target_id}", detail=f"active={new_state}")
         return RedirectResponse(url="/targets", status_code=303)
 
     # --- Модерация (F07) ---
@@ -158,25 +174,28 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
         try:
-            await moderation_repo.approve_post(application.bot, post_id)
+            outcome = await moderation_repo.approve_post(application.bot, post_id)
         except InvalidStatusTransition as exc:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 {"post": moderation_repo.get_post(post_id), "error": str(exc)},
                 status_code=400,
             )
+        audit.record_audit("post_approve", target=f"#{post_id}", detail=outcome)
         return RedirectResponse(url="/moderation", status_code=303)
 
     @router.post("/moderation/{post_id}/reject")
     async def moderation_reject(request: Request, post_id: int) -> Response:
         try:
-            moderation_repo.reject_post(post_id)
+            found = moderation_repo.reject_post(post_id)
         except InvalidStatusTransition as exc:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 {"post": moderation_repo.get_post(post_id), "error": str(exc)},
                 status_code=400,
             )
+        if found:
+            audit.record_audit("post_reject", target=f"#{post_id}")
         return RedirectResponse(url="/moderation", status_code=303)
 
     @router.post("/moderation/{post_id}/edit")
@@ -184,7 +203,8 @@ def build_crud_router() -> APIRouter:
         request: Request, post_id: int, rewritten_text: str = Form(...)
     ) -> Response:
         del request
-        moderation_repo.edit_post_text(post_id, rewritten_text)
+        if moderation_repo.edit_post_text(post_id, rewritten_text):
+            audit.record_audit("post_edit", target=f"#{post_id}")
         return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
 
     # --- Реклама (F21) ---
@@ -209,13 +229,15 @@ def build_crud_router() -> APIRouter:
                 "briefs": ads_repo.list_briefs(),
                 "error": "Лимит показов должен быть целым неотрицательным числом или пустым.",
             }, status_code=400)
-        ads_repo.add_brief(brief_text.strip(), max_uses_int)
+        brief = ads_repo.add_brief(brief_text.strip(), max_uses_int)
+        audit.record_audit("ad_brief_add", target=f"#{brief.id}", detail=brief.brief_text[:80])
         return RedirectResponse(url="/ads", status_code=303)
 
     @router.post("/ads/{brief_id}/disable")
     async def ads_disable(request: Request, brief_id: int) -> Response:
         del request
-        ads_repo.disable_brief(brief_id)
+        if ads_repo.disable_brief(brief_id):
+            audit.record_audit("ad_brief_disable", target=f"#{brief_id}")
         return RedirectResponse(url="/ads", status_code=303)
 
     # --- Статистика / расписание / рост (F14, F19, F22) ---
@@ -247,4 +269,43 @@ def build_crud_router() -> APIRouter:
             {"report": report, "window_days": settings.growth_report_window_days},
         )
 
+    # --- Журнал изменений + живые логи (F23, Фаза 5.4) ---
+
+    @router.get("/audit", response_class=HTMLResponse)
+    async def audit_page(request: Request) -> Response:
+        return _templates.TemplateResponse(
+            request, "audit.html", {"entries": audit.list_audit_log()},
+        )
+
+    @router.get("/logs", response_class=HTMLResponse)
+    async def logs_page(request: Request) -> Response:
+        return _templates.TemplateResponse(
+            request, "logs.html", {"recent": log_broadcast.recent_logs()},
+        )
+
+    @router.get("/logs/stream")
+    async def logs_stream(request: Request) -> StreamingResponse:
+        async def event_source():
+            async with log_broadcast.subscription() as queue:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        line = await asyncio.wait_for(
+                            queue.get(), timeout=_SSE_HEARTBEAT_SECONDS
+                        )
+                    except TimeoutError:
+                        yield ": keep-alive\n\n"
+                        continue
+                    yield _sse_event(line)
+
+        return StreamingResponse(event_source(), media_type="text/event-stream")
+
     return router
+
+
+def _sse_event(text: str) -> str:
+    """Отформатировать многострочный текст (напр. traceback) как одно
+    SSE-сообщение — каждая физическая строка со своим префиксом `data:`,
+    как того требует спецификация SSE для восстановления переводов строк."""
+    return "".join(f"data: {line}\n" for line in text.splitlines() or [""]) + "\n"
