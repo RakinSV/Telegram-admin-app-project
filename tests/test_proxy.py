@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import dotenv_values
-from telethon.network.connection.tcpmtproxy import ConnectionTcpMTProxyRandomizedIntermediate
+from telethon.network.connection.tcpmtproxy import (
+    ConnectionTcpMTProxyIntermediate,
+    ConnectionTcpMTProxyRandomizedIntermediate,
+)
 
 from guardian.config import (
     GuardianSettings,
@@ -48,7 +51,25 @@ async def test_build_client_without_proxy_uses_default_connection():
     assert client._proxy is None
 
 
-async def test_build_client_with_mtproto_proxy_configured(monkeypatch):
+async def test_build_client_with_dd_secret_uses_randomized_intermediate(monkeypatch):
+    # "dd"-секрет ТРЕБУЕТ randomized intermediate — Telethon сам бросает
+    # ValueError при несовпадении (tcpmtproxy.py::MTProxyIO.init_header).
+    monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
+    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
+    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
+
+    client = build_client()
+
+    assert client._proxy == ("1.2.3.4", 443, "ddeadbeefdeadbeefdeadbeefdeadbeef")
+    assert client._connection is ConnectionTcpMTProxyRandomizedIntermediate
+
+
+async def test_build_client_with_plain_secret_uses_intermediate(monkeypatch):
+    # Регрессия (найдено на реальном деплое): раньше ВСЕГДА хардкодился
+    # RandomizedIntermediate — с обычным (не dd/ee) hex-секретом прокси
+    # обрывал соединение сразу после хендшейка ("0 bytes read on a total
+    # of 4 expected bytes"), т.к. randomized intermediate framing не
+    # совпадал с тем, что ожидает сервер для такого секрета.
     monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
     monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
     monkeypatch.setenv("MTPROTO_PROXY_SECRET", "deadbeefdeadbeefdeadbeefdeadbeef")
@@ -56,7 +77,7 @@ async def test_build_client_with_mtproto_proxy_configured(monkeypatch):
     client = build_client()
 
     assert client._proxy == ("1.2.3.4", 443, "deadbeefdeadbeefdeadbeefdeadbeef")
-    assert client._connection is ConnectionTcpMTProxyRandomizedIntermediate
+    assert client._connection is ConnectionTcpMTProxyIntermediate
 
 
 async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
@@ -69,7 +90,7 @@ async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
     # без прямого доступа.
     monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
     monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
-    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "deadbeefdeadbeefdeadbeefdeadbeef")
+    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
     invalidate_settings_cache()
 
     from unittest.mock import AsyncMock
@@ -82,7 +103,7 @@ async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
 
     state = await start_telethon_login(api_id=1, api_hash="hash", phone="+10000000000")
 
-    assert state.client._proxy == ("1.2.3.4", 443, "deadbeefdeadbeefdeadbeefdeadbeef")
+    assert state.client._proxy == ("1.2.3.4", 443, "ddeadbeefdeadbeefdeadbeefdeadbeef")
     assert state.client._connection is ConnectionTcpMTProxyRandomizedIntermediate
 
 

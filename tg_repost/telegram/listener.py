@@ -23,7 +23,10 @@ import uuid
 from pathlib import Path
 
 from telethon import TelegramClient, events
-from telethon.network.connection.tcpmtproxy import ConnectionTcpMTProxyRandomizedIntermediate
+from telethon.network.connection.tcpmtproxy import (
+    ConnectionTcpMTProxyIntermediate,
+    ConnectionTcpMTProxyRandomizedIntermediate,
+)
 from telethon.sessions import StringSession
 
 from tg_repost import telethon_sessions_repo
@@ -78,12 +81,32 @@ def _get_rate_limiter(client: TelegramClient) -> HourlyRateLimiter:
 def _mtproxy_kwargs(settings: Settings) -> dict:
     """Аргументы MTProto-прокси для `TelegramClient` — пусто, если не
     настроено (host — обязательный маркер "прокси включён"). Один общий
-    прокси на ВСЕ Telethon-клиенты (основной + F26-ротация), см. config.py."""
+    прокси на ВСЕ Telethon-клиенты (основной + F26-ротация), см. config.py.
+
+    Класс `connection` зависит от ФОРМАТА секрета (соглашение MTProxy,
+    не наша выдумка): секрет с префиксом `dd` ТРЕБУЕТ randomized
+    intermediate (Telethon сам бросает ValueError при несовпадении —
+    см. `tcpmtproxy.py::MTProxyIO.init_header`); обычный hex-секрет без
+    префикса рассчитан на простой intermediate. Раньше здесь был
+    захардкожен один RandomizedIntermediate на все секреты — с обычным
+    (не `dd`) секретом сервер обрывал соединение сразу после хендшейка
+    ("0 bytes read on a total of 4 expected bytes", найдено на реальном
+    деплое). `ee`-секреты (fake-TLS) сюда тоже попадают как
+    RandomizedIntermediate, но Telethon в принципе не умеет полноценный
+    fake-TLS handshake — с таким секретом соединение зависает независимо
+    от выбора класса ниже (ограничение библиотеки, не этой функции).
+    """
     if not settings.mtproto_proxy_host:
         return {}
+    secret = settings.mtproto_proxy_secret
+    connection = (
+        ConnectionTcpMTProxyRandomizedIntermediate
+        if secret[:2].lower() in ("dd", "ee")
+        else ConnectionTcpMTProxyIntermediate
+    )
     return {
-        "connection": ConnectionTcpMTProxyRandomizedIntermediate,
-        "proxy": (settings.mtproto_proxy_host, settings.mtproto_proxy_port, settings.mtproto_proxy_secret),
+        "connection": connection,
+        "proxy": (settings.mtproto_proxy_host, settings.mtproto_proxy_port, secret),
     }
 
 
