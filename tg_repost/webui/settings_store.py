@@ -51,6 +51,15 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         SettingField("tg_api_id", "API ID", "int"),
         SettingField("tg_owner_user_id", "Owner user ID", "int"),
     )),
+    SettingsGroup("proxy", "Прокси (host/port — секрет см. /secrets)", (
+        # host/port сами по себе не секрет (бесполезны без mtproto_proxy_secret
+        # с /secrets) — тот же класс полей, что "телеграм-идентичность" выше:
+        # применяются к НОВОМУ клиенту, для уже запущенного listener'а нужен
+        # ручной рестарт на /components (не needs_resync — тот флаг только про
+        # состав джобов планировщика, не про пересборку Telethon-клиента).
+        SettingField("mtproto_proxy_host", "MTProto proxy host (для Telethon)", "str"),
+        SettingField("mtproto_proxy_port", "MTProto proxy port", "int"),
+    )),
     SettingsGroup("rewrite", "Рерайт — F06", (
         SettingField("openai_base_url", "Base URL", "str"),
         SettingField("openai_model", "Модель", "str"),
@@ -148,6 +157,8 @@ SECRET_LABELS: dict[str, str] = {
     "openai_api_key": "OpenAI API Key",
     "brave_api_key": "Brave Search API Key",
     "unsplash_access_key": "Unsplash Access Key",
+    "mtproto_proxy_secret": "MTProto Proxy Secret",
+    "bot_api_proxy_url": "Bot API Proxy URL (socks5://user:pass@host:port)",
 }
 
 

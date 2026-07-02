@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -221,9 +222,24 @@ async def main() -> None:
     _seed_stopwords_if_empty()
     _reload_filters()
 
+    # SOCKS5, не MTProto — Bot API ходит по HTTPS (см. config.py::bot_api_proxy_url).
+    # AiohttpSession() парсит URL СРАЗУ в конструкторе (не лениво при первом
+    # запросе) — битый GUARDIAN_BOT_API_PROXY_URL иначе ронял бы процесс
+    # необработанным ValueError вместо понятного лога (найдено security-ревью).
+    session = None
+    if settings.bot_api_proxy_url:
+        try:
+            session = AiohttpSession(proxy=settings.bot_api_proxy_url)
+        except ValueError as exc:
+            logger.error(
+                "GUARDIAN_BOT_API_PROXY_URL некорректен (%s) — Guardian не может "
+                "стартовать. Формат: socks5://user:pass@host:port.", exc,
+            )
+            return
     bot = Bot(
         token=settings.guardian_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
     )
     await _auto_trust_repost_bot(
         bot

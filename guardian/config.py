@@ -101,6 +101,15 @@ class GuardianSettings(BaseSettings):
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
 
+    # --- Прокси для Bot API ---
+    # SOCKS5, не MTProto — Bot API ходит по HTTPS (см. bot.py::main про
+    # AiohttpSession). Намеренно ТОЛЬКО .env, не в SETTINGS_GROUPS/
+    # bot_config (см. settings_store.py docstring про "живой оверлей без
+    # перезапуска") — Bot() строится один раз при старте процесса, как и
+    # guardian_bot_token; веб-форма для этого поля выглядела бы так, будто
+    # применяется сразу, а на деле требует перезапуска Guardian.
+    bot_api_proxy_url: str = Field("", alias="GUARDIAN_BOT_API_PROXY_URL")
+
     @field_validator("guardian_group_id", "guardian_log_channel_id", mode="before")
     @classmethod
     def _blank_int_to_zero(cls, value: object) -> object:

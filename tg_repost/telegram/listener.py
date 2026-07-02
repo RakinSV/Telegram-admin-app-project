@@ -23,11 +23,12 @@ import uuid
 from pathlib import Path
 
 from telethon import TelegramClient, events
+from telethon.network.connection.tcpmtproxy import ConnectionTcpMTProxyRandomizedIntermediate
 from telethon.sessions import StringSession
 
 from tg_repost import telethon_sessions_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
-from tg_repost.config import get_settings
+from tg_repost.config import Settings, get_settings
 from tg_repost.db.models import Post, PostStatus, Source
 from tg_repost.db.session import session_scope
 from tg_repost.dedup.hash_dedup import content_hash
@@ -74,6 +75,18 @@ def _get_rate_limiter(client: TelegramClient) -> HourlyRateLimiter:
     return limiter
 
 
+def _mtproxy_kwargs(settings: Settings) -> dict:
+    """Аргументы MTProto-прокси для `TelegramClient` — пусто, если не
+    настроено (host — обязательный маркер "прокси включён"). Один общий
+    прокси на ВСЕ Telethon-клиенты (основной + F26-ротация), см. config.py."""
+    if not settings.mtproto_proxy_host:
+        return {}
+    return {
+        "connection": ConnectionTcpMTProxyRandomizedIntermediate,
+        "proxy": (settings.mtproto_proxy_host, settings.mtproto_proxy_port, settings.mtproto_proxy_secret),
+    }
+
+
 def build_client() -> TelegramClient:
     """Создать ОСНОВНОЙ Telethon-клиент из настроек (без подключения)."""
     settings = get_settings()
@@ -81,6 +94,7 @@ def build_client() -> TelegramClient:
         StringSession(settings.tg_session_string),
         settings.tg_api_id,
         settings.tg_api_hash,
+        **_mtproxy_kwargs(settings),
     )
 
 
@@ -102,10 +116,13 @@ def build_extra_clients() -> list[TelegramClient]:
             "распределяются только между оставшимися сессиями.",
             active_count - len(decrypted), active_count,
         )
+    proxy_kwargs = _mtproxy_kwargs(settings)
     clients = []
     for _label, session_string in decrypted:
         clients.append(
-            TelegramClient(StringSession(session_string), settings.tg_api_id, settings.tg_api_hash)
+            TelegramClient(
+                StringSession(session_string), settings.tg_api_id, settings.tg_api_hash, **proxy_kwargs
+            )
         )
     return clients
 

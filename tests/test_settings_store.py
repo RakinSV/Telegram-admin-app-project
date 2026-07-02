@@ -81,6 +81,30 @@ def test_set_secret_and_list_status_db_source():
     assert "sk-test-abcd1234" not in status.masked_hint
 
 
+def test_proxy_host_port_are_plain_settings_not_secrets():
+    field = next(
+        f for g in settings_store.SETTINGS_GROUPS for f in g.fields if f.name == "mtproto_proxy_host"
+    )
+    settings_store.save_setting("mtproto_proxy_host", "1.2.3.4", "str")
+    assert settings_store.effective_value(field) == "1.2.3.4"
+    assert get_settings().mtproto_proxy_host == "1.2.3.4"
+
+
+def test_mtproto_proxy_secret_is_a_write_only_secret():
+    with pytest.raises(ValueError):
+        settings_store.save_setting("mtproto_proxy_secret", "deadbeef", "str")
+    settings_store.set_secret("mtproto_proxy_secret", "deadbeefdeadbeefdeadbeefdeadbeef")
+    assert get_settings().mtproto_proxy_secret == "deadbeefdeadbeefdeadbeefdeadbeef"
+    statuses = {s.key: s for s in settings_store.list_secret_status()}
+    assert statuses["mtproto_proxy_secret"].is_set is True
+    assert "deadbeef" not in statuses["mtproto_proxy_secret"].masked_hint[:-4]
+
+
+def test_bot_api_proxy_url_is_a_write_only_secret():
+    settings_store.set_secret("bot_api_proxy_url", "socks5://user:pass@1.2.3.4:1080")
+    assert get_settings().bot_api_proxy_url == "socks5://user:pass@1.2.3.4:1080"
+
+
 def test_set_secret_rejects_unknown_key():
     with pytest.raises(ValueError):
         settings_store.set_secret("not_a_secret_field", "value")

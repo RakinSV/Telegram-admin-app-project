@@ -220,7 +220,32 @@ def build_application() -> Application:
     settings = get_settings()
     owner_filter = filters.User(user_id=settings.tg_owner_user_id)
 
-    application = Application.builder().token(settings.tg_bot_token).build()
+    builder = Application.builder().token(settings.tg_bot_token)
+    if settings.bot_api_proxy_url:
+        # Bot API ходит по HTTPS, не по MTProto — тут нужен SOCKS5/HTTP-прокси,
+        # не тот же самый, что для Telethon (см. config.py::mtproto_proxy_*).
+        # `.get_updates_proxy()` — отдельно для долгоживущего long-polling
+        # соединения (иначе оно продолжало бы идти напрямую).
+        builder = builder.proxy(settings.bot_api_proxy_url).get_updates_proxy(
+            settings.bot_api_proxy_url
+        )
+    try:
+        # URL прокси парсится именно ЗДЕСЬ, в .build() (не лениво при первом
+        # запросе, проверено эмпирически) — битый BOT_API_PROXY_URL иначе
+        # ронял бы необработанным ValueError весь процесс main.py (веб-панель
+        # ДОЛЖНА подниматься всегда, даже без рабочего Telegram-конфига —
+        # см. main.py::run) (найдено security-ревью, тот же класс бага, что
+        # и в guardian/bot.py::main).
+        application = builder.build()
+    except ValueError as exc:
+        if not settings.bot_api_proxy_url:
+            raise  # ValueError не про прокси — не глотать чужую ошибку
+        logger.error(
+            "BOT_API_PROXY_URL некорректен (%s) — бот модерации запускается "
+            "БЕЗ прокси, напрямую. Проверь формат socks5://user:pass@host:port "
+            "на /secrets.", exc,
+        )
+        application = Application.builder().token(settings.tg_bot_token).build()
     application.add_handler(CommandHandler("start", _cmd_start, filters=owner_filter))
     application.add_handler(CommandHandler("stats", _cmd_stats, filters=owner_filter))
     application.add_handler(CommandHandler("best_times", _cmd_best_times, filters=owner_filter))

@@ -48,6 +48,21 @@ class Settings(BaseSettings):
     # неиспользуемое поле TG_TARGET_CHAT_ID, вводившее в заблуждение (выглядело
     # как рабочий конфиг, но нигде не читалось).
 
+    # --- Прокси ---
+    # MTProto-прокси — только для Telethon (юзер-сессия говорит на MTProto
+    # напрямую с серверами Telegram). Один общий прокси на ВСЕ Telethon-
+    # клиенты — и основной, и дополнительные из ротации сессий (F26): цель
+    # обычно "спрятать IP сервера", а не развести аккаунты по разным адресам.
+    # host/port не секрет сами по себе (бесполезны без secret), поэтому
+    # обычные настройки; mtproto_proxy_secret — в SECRET_FIELD_NAMES ниже.
+    mtproto_proxy_host: str = Field("", alias="MTPROTO_PROXY_HOST")
+    mtproto_proxy_port: int = Field(0, alias="MTPROTO_PROXY_PORT")
+    mtproto_proxy_secret: str = Field("", alias="MTPROTO_PROXY_SECRET")
+    # SOCKS5-прокси для Bot API (postинг/модерация репост-бота) — Bot API
+    # ходит по HTTPS, MTProto-прокси тут не применим. URL обычно содержит
+    # логин:пароль (socks5://user:pass@host:port) — целиком секрет.
+    bot_api_proxy_url: str = Field("", alias="BOT_API_PROXY_URL")
+
     # --- Рерайт (OpenAI-совместимое API) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
@@ -209,14 +224,16 @@ class Settings(BaseSettings):
             return [str(s).strip() for s in value if str(s).strip()]
         return []
 
-    @field_validator("tg_api_id", "tg_owner_user_id", mode="before")
+    @field_validator("tg_api_id", "tg_owner_user_id", "mtproto_proxy_port", mode="before")
     @classmethod
     def _blank_int_to_zero(cls, value: object) -> object:
         """Пустая строка (`TG_API_ID=` — обычный плейсхолдер из .env.example,
         пока секрет не задан через `/setup`) не должна валить `Settings()`:
         pydantic иначе пытается распарсить "" как int и падает с
         ValidationError вместо мягкого дефолта 0 (`is_minimally_configured`
-        корректно интерпретирует 0 как «не настроено»)."""
+        корректно интерпретирует 0 как «не настроено»; для mtproto_proxy_port
+        0 так же означает «прокси не настроен», см. listener.py::_mtproxy_kwargs
+        — проверяет host, но port должен хотя бы парситься)."""
         if value == "":
             return 0
         return value
@@ -255,6 +272,8 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "openai_api_key",
     "brave_api_key",
     "unsplash_access_key",
+    "mtproto_proxy_secret",
+    "bot_api_proxy_url",
 )
 
 
