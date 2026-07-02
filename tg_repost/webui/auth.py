@@ -148,6 +148,13 @@ def is_login_locked(client_key: str) -> bool:
         return False
     cutoff = time.time() - _LOGIN_LOCKOUT_SECONDS
     attempts[:] = [t for t in attempts if t > cutoff]
+    if not attempts:
+        # Ключ с одной давно устаревшей попыткой иначе оставался бы в
+        # словаре НАВСЕГДА (пустой список — не None, .get() выше не
+        # удаляет) — на loopback-only периметре не эксплуатируемо снаружи
+        # (найдено security-ревью), но чистить дёшево.
+        _failed_attempts.pop(client_key, None)
+        return False
     return len(attempts) >= _MAX_FAILED_ATTEMPTS
 
 

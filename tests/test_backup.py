@@ -76,6 +76,56 @@ def test_run_backup_raises_when_nothing_to_back_up(tmp_path):
         backup.run_backup(keep=14)
 
 
+def test_run_backup_falls_back_to_docker_data_db_layout(tmp_path):
+    # Регрессия (security-ревью): задокументированный cron-рецепт запускает
+    # backup.py С ХОСТА, где .env читает "sqlite:///tg_repost.db" (без db/ —
+    # тот префикс только внутри контейнера, через docker-compose environment:
+    # override, который никогда не попадает в сам файл .env на хосте). Реальный
+    # файл в Docker-деплое лежит в ./data/db/ (bind mount) — без фолбэка
+    # бэкап "успешен", но БЕЗ БД внутри.
+    (tmp_path / ".env").write_text("SECRET=x")
+    data_db = tmp_path / "data" / "db"
+    data_db.mkdir(parents=True)
+    (data_db / "tg_repost.db").write_bytes(b"real-docker-db")
+    # DATABASE_URL НЕ переопределён — дефолт "sqlite:///tg_repost.db", как
+    # реально лежит в .env на хосте при Docker-деплое.
+
+    archive_path = backup.run_backup(keep=14)
+
+    with ZipFile(archive_path) as zf:
+        names = zf.namelist()
+    assert any(n.endswith("tg_repost.db") for n in names)
+
+
+def test_run_backup_falls_back_to_docker_data_logs_layout(tmp_path):
+    (tmp_path / ".env").write_text("SECRET=x")
+    data_logs = tmp_path / "data" / "logs"
+    data_logs.mkdir(parents=True)
+    (data_logs / "tg_repost.log").write_text("docker log line")
+
+    archive_path = backup.run_backup(keep=14)
+
+    with ZipFile(archive_path) as zf:
+        names = zf.namelist()
+    assert any("tg_repost.log" in n for n in names)
+
+
+def test_run_backup_prefers_direct_path_over_docker_fallback(tmp_path):
+    # Если файл есть по прямому пути — фолбэк в data/db не должен даже
+    # проверяться (уж тем более не должен подменить реальный путь).
+    (tmp_path / ".env").write_text("SECRET=x")
+    (tmp_path / "tg_repost.db").write_bytes(b"direct-db")
+    data_db = tmp_path / "data" / "db"
+    data_db.mkdir(parents=True)
+    (data_db / "tg_repost.db").write_bytes(b"should-not-be-used")
+
+    archive_path = backup.run_backup(keep=14)
+
+    with ZipFile(archive_path) as zf:
+        content = zf.read("tg_repost.db")
+    assert content == b"direct-db"
+
+
 def test_prune_keeps_only_newest_n_archives(tmp_path):
     (tmp_path / ".env").write_text("SECRET=x")
     backups_dir = tmp_path / "backups"

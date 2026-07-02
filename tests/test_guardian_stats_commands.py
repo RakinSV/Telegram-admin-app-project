@@ -11,7 +11,6 @@ import pytest
 from guardian.db.models import DailyStats, ModerationLog
 from guardian.db.session import session_scope
 from guardian.handlers import stats as stats_module
-from guardian.services import daily_stats_repo
 
 CHAT_ID = -100123
 

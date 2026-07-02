@@ -2,6 +2,10 @@
 {% block title %}Дашборд — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Дашборд</h1>
+<p class="muted">
+  Общая сводка системы: какие компоненты работают, сколько постов на каком
+  этапе (воронка), расход токенов рерайта за сегодня и последние посты.
+</p>
 
 {% if not is_minimally_configured %}
 <div class="card" style="border-color: var(--warn);">

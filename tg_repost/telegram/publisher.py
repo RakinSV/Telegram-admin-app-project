@@ -11,11 +11,18 @@ import functools
 from pathlib import Path
 
 from telegram import Bot
+from telegram.error import RetryAfter
 
 from tg_repost.db.models import Post, PostStatus, TargetGroup, parse_chat_ids_csv
 from tg_repost.db.session import session_scope
-from tg_repost.logging_conf import get_logger
+from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.retry import retry_async
+
+
+def _retry_after_delay(exc: BaseException) -> float | None:
+    """Уважать flood-wait от самого Telegram (см. retry.py::retry_async
+    docstring) вместо фиксированного backoff."""
+    return exc.retry_after if isinstance(exc, RetryAfter) else None
 
 logger = get_logger(__name__)
 
@@ -118,17 +125,22 @@ async def publish_post(bot: Bot, post_id: int) -> None:
             mid = await retry_async(
                 functools.partial(_send_one, bot, chat_id, text, media_path),
                 description=f"публикация поста {post_id} в {chat_id}",
+                delay_override=_retry_after_delay,
             )
             if first_message_id is None:
                 first_message_id = mid
                 first_chat_id = chat_id
             logger.info("Пост %s опубликован в %s (msg=%s)", post_id, chat_id, mid)
     except Exception as exc:  # noqa: BLE001
-        logger.error("Ошибка публикации поста %s: %s", post_id, exc)
+        # sanitize_proxy_error — на случай сбоя подключения через
+        # BOT_API_PROXY_URL (см. retry.py); `reason` попадает и в лог, и в БД
+        # (видно в /moderation), поэтому санитайзим один раз здесь.
+        safe_exc = sanitize_proxy_error(str(exc))
+        logger.error("Ошибка публикации поста %s: %s", post_id, safe_exc)
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post:
-                post.set_status(PostStatus.FAILED, reason=f"ошибка публикации: {exc}")
+                post.set_status(PostStatus.FAILED, reason=f"ошибка публикации: {safe_exc}")
         return
 
     with session_scope() as session:

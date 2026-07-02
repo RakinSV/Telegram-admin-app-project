@@ -22,6 +22,16 @@ services:
       WEBUI_HOST: "0.0.0.0"
       WEBUI_PORT: "8000"
       DATABASE_URL: "sqlite:///db/tg_repost.db"
+      # ОБЯЗАТЕЛЬНО совпадает со значением в сервисе guardian ниже — веб-
+      # админка tg_repost читает БД Guardian напрямую (guardian_routes.py,
+      # кросс-пакетный импорт), а не через сеть. Без этой строки процесс
+      # tg_repost резолвит guardian.db по default-пути ("sqlite:///guardian.db"
+      # относительно /app), а не в общем volume ./data/db — получается
+      # ДРУГОЙ, немигрированный файл: /guardian, /guardian/settings,
+      # /guardian/stopwords, /guardian/domains падают 500 "no such table"
+      # (найдено на реальном деплое — было пропущено при добавлении Guardian
+      # в docker-compose.yml).
+      GUARDIAN_DATABASE_URL: "sqlite:///db/guardian.db"
     ports:
       # Публикуем ТОЛЬКО на loopback хоста — тот же localhost/VPN-only
       # периметр, что и при запуске без Docker (см. план Фазы 5, раздел

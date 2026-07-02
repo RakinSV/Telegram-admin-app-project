@@ -180,6 +180,45 @@ def test_settings_save_invalid_number_returns_clean_400():
     assert "error" in r.text.lower() or "Некорректн" in r.text
 
 
+def _covers_form(**overrides: str) -> dict:
+    base = {
+        "enable_auto_cover": "on",
+        "cover_strategy": "unsplash",
+        "unsplash_api_url": "https://api.unsplash.com/photos/random",
+        "comfyui_base_url": "",
+        "comfyui_workflow_path": "",
+        "comfyui_positive_node_id": "",
+        "comfyui_poll_attempts": "10",
+        "comfyui_poll_interval_seconds": "2.0",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_settings_save_cover_strategy_rejects_value_outside_choices():
+    """Регрессия (code-ревью): cover_strategy был обычным str без choices —
+    опечатка вида "ComfyUI" молча проходила бы валидацию (любая непустая
+    строка) и код (`if settings.cover_strategy == "comfyui"`) тихо всегда
+    попадал бы в ветку unsplash."""
+    client = _client()
+    _bootstrap(client)
+    r = client.post("/settings/covers", data=_covers_form(cover_strategy="ComfyUI"))
+    assert r.status_code == 400
+    assert "Стратегия" in r.text or "должно быть одним из" in r.text
+
+
+def test_settings_save_cover_strategy_accepts_valid_choice():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/settings/covers", data=_covers_form(cover_strategy="comfyui"),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = client.get("/settings")
+    assert "comfyui" in r.text
+
+
 def test_settings_save_invalid_number_does_not_partially_apply():
     """Регрессия: раньше поля сохранялись по одному в цикле — плохое
     значение в одном поле не должно оставлять СОСЕДНИЕ поля из той же формы

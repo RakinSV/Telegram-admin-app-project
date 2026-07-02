@@ -40,6 +40,7 @@ class SettingsGroup:
     key: str
     title: str
     fields: tuple[SettingField, ...]
+    description: str = ""
 
 
 # Всё здесь читается заново на каждый вызов get_guardian_settings() (см. его
@@ -56,6 +57,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "guardian_log_channel_id", "id канала для лога модерации", "int"
             ),
         ),
+        "Отрицательные числа (chat_id групп/каналов всегда отрицательный). "
+        "Узнать id — переслать любое сообщение из группы/канала боту "
+        "@getidsbot. Guardian должен быть добавлен в оба администратором.",
     ),
     SettingsGroup(
         "spam_filter",
@@ -68,6 +72,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "ai_spam_confidence_threshold", "Порог уверенности AI", "float"
             ),
         ),
+        "keywords — бесплатно, только стоп-слова. ai — каждое сообщение "
+        "через LLM (дороже всего). hybrid (рекомендуется) — эвристики "
+        "отбирают ~20% подозрительных, только они идут в AI.",
     ),
     SettingsGroup(
         "captcha",
@@ -78,6 +85,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             ),
             SettingField("captcha_timeout_minutes", "Тайм-аут, мин", "int"),
         ),
+        "Что видит новый участник при входе, пока не ответит — math "
+        "(пример, «сколько будет 7+4»), button («я не робот»), question "
+        "(тематический вопрос про канал). Не ответил за тайм-аут — кик.",
     ),
     SettingsGroup(
         "warns",
@@ -91,6 +101,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "mute_duration_hours", "Длительность мута по умолчанию, ч", "int"
             ),
         ),
+        "Каждое нарушение (стоп-слово, ссылка вне whitelist, флуд) — варн. "
+        "При достижении порога — автоматический мут/кик/бан. Пороги должны "
+        "идти по возрастанию: мут < кик < бан.",
     ),
     SettingsGroup(
         "flood",
@@ -100,6 +113,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("flood_window_seconds", "Окно, сек", "int"),
             SettingField("allow_forwards", "Разрешить форварды", "bool"),
         ),
+        "Слишком много сообщений за короткое окно — варн. Одинаковый текст "
+        "подряд ловится отдельно, всегда. Форварды из других каналов можно "
+        "запретить целиком.",
     ),
     SettingsGroup(
         "raid",
@@ -111,16 +127,25 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "raid_cooldown_minutes", "Тишина для снятия режима, мин", "int"
             ),
         ),
+        "Всплеск вступлений (больше порога за период) замораживает права "
+        "ВСЕЙ группы (никто не может писать), с сохранением прежних прав "
+        "для восстановления. Снимается автоматически после тишины или "
+        "вручную кнопкой в лог-канале.",
     ),
     SettingsGroup(
         "trust",
         "Доверенные (G12)",
         (SettingField("auto_trust_after_days", "Автодоверие через, дней", "int"),),
+        "Участники без единого нарушения N дней автоматически обходят все "
+        "фильтры (снижает нагрузку на AI-режим для уже проверенной аудитории).",
     ),
     SettingsGroup(
         "profile",
         "Анализ профиля (G15)",
         (SettingField("profile_suspicion_threshold", "Порог для усиленной капчи", "int"),),
+        "При вступлении новичка: нет username/фото, подозрительное био, "
+        "свежий аккаунт — каждый признак добавляет балл. Порог — только "
+        "усиливает капчу до math, НЕ банит и не отклоняет автоматически.",
     ),
     SettingsGroup(
         "quiet_hours",
@@ -131,6 +156,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("quiet_hours_start_hour", "Начало строгого режима, час UTC", "int"),
             SettingField("quiet_hours_end_hour", "Конец строгого режима, час UTC", "int"),
         ),
+        "Строгий режим — варн за любое нарушение (в т.ч. ссылки). Мягкий — "
+        "ссылки вне whitelist только логируются, не удаляются. Время — "
+        "UTC, без поправки на твой часовой пояс.",
     ),
 )
 

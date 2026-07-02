@@ -24,7 +24,7 @@ from telegram.ext import (
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
-from tg_repost.logging_conf import get_logger
+from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.moderation import approve_post, edit_post_text, reject_post
 
 logger = get_logger(__name__)
@@ -92,7 +92,12 @@ async def send_pending_for_approval(application: Application) -> None:
                 parse_mode=None,  # превью — plain text, без риска парсинга
             )
         except Exception as exc:  # noqa: BLE001
-            logger.error("Не удалось отправить пост %s на модерацию: %s", post_id, exc)
+            # sanitize_proxy_error — на случай сбоя подключения через
+            # BOT_API_PROXY_URL (см. retry.py::retry_async про ту же находку).
+            logger.error(
+                "Не удалось отправить пост %s на модерацию: %s",
+                post_id, sanitize_proxy_error(str(exc)),
+            )
             continue
 
         with session_scope() as session:

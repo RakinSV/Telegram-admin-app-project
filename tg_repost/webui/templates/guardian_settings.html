@@ -16,6 +16,7 @@
 {% for group in groups %}
 <div class="settings-group">
   <h2>{{ group.title }}</h2>
+  {% if group.description %}<p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ group.description }}</p>{% endif %}
   <div class="card">
     <form method="post" action="/guardian/settings/{{ group.key }}">
       {% for field in group.fields %}

@@ -4,15 +4,19 @@
 <h1>Настройки</h1>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 <p class="muted">
-  Большинство значений применяются сразу. Поля с пометкой
-  <span class="badge warn">resync</span> меняют состав/расписание задач
-  планировщика — кнопка их применения появится в Фазе 5.2 (сейчас значение
-  сохраняется, но требует ручного перезапуска планировщика).
+  Все значения применяются сразу после сохранения группы — отдельно
+  перезапускать ничего не нужно. Поля с пометкой
+  <span class="badge warn">resync</span> дополнительно синхронизируют состав/
+  расписание задач планировщика (автоматически, если компоненты уже
+  запущены — см. статус на «Компоненты»). Настройки идентичности
+  (Telegram/Прокси) применяются к следующему пересозданному клиенту — для
+  уже запущенного нужен ручной рестарт на «Компоненты».
 </p>
 
 {% for group in groups %}
 <div class="settings-group">
   <h2>{{ group.title }}</h2>
+  {% if group.description %}<p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ group.description }}</p>{% endif %}
   <div class="card">
     <form method="post" action="/settings/{{ group.key }}">
       {% for field in group.fields %}
@@ -21,7 +25,13 @@
           {{ field.label }}
           {% if field.needs_resync %}<span class="badge warn">resync</span>{% endif %}
         </label>
-        {% if field.value_type == "bool" %}
+        {% if field.choices %}
+          <select id="{{ field.name }}" name="{{ field.name }}">
+            {% for choice in field.choices %}
+            <option value="{{ choice }}" {{ "selected" if field.value == choice else "" }}>{{ choice }}</option>
+            {% endfor %}
+          </select>
+        {% elif field.value_type == "bool" %}
           <input type="checkbox" id="{{ field.name }}" name="{{ field.name }}" {{ "checked" if field.value else "" }}>
         {% elif field.value_type == "csv_list" %}
           <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value|join(', ') }}">

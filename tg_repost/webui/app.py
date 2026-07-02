@@ -107,12 +107,14 @@ def _settings_groups_context() -> list[dict]:
         {
             "key": group.key,
             "title": group.title,
+            "description": group.description,
             "fields": [
                 {
                     "name": f.name,
                     "label": f.label,
                     "value_type": f.value_type,
                     "needs_resync": f.needs_resync,
+                    "choices": f.choices,
                     "value": settings_store.effective_value(f),
                 }
                 for f in group.fields
@@ -465,6 +467,18 @@ def _protected_router() -> APIRouter:
                     status_code=400,
                 )
             for field in group.fields:
+                if field.choices is not None and coerced[field.name] not in field.choices:
+                    return _templates.TemplateResponse(
+                        request,
+                        "settings.html",
+                        {
+                            "groups": _settings_groups_context(),
+                            "error": f"«{field.label}» должно быть одним из: "
+                            f"{', '.join(field.choices)}.",
+                        },
+                        status_code=400,
+                    )
+            for field in group.fields:
                 settings_store.save_setting(
                     field.name, coerced[field.name], field.value_type
                 )
@@ -497,6 +511,16 @@ def _protected_router() -> APIRouter:
             try:
                 settings_store.set_secret(key, value.strip())
                 audit.record_audit("secret_set", target=key)
+                # `openai_api_key` используется долгоживущим `RewriterClient`
+                # (держится в _components.rewriter, не читается заново на
+                # каждый вызов, в отличие от Brave/Unsplash-клиентов) —
+                # resync_scheduler_jobs() пересобирает его со свежим ключом.
+                # tg_*/mtproto_* секреты сюда не входят — им нужен полноценный
+                # restart_telethon_listener()/restart_moderation_bot() на
+                # /components, не просто ресинк джобов (найдено security-ревью).
+                if key == "openai_api_key" and get_components().is_running:
+                    await resync_scheduler_jobs()
+                    audit.record_audit("component_resync", target="scheduler")
             except ValueError as exc:
                 logger.warning("Не удалось сохранить секрет '%s': %s", key, exc)
         return RedirectResponse(url="/secrets", status_code=303)

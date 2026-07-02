@@ -27,12 +27,22 @@
     <input type="password" name="password_confirm" placeholder="Повтори пароль" required minlength="8">
 
     <h2>Telegram (опционально сейчас)</h2>
+    <p class="muted" style="margin-top:0">
+      TG_API_ID и TG_API_HASH — с <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a>
+      (API development tools → создать приложение; Short name — только латиница/цифры,
+      без пробелов). TG_BOT_TOKEN — от @BotFather в самом Telegram (команда /newbot).
+      TG_OWNER_USER_ID — твой числовой Telegram ID (узнать у @userinfobot).
+    </p>
     <input type="text" name="tg_api_id" placeholder="TG_API_ID">
     <input type="text" name="tg_api_hash" placeholder="TG_API_HASH">
     <input type="text" name="tg_bot_token" placeholder="TG_BOT_TOKEN">
     <input type="text" name="tg_owner_user_id" placeholder="TG_OWNER_USER_ID">
 
     <h2>Рерайт (опционально сейчас)</h2>
+    <p class="muted" style="margin-top:0">
+      Ключ OpenAI-совместимого API (сам OpenAI, либо прокси/локальная модель —
+      см. OPENAI_BASE_URL в «Настройках» после создания администратора).
+    </p>
     <input type="text" name="openai_api_key" placeholder="OPENAI_API_KEY">
 
     <input type="submit" value="Создать администратора и продолжить" style="margin-top: 12px;">

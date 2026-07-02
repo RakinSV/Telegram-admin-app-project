@@ -8,11 +8,25 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from logging.handlers import RotatingFileHandler
 
 _LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 _configured = False
+
+# user:pass@ в URL прокси (socks5://user:pass@host:port, BOT_API_PROXY_URL) —
+# ни `httpx`/`socksio`, ни `aiohttp_socks` не гарантируют, что их исключения
+# при сбое подключения/авторизации через прокси НИКОГДА не отразят исходный
+# URL целиком; код на нашей стороне логирует такие исключения как обычный
+# %s, exc (найдено security-ревью). Используется в местах, где ошибка МОЖЕТ
+# быть связана с прокси-подключением.
+_PROXY_CREDS_RE = re.compile(r"://[^/@\s:]+:[^/@\s]+@")
+
+
+def sanitize_proxy_error(text: str) -> str:
+    """Вырезать логин:пароль из текста ошибки (см. `_PROXY_CREDS_RE`)."""
+    return _PROXY_CREDS_RE.sub("://***:***@", text)
 
 
 def ensure_utf8_stdout() -> None:

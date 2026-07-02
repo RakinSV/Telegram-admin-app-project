@@ -40,6 +40,7 @@ def _settings_groups_context() -> list[dict]:
         {
             "key": group.key,
             "title": group.title,
+            "description": group.description,
             "fields": [
                 {
                     "name": f.name,

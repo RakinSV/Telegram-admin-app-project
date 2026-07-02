@@ -2,6 +2,11 @@
 {% block title %}Логи — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Логи <span id="conn-status" class="badge muted">подключение…</span></h1>
+<p class="muted">
+  Живой поток логов процесса (Telethon-listener, бот модерации, планировщик,
+  веб-админка) — обновляется само по себе, без перезагрузки страницы.
+  «Живо» = соединение активно; при обрыве браузер переподключится сам.
+</p>
 
 <div class="card">
   <pre id="log-view" style="max-height:70vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:12px; margin:0;">{% for line in recent %}{{ line }}

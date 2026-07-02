@@ -95,6 +95,17 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     (часть джобов уже существует) — единая точка истины вместо дублирования
     логики регистрации в нескольких местах.
     """
+    # Пересобираем ВСЕГДА (не только при первом старте) — `RewriterClient()`
+    # дёшев (AsyncOpenAI() в конструкторе не делает сетевых вызовов, только
+    # читает settings), а без пересборки ротация OPENAI_API_KEY/смена
+    # OPENAI_BASE_URL/MODEL через /secrets и /settings тихо не применялась
+    # бы: старый `_components.rewriter` держал бы СТАРЫЙ ключ до полного
+    # рестарта контейнера (найдено security-ревью — тот же класс бага, что
+    # уже чинили для WEBUI_MASTER_KEY). `_sync_jobs()` вызывается и из
+    # `resync_scheduler_jobs()` (после /settings и /secrets, см. app.py), и
+    # из restart_telethon_listener()/restart_moderation_bot() — везде, где
+    # нужен свежий rewriter.
+    _components.rewriter = RewriterClient()
     rewriter = _components.rewriter
     application = _components.application
     tele_client = _components.tele_client
@@ -113,6 +124,14 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
             "pipeline_tick",
             trigger=IntervalTrigger(seconds=settings.pipeline_interval_seconds),
         )
+        # `reschedule_job` меняет ТОЛЬКО trigger/next_run_time, НЕ args
+        # (проверено по исходнику APScheduler) — без этой строки джоба после
+        # restart_moderation_bot()/restart_telethon_listener() продолжала бы
+        # держать ссылку на СТАРЫЙ (уже .shutdown()) Application/tele_client,
+        # тихо ломая рерайт после ротации TG_BOT_TOKEN через /secrets (найдено
+        # security-ревью). `rewriter`/`application` в этой функции уже
+        # свежепрочитаны из `_components` в начале `_sync_jobs`.
+        scheduler.modify_job("pipeline_tick", args=[rewriter, application])
 
     # Слоты публикации: количество и времена переменные — проще снести все
     # текущие slot_* и создать заново по актуальному списку.
@@ -182,9 +201,8 @@ async def start_components(settings: Settings | None = None) -> None:
     runtime_state.set_component_status("bot", True)
     logger.info("Бот модерации запущен")
 
-    _components.rewriter = RewriterClient()
     _components.scheduler = AsyncIOScheduler()
-    _sync_jobs(_components.scheduler, settings)
+    _sync_jobs(_components.scheduler, settings)  # тоже строит _components.rewriter
     _components.scheduler.start()
     runtime_state.set_component_status("scheduler", True)
     logger.info(

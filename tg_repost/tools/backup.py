@@ -40,7 +40,28 @@ def _sqlite_path(url: str) -> Path | None:
     if not url.startswith("sqlite:///"):
         logger.warning("Не SQLite URL (%s) — файловый бэкап пропущен, нужен снапшот СУБД отдельно", url)
         return None
-    return Path(url.removeprefix("sqlite:///"))
+    path = Path(url.removeprefix("sqlite:///"))
+    if path.is_file():
+        return path
+    # Docker-раскладка (docker-compose.yml): контейнер видит DATABASE_URL как
+    # "sqlite:///db/....db" (переопределено в environment:, только внутри
+    # контейнера), но задокументированный cron-рецепт (README) запускает
+    # backup.py С ХОСТА — там та же переменная читается из голого .env
+    # ("sqlite:///tg_repost.db", без db/), а реальный файл лежит в
+    # ./data/db/ (bind mount). Без этого фолбэка бэкап "успешен", но без
+    # единой БД внутри — is_file() тихо False, только warning (найдено
+    # security-ревью). Тот же приём — для logs/ ниже.
+    docker_path = Path("data") / "db" / path.name
+    if docker_path.is_file():
+        return docker_path
+    return path  # ни один вариант не найден — вернуть исходный, лог отдельно
+
+
+def _resolve_logs_dir() -> Path | None:
+    for candidate in (Path("logs"), Path("data") / "logs"):
+        if candidate.is_dir():
+            return candidate
+    return None
 
 
 def _collect_files() -> list[Path]:
@@ -61,11 +82,16 @@ def _collect_files() -> list[Path]:
         if db_path is not None and db_path.is_file():
             files.append(db_path)
         elif db_path is not None:
-            logger.warning("БД не найдена: %s (%s)", db_path, env_var)
+            logger.warning(
+                "БД не найдена ни по прямому пути, ни в data/db/ (%s): %s",
+                env_var, db_path,
+            )
 
-    logs_dir = Path("logs")
-    if logs_dir.is_dir():
+    logs_dir = _resolve_logs_dir()
+    if logs_dir is not None:
         files.extend(p for p in logs_dir.rglob("*") if p.is_file())
+    else:
+        logger.warning("Директория логов не найдена (проверены ./logs и ./data/logs)")
 
     return files
 

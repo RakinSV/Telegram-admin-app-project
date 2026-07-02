@@ -173,6 +173,19 @@ def test_is_login_locked_expires_after_window():
     assert is_login_locked("1.2.3.4") is False
 
 
+def test_is_login_locked_prunes_empty_entry_from_dict():
+    # Регрессия (security-ревью): раньше пустой список ПОСЛЕ прунинга
+    # оставался в словаре навсегда (только .get() выше, без .pop()) — ключи
+    # для IP с одной устаревшей попыткой копились бы бесконечно на весь
+    # процесс. Низкий приоритет (loopback-only периметр), но дёшево починить.
+    register_failed_login("1.2.3.4")
+    auth._failed_attempts["1.2.3.4"] = [
+        t - auth._LOGIN_LOCKOUT_SECONDS - 1 for t in auth._failed_attempts["1.2.3.4"]
+    ]
+    assert is_login_locked("1.2.3.4") is False
+    assert "1.2.3.4" not in auth._failed_attempts
+
+
 def test_clear_failed_logins_resets_counter():
     for _ in range(5):
         register_failed_login("1.2.3.4")

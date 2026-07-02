@@ -13,6 +13,7 @@ from tg_repost.webui.supervisor import (
     _sync_jobs,
     get_components,
 )
+from tg_repost.webui import supervisor as supervisor_module
 
 
 def _noop(*args, **kwargs):
@@ -68,6 +69,25 @@ def test_sync_jobs_creates_pipeline_tick():
     assert scheduler.get_job("pipeline_tick") is not None
 
 
+def test_sync_jobs_rebuilds_rewriter_every_call():
+    # Регрессия (security-ревью): _components.rewriter раньше строился ОДИН
+    # РАЗ в start_components() и никогда не пересобирался — ротация
+    # OPENAI_API_KEY через /secrets тихо не применялась (RewriterClient
+    # держит ключ, снятый в конструкторе, до полного рестарта контейнера).
+    # _sync_jobs() теперь пересобирает его на каждый вызов (дёшево — не
+    # делает сетевых вызовов, см. RewriterClient.__init__).
+    settings = Settings()
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    first_rewriter = supervisor_module._components.rewriter
+    assert first_rewriter is not None
+
+    _sync_jobs(scheduler, settings)
+    second_rewriter = supervisor_module._components.rewriter
+    assert second_rewriter is not None
+    assert second_rewriter is not first_rewriter
+
+
 def test_sync_jobs_reschedule_does_not_duplicate_pipeline_tick():
     settings = Settings()
     scheduler = AsyncIOScheduler()
@@ -75,6 +95,29 @@ def test_sync_jobs_reschedule_does_not_duplicate_pipeline_tick():
     settings.pipeline_interval_seconds = 999
     _sync_jobs(scheduler, settings)
     assert sum(1 for j in scheduler.get_jobs() if j.id == "pipeline_tick") == 1
+
+
+def test_sync_jobs_reschedule_updates_pipeline_tick_args(monkeypatch):
+    # Регрессия (security-ревью): reschedule_job() меняет ТОЛЬКО
+    # trigger/next_run_time (проверено по исходнику APScheduler), НЕ args —
+    # без явного modify_job(args=...) джоба после restart_moderation_bot()
+    # продолжала бы держать ссылку на СТАРЫЙ (уже .shutdown()) Application,
+    # тихо ломая рерайт после ротации TG_BOT_TOKEN через /secrets.
+    settings = Settings()
+    scheduler = AsyncIOScheduler()
+
+    old_application = object()
+    monkeypatch.setattr(supervisor_module._components, "application", old_application)
+    _sync_jobs(scheduler, settings)
+    assert scheduler.get_job("pipeline_tick").args[1] is old_application
+
+    new_application = object()
+    monkeypatch.setattr(supervisor_module._components, "application", new_application)
+    _sync_jobs(scheduler, settings)
+
+    job = scheduler.get_job("pipeline_tick")
+    assert job.args[1] is new_application
+    assert job.args[1] is not old_application
 
 
 def test_sync_jobs_no_optional_jobs_by_default():

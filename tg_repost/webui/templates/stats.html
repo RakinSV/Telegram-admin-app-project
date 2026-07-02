@@ -2,7 +2,11 @@
 {% block title %}Статистика — tg_repost admin{% endblock %}
 {% block content %}
 <h1>Статистика</h1>
-<p class="muted">За последние {{ summary.window_days }} дн.</p>
+<p class="muted">
+  Просмотры опубликованных постов за последние {{ summary.window_days }} дн.
+  (окно настраивается в «Настройках» → «Статистика»). Собирается периодически
+  планировщиком, если включён сбор статистики.
+</p>
 
 <div class="grid">
   <div class="card stat">
