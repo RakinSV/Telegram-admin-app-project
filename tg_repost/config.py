@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from tg_repost.logging_conf import get_logger
 
@@ -63,8 +64,17 @@ class Settings(BaseSettings):
     database_url: str = Field("sqlite:///tg_repost.db", alias="DATABASE_URL")
 
     # --- Фильтрация (F03) ---
-    filter_stop_words: list[str] = Field(default_factory=list, alias="FILTER_STOP_WORDS")
-    filter_required_words: list[str] = Field(default_factory=list, alias="FILTER_REQUIRED_WORDS")
+    # `NoDecode` обязателен: без него pydantic-settings пытается json.loads()
+    # сырое значение из .env ДО того, как отработает `_split_csv` ниже — и
+    # падает даже на "" (не говоря о "a,b,c"), т.к. это не валидный JSON.
+    # Найдено при первом реальном прогоне через Docker/.env (раньше никогда
+    # не проверялось живым .env-файлом, только через os.environ в тестах).
+    filter_stop_words: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="FILTER_STOP_WORDS"
+    )
+    filter_required_words: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="FILTER_REQUIRED_WORDS"
+    )
 
     # --- Поведение пайплайна ---
     pipeline_interval_seconds: int = Field(30, alias="PIPELINE_INTERVAL_SECONDS")
@@ -78,8 +88,11 @@ class Settings(BaseSettings):
 
     # --- F11: авто-постинг по расписанию (слоты) ---
     scheduled_posting_enabled: bool = Field(False, alias="SCHEDULED_POSTING_ENABLED")
-    # Временные слоты публикации в формате HH:MM, через запятую.
-    posting_slots: list[str] = Field(default_factory=list, alias="POSTING_SLOTS")
+    # Временные слоты публикации в формате HH:MM, через запятую. `NoDecode` —
+    # см. комментарий у filter_stop_words выше.
+    posting_slots: Annotated[list[str], NoDecode] = Field(
+        default_factory=list, alias="POSTING_SLOTS"
+    )
     # Сколько одобренных постов выпускать за один слот.
     posting_batch_per_slot: int = Field(1, alias="POSTING_BATCH_PER_SLOT")
 

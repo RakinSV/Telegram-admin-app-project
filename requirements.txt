@@ -8,7 +8,7 @@ alembic==1.13.3
 
 # --- Конфиг ---
 pydantic==2.9.2
-pydantic-settings==2.5.2
+pydantic-settings==2.11.0     # 2.5.2 не имел NoDecode — нужен для filter_stop_words/posting_slots (см. config.py)
 python-dotenv==1.2.2          # CVE-2026-28684 fixed in 1.2.2
 
 # --- Рерайт (любой OpenAI-совместимый API) ---
