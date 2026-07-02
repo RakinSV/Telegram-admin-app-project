@@ -129,6 +129,7 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     elif action == "reject":
         await _reject(query, post_id)
     elif action == "edit":
+        assert context.user_data is not None  # приватный чат с владельцем — всегда есть
         context.user_data[_EDIT_KEY] = post_id
         await query.edit_message_text(
             f"✏️ Пришли новый текст для поста #{post_id} одним сообщением."
@@ -160,6 +161,7 @@ async def _reject(query, post_id: int) -> None:
 
 async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Приём нового текста в режиме редактирования (F07)."""
+    assert context.user_data is not None  # приватный чат с владельцем — всегда есть
     post_id = context.user_data.get(_EDIT_KEY)
     if post_id is None or update.message is None or not update.message.text:
         return

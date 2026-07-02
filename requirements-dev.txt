@@ -1,0 +1,5 @@
+# --- Инструменты разработки/CI (не нужны в проде) ---
+ruff==0.15.20
+mypy==2.1.0
+bandit[toml]==1.9.4          # [toml] — читает baseline из pyproject.toml (см. -c pyproject.toml в CI)
+pip-audit==2.10.1

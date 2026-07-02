@@ -51,7 +51,7 @@ class BraveSearchClient:
             "Accept": "application/json",
             "X-Subscription-Token": self._api_key,
         }
-        params = {"q": query, "count": count}
+        params: dict[str, str | int] = {"q": query, "count": count}
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:

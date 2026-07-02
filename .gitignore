@@ -36,6 +36,9 @@ media/
 *.log
 logs/
 
+# Бэкапы (tg_repost.tools.backup) — содержат .env + БД с секретами
+/backups/
+
 # IDE
 .idea/
 .vscode/

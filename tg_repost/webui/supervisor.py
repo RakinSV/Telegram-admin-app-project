@@ -177,6 +177,7 @@ async def start_components(settings: Settings | None = None) -> None:
     _components.application = build_application()
     await _components.application.initialize()
     await _components.application.start()
+    assert _components.application.updater is not None  # build_application() не отключает updater
     await _components.application.updater.start_polling(drop_pending_updates=True)
     runtime_state.set_component_status("bot", True)
     logger.info("Бот модерации запущен")
@@ -202,6 +203,7 @@ async def stop_components() -> None:
         runtime_state.set_component_status("scheduler", False)
         _components.scheduler = None
     if _components.application is not None:
+        assert _components.application.updater is not None  # build_application() не отключает updater
         await _components.application.updater.stop()
         await _components.application.stop()
         await _components.application.shutdown()
@@ -252,12 +254,14 @@ async def restart_moderation_bot() -> None:
         logger.warning("restart_moderation_bot: компоненты не запущены")
         return
     if _components.application is not None:
+        assert _components.application.updater is not None  # build_application() не отключает updater
         await _components.application.updater.stop()
         await _components.application.stop()
         await _components.application.shutdown()
     _components.application = build_application()
     await _components.application.initialize()
     await _components.application.start()
+    assert _components.application.updater is not None  # build_application() не отключает updater
     await _components.application.updater.start_polling(drop_pending_updates=True)
     runtime_state.set_component_status("bot", True)
     if _components.scheduler is not None:

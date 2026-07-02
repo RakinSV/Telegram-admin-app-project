@@ -117,6 +117,21 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "Доверенные (G12)",
         (SettingField("auto_trust_after_days", "Автодоверие через, дней", "int"),),
     ),
+    SettingsGroup(
+        "profile",
+        "Анализ профиля (G15)",
+        (SettingField("profile_suspicion_threshold", "Порог для усиленной капчи", "int"),),
+    ),
+    SettingsGroup(
+        "quiet_hours",
+        "Тихие часы / режим строгости (G16)",
+        (
+            SettingField("strict_mode", "Строгий режим сейчас", "bool"),
+            SettingField("quiet_hours_enabled", "Расписание тихих часов включено", "bool"),
+            SettingField("quiet_hours_start_hour", "Начало строгого режима, час UTC", "int"),
+            SettingField("quiet_hours_end_hour", "Конец строгого режима, час UTC", "int"),
+        ),
+    ),
 )
 
 

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from pathlib import Path
 
 from telegram import Bot
@@ -115,7 +116,7 @@ async def publish_post(bot: Bot, post_id: int) -> None:
     try:
         for chat_id in chat_ids:
             mid = await retry_async(
-                lambda c=chat_id: _send_one(bot, c, text, media_path),
+                functools.partial(_send_one, bot, chat_id, text, media_path),
                 description=f"публикация поста {post_id} в {chat_id}",
             )
             if first_message_id is None:

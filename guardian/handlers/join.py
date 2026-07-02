@@ -45,6 +45,7 @@ from guardian.config import get_guardian_settings
 from guardian.db.models import Member, ModerationLog
 from guardian.db.session import session_scope
 from guardian.logging_conf import get_logger
+from guardian.services import profile_analyzer
 from guardian.services.captcha import generate_captcha, make_captcha_keyboard
 from guardian.services.log_channel import log_action
 
@@ -130,8 +131,21 @@ async def on_new_member(
             row.username = event.new_chat_member.user.username
             row.first_name = event.new_chat_member.user.first_name
 
+    captcha_type = settings.captcha_type
+    profile_score = await profile_analyzer.compute_profile_score(
+        bot, user_id, event.new_chat_member.user.username
+    )
+    if profile_score >= settings.profile_suspicion_threshold:
+        # G15: усиленная капча для подозрительных профилей — `math` труднее
+        # автоматизировать одним кликом, чем `button`. НЕ банит/отклоняет
+        # сам по себе (см. docstring profile_analyzer.py).
+        captcha_type = "math"
+        logger.info(
+            "G15: профиль %s подозрителен (score=%d >= %d) — усиленная капча",
+            user_id, profile_score, settings.profile_suspicion_threshold,
+        )
     with session_scope() as session:
-        captcha = generate_captcha(settings.captcha_type, session=session)
+        captcha = generate_captcha(captcha_type, session=session)
     keyboard, options = make_captcha_keyboard(captcha, target_user_id=user_id)
     mention = _display_name(event.new_chat_member.user)
     sent = await bot.send_message(

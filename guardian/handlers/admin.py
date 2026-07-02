@@ -21,7 +21,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject
 from aiogram.types import ChatPermissions, Message
 
-from guardian import domains_repo, stopwords_repo, trusted_repo
+from guardian import domains_repo, settings_store, stopwords_repo, trusted_repo
 from guardian.config import get_guardian_settings
 from guardian.db.models import Member, ModerationLog, Warning
 from guardian.db.session import session_scope
@@ -497,3 +497,105 @@ async def cmd_listdomains(message: Message, bot: Bot) -> None:
     await message.reply(
         "Whitelist доменов:\n" + ("\n".join(domains) if domains else "(пусто)")
     )
+
+
+# --- Конфиг через команды (G13) — те же настройки, что и в веб-админке
+# tg_repost (`settings_store.save_setting`), альтернативный интерфейс для
+# случаев без доступа к веб-панели. Валидация `spam_mode`/`captcha_type`
+# берёт allowlist из `settings_store.SETTINGS_GROUPS` (`SettingField.choices`)
+# — единый источник истины с веб-формой, не дублирует список значений.
+
+
+def _find_field(name: str) -> settings_store.SettingField:
+    for group in settings_store.SETTINGS_GROUPS:
+        for field in group.fields:
+            if field.name == name:
+                return field
+    raise KeyError(name)
+
+
+@router.message(Command("setmode"))
+async def cmd_setmode(message: Message, command: CommandObject, bot: Bot) -> None:
+    actor_id = await _require_admin(message, bot)
+    if actor_id is None:
+        return
+    mode = (command.args or "").strip().lower()
+    choices = _find_field("spam_mode").choices or ()
+    if mode not in choices:
+        await message.reply(f"Использование: /setmode {'|'.join(choices)}")
+        return
+    settings_store.save_setting("spam_mode", mode, "str", updated_by=str(actor_id))
+    await message.reply(f"Режим спам-фильтра: {mode}.")
+
+
+@router.message(Command("setcaptcha"))
+async def cmd_setcaptcha(message: Message, command: CommandObject, bot: Bot) -> None:
+    actor_id = await _require_admin(message, bot)
+    if actor_id is None:
+        return
+    captcha_type = (command.args or "").strip().lower()
+    choices = _find_field("captcha_type").choices or ()
+    if captcha_type not in choices:
+        await message.reply(f"Использование: /setcaptcha {'|'.join(choices)}")
+        return
+    settings_store.save_setting("captcha_type", captcha_type, "str", updated_by=str(actor_id))
+    await message.reply(f"Тип капчи: {captcha_type}.")
+
+
+@router.message(Command("setwarn"))
+async def cmd_setwarn(message: Message, command: CommandObject, bot: Bot) -> None:
+    actor_id = await _require_admin(message, bot)
+    if actor_id is None:
+        return
+    parts = (command.args or "").split()
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        await message.reply(
+            "Использование: /setwarn <мут_порог> <кик_порог> <бан_порог> (целые числа)"
+        )
+        return
+    mute_t, kick_t, ban_t = (int(p) for p in parts)
+    if not (mute_t < kick_t < ban_t):
+        await message.reply("Пороги должны идти по возрастанию: мут < кик < бан.")
+        return
+    settings_store.save_setting("warn_threshold_mute", mute_t, "int", updated_by=str(actor_id))
+    settings_store.save_setting("warn_threshold_kick", kick_t, "int", updated_by=str(actor_id))
+    settings_store.save_setting("warn_threshold_ban", ban_t, "int", updated_by=str(actor_id))
+    await message.reply(f"Пороги варнов: мут={mute_t}, кик={kick_t}, бан={ban_t}.")
+
+
+@router.message(Command("setmutime"))
+async def cmd_setmutime(message: Message, command: CommandObject, bot: Bot) -> None:
+    """Настройка называется `mute_duration_hours` (тот же .env `MUTE_DURATION_HOURS`,
+    веб-админка, `/mute`-фолбэк) — команда сохраняет ЧАСЫ, а не минуты, хотя
+    первоначальный план (GUARDIAN_FEATURES.md, G13) описывал её как "минуты":
+    поле с самого G01 везде по кодовой базе в часах, заводить отдельное
+    minutes-поле только под эту команду значило бы либо рассинхрон с
+    `/mute`/веб-UI, либо путаницу единиц — текст ответа явно говорит "ч.",
+    чтобы не вводить в заблуждение."""
+    actor_id = await _require_admin(message, bot)
+    if actor_id is None:
+        return
+    raw = (command.args or "").strip()
+    if not raw.isdigit() or int(raw) <= 0:
+        await message.reply("Использование: /setmutime <часы> (целое положительное число)")
+        return
+    settings_store.save_setting("mute_duration_hours", int(raw), "int", updated_by=str(actor_id))
+    await message.reply(f"Длительность мута по умолчанию: {raw} ч.")
+
+
+@router.message(Command("mode"))
+async def cmd_mode(message: Message, command: CommandObject, bot: Bot) -> None:
+    """G16: ручное переключение strict/soft. Если включено расписание тихих
+    часов (`quiet_hours_enabled`), следующий тик джобы `bot.py::
+    _apply_quiet_hours_schedule` перезапишет это значение согласно текущему
+    часу — ручное переключение "держится" только до следующего тика,
+    расписание приоритетнее (см. его docstring)."""
+    actor_id = await _require_admin(message, bot)
+    if actor_id is None:
+        return
+    mode = (command.args or "").strip().lower()
+    if mode not in ("strict", "soft"):
+        await message.reply("Использование: /mode strict|soft")
+        return
+    settings_store.save_setting("strict_mode", mode == "strict", "bool", updated_by=str(actor_id))
+    await message.reply(f"Режим строгости: {mode}.")

@@ -79,6 +79,23 @@ class GuardianSettings(BaseSettings):
     # спам-фильтром (см. GUARDIAN.md "Интеграция с репост-ботом").
     repost_bot_id: str = Field("", alias="REPOST_BOT_ID")
 
+    # --- Анализ профиля нового участника (G15) ---
+    # Сумма сигналов (нет username +1, нет фото +1, новый аккаунт +1, био с
+    # ключевыми словами +2) >= порога -> усиленная (math) капча вместо
+    # сконфигурированного CAPTCHA_TYPE. НЕ используется для бана/автоотказа —
+    # см. GUARDIAN_FEATURES.md G15: "не банить только за профиль".
+    profile_suspicion_threshold: int = Field(3, alias="PROFILE_SUSPICION_THRESHOLD")
+
+    # --- Тихие часы / режимы строгости (G16) ---
+    # strict — все нарушения (в т.ч. ссылки) удаляются с варном (поведение
+    # по умолчанию, как до G16). soft — стоп-слова работают как раньше, но
+    # ссылки вне whitelist только логируются, не удаляются (см.
+    # handlers/messages.py). Переключается вручную (/mode) или по расписанию.
+    strict_mode: bool = Field(True, alias="STRICT_MODE")
+    quiet_hours_enabled: bool = Field(False, alias="QUIET_HOURS_ENABLED")
+    quiet_hours_start_hour: int = Field(22, alias="QUIET_HOURS_START_HOUR")  # UTC, 0-23
+    quiet_hours_end_hour: int = Field(8, alias="QUIET_HOURS_END_HOUR")  # UTC, 0-23
+
     # --- Рерайт/AI (переиспользует те же ключи, что и репост-бот, G09) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")

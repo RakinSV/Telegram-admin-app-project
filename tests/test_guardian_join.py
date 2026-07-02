@@ -43,14 +43,14 @@ def _fake_user(
     )
 
 
-def _fake_event(chat_id: int, joiner_id: int) -> SimpleNamespace:
+def _fake_event(chat_id: int, joiner_id: int, username: str | None = "newuser") -> SimpleNamespace:
     """`new_chat_member.user` — реальный новый участник. Умышленно НЕ
     выставляем отдельный `from_user` на событии — `on_new_member` его не
     читает вообще (это и есть суть фикса: `from_user` больше нигде не
     участвует в определении, для кого капча)."""
     return SimpleNamespace(
         chat=SimpleNamespace(id=chat_id),
-        new_chat_member=SimpleNamespace(user=_fake_user(joiner_id)),
+        new_chat_member=SimpleNamespace(user=_fake_user(joiner_id, username=username)),
     )
 
 
@@ -59,6 +59,12 @@ async def test_on_new_member_pending_keyed_by_joining_user_not_actor():
     bot = AsyncMock()
     bot.restrict_chat_member = AsyncMock()
     bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=555))
+    # G15 (анализ профиля) вызывает эти два метода при каждом вступлении —
+    # без явных конкретных return_value голый AsyncMock() каскадно
+    # авто-мокает даже `.bio.lower()` в коротину, которую никто не await'ит
+    # (найдено эмпирически при добавлении G15).
+    bot.get_user_profile_photos = AsyncMock(return_value=SimpleNamespace(total_count=1))
+    bot.get_chat = AsyncMock(return_value=SimpleNamespace(bio=""))
     scheduler = MagicMock()
 
     chat_id, joiner_id = -100123, 2002
@@ -72,6 +78,30 @@ async def test_on_new_member_pending_keyed_by_joining_user_not_actor():
     scheduler.add_job.assert_called_once()
     _, kwargs = scheduler.add_job.call_args
     assert kwargs["args"] == [bot, chat_id, joiner_id]
+
+
+async def test_suspicious_profile_forces_math_captcha():
+    """G15: подозрительный профиль (нет username, нет фото, "плохая" био) —
+    капча принудительно `math`, даже если сконфигурирован `button` (тот
+    решается одним кликом без чтения текста)."""
+    from guardian import settings_store
+
+    settings_store.save_setting("captcha_type", "button", "str")
+    settings_store.save_setting("profile_suspicion_threshold", 2, "int")
+
+    bot = AsyncMock()
+    bot.restrict_chat_member = AsyncMock()
+    bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=555))
+    bot.get_user_profile_photos = AsyncMock(return_value=SimpleNamespace(total_count=0))
+    bot.get_chat = AsyncMock(return_value=SimpleNamespace(bio="crypto заработок"))
+    scheduler = MagicMock()
+
+    chat_id, joiner_id = -100123, 3003
+    event = _fake_event(chat_id, joiner_id, username=None)
+    await join.on_new_member(event, bot, scheduler)
+
+    pending = join._pending[(chat_id, joiner_id)]
+    assert len(pending.options) == 4  # math-капча даёт 4 варианта, button — 1
 
 
 async def test_captcha_answer_rejected_when_clicker_is_not_the_target():

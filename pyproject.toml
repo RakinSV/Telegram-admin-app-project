@@ -1,0 +1,18 @@
+[tool.bandit]
+# Задокументированный baseline принятых low-severity находок (security-ревью
+# Guardian G09-G17), чтобы допущения жили в репозитории, а не только в
+# описании таска/PR — иначе "низкая серьёзность" молча становится слепой
+# зоной для будущих РЕАЛЬНЫХ находок той же категории.
+#
+# B101 (assert_used) — `assert x is not None` в проде для сужения типов
+#   там, где библиотека типизирует поле как `X | None`, но инвариант кода
+#   гарантирует, что оно всегда задано (см. tg_repost/telegram/moderation_bot.py,
+#   tg_repost/webui/supervisor.py). Не проверка бизнес-инварианта.
+# B105 (hardcoded_password_string) — ложное срабатывание: строка
+#   "Telegram Bot Token" в tg_repost/webui/settings_store.py — это
+#   UI-подпись поля для write-only формы секретов, не сам секрет.
+# B311 (blacklist / random) — `random.randint`/`random.choice`/`random.uniform`
+#   используются только для генерации капчи (guardian/services/captcha.py,
+#   не криптографический токен) и джиттера антибан-задержек
+#   (tg_repost/antiban.py) — не для секретов/токенов/ключей.
+skips = ["B101", "B105", "B311"]

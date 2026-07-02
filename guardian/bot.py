@@ -7,6 +7,7 @@ tg_repost/main.py, свой bot token, своя БД.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -17,11 +18,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from guardian import settings_store, trusted_repo
 from guardian.config import get_guardian_settings
-from guardian.db.models import StopWord, TrustedUser
+from guardian.db.models import Member, StopWord, TrustedUser
 from guardian.db.session import session_scope
-from guardian.handlers import admin, join, messages
+from guardian.handlers import admin, join, messages, stats
 from guardian.logging_conf import get_logger, setup_logging
+from guardian.services import daily_stats_repo, raid_detector
 from guardian.services.warn_system import reset_expired_warns
 
 logger = get_logger(__name__)
@@ -51,6 +54,71 @@ def _reload_filters() -> None:
     messages.flood_filter.update_limits(
         settings.flood_max_messages, settings.flood_window_seconds
     )
+
+
+def _apply_quiet_hours_schedule() -> None:
+    """G16: если `quiet_hours_enabled`, пересчитывает `strict_mode` по
+    текущему часу UTC и перезаписывает настройку. Расписание ПРИОРИТЕТНЕЕ
+    ручного `/mode` между тиками — следующий тик (см. `_FILTER_RELOAD_INTERVAL_SECONDS`-
+    подобный интервал ниже) снова применит расписание, откатывая ручное
+    переключение, если оно противоречит текущему часу. Это осознанный выбор
+    (не баг): включив расписание, оператор ожидает, что оно и есть источник
+    истины, а не разовый ручной override, который стоило бы теперь помнить
+    отключить обратно."""
+    settings = get_guardian_settings()
+    if not settings.quiet_hours_enabled:
+        return
+    hour = datetime.now(timezone.utc).hour
+    start, end = settings.quiet_hours_start_hour, settings.quiet_hours_end_hour
+    is_quiet_hours = start <= hour < end if start <= end else hour >= start or hour < end
+    settings_store.save_setting("strict_mode", is_quiet_hours, "bool", updated_by="schedule")
+
+
+def _auto_trust_eligible_members() -> None:
+    """G12: автодоверие — участник без единого варна, состоящий в группе
+    дольше `auto_trust_after_days` (по умолчанию 30), становится доверенным
+    автоматически (закрывает поле `auto_trust_after_days`, которое раньше
+    существовало только в настройках, но нигде не читалось — найдено при
+    ретроспективе). `auto_trust_after_days <= 0` — оператор явно выключил
+    автодоверие (тот же sentinel-паттерн, что `negative_reaction_threshold=0`
+    в tg_repost — "0 = выкл.")."""
+    settings = get_guardian_settings()
+    if not settings.guardian_group_id or settings.auto_trust_after_days <= 0:
+        return
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.auto_trust_after_days)
+    with session_scope() as session:
+        candidates = (
+            session.query(Member)
+            .filter(
+                Member.chat_id == settings.guardian_group_id,
+                Member.join_date < cutoff,
+                Member.warn_count == 0,
+                Member.is_trusted.is_(False),
+                Member.is_banned.is_(False),
+                Member.is_verified.is_(True),
+            )
+            .all()
+        )
+        candidate_ids = [m.user_id for m in candidates]
+
+    reason = f"автодоверие: {settings.auto_trust_after_days}+ дней без нарушений"
+    for user_id in candidate_ids:
+        if trusted_repo.add_trusted(user_id, settings.guardian_group_id, added_by="auto", reason=reason):
+            logger.info("G12: %s автоматически добавлен в доверенные (%s)", user_id, reason)
+
+
+def _finalize_yesterday_stats() -> None:
+    """G17: ежедневная джоба — фиксирует ВЧЕРАШНИЙ день в `daily_stats`,
+    гарантируя непрерывную историю для `/growth` даже если `/stats`/`/growth`
+    ни разу не вызывались за день (сегодняшняя запись и так пересчитывается
+    "по требованию" при каждом вызове — см. `daily_stats_repo.sum_range`,
+    но БЕЗ этой джобы день, за который никто не спросил статистику,
+    останется без записи вообще)."""
+    settings = get_guardian_settings()
+    if not settings.guardian_group_id:
+        return
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    daily_stats_repo.compute_and_store_daily_stats(settings.guardian_group_id, day=yesterday)
 
 
 def _seed_stopwords_if_empty() -> None:
@@ -161,10 +229,13 @@ async def main() -> None:
         bot
     )  # после Bot(), т.к. подтверждает личность через bot.get_chat
     dp = Dispatcher(storage=MemoryStorage())
-    # Порядок важен: admin (команды) — раньше messages (общий обработчик
-    # текста), иначе /warn и т.п. дошли бы и до спам-фильтра как обычный текст.
+    # Порядок важен: admin/stats (команды) — раньше messages (общий
+    # обработчик текста), иначе /warn, /stats и т.п. дошли бы и до
+    # спам-фильтра как обычный текст.
     dp.include_router(join.router)
+    dp.include_router(raid_detector.router)
     dp.include_router(admin.router)
+    dp.include_router(stats.router)
     dp.include_router(messages.router)
 
     scheduler = AsyncIOScheduler()
@@ -175,6 +246,21 @@ async def main() -> None:
         _reload_filters,
         IntervalTrigger(seconds=_FILTER_RELOAD_INTERVAL_SECONDS),
         id="filter_reload",
+    )
+    scheduler.add_job(
+        _finalize_yesterday_stats, CronTrigger(hour=0, minute=5), id="finalize_daily_stats"
+    )
+    scheduler.add_job(
+        _auto_trust_eligible_members, CronTrigger(hour=4, minute=0), id="auto_trust"
+    )
+    scheduler.add_job(
+        raid_detector.check_raid,
+        IntervalTrigger(minutes=1),
+        args=[bot],
+        id="raid_check",
+    )
+    scheduler.add_job(
+        _apply_quiet_hours_schedule, IntervalTrigger(minutes=15), id="quiet_hours"
     )
     scheduler.start()
 
