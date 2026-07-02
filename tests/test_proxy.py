@@ -19,6 +19,7 @@ from guardian.config import (
 from tg_repost.config import invalidate_settings_cache
 from tg_repost.telegram.listener import build_client
 from tg_repost.telegram.moderation_bot import build_application
+from tg_repost.tools.gen_session import start_telethon_login
 
 _ENV_EXAMPLE = Path(__file__).parent.parent / ".env.example"
 
@@ -56,6 +57,33 @@ async def test_build_client_with_mtproto_proxy_configured(monkeypatch):
 
     assert client._proxy == ("1.2.3.4", 443, "deadbeefdeadbeefdeadbeefdeadbeef")
     assert client._connection is ConnectionTcpMTProxyRandomizedIntermediate
+
+
+async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
+    # Регрессия (найдено на реальном деплое): визард входа
+    # (webui/telethon_login.py -> gen_session.start_telethon_login) строил
+    # СВОЙ TelegramClient в обход _mtproxy_kwargs() — прокси применялся
+    # только к уже работающему listener'у (build_client), а самый первый
+    # логин, которым и добывается TG_SESSION_STRING, стучался в Telegram
+    # напрямую и падал "Connection to Telegram failed 5 time(s)" на сервере
+    # без прямого доступа.
+    monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
+    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
+    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "deadbeefdeadbeefdeadbeefdeadbeef")
+    invalidate_settings_cache()
+
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("telethon.TelegramClient.connect", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "telethon.TelegramClient.send_code_request",
+        AsyncMock(return_value=type("Sent", (), {"phone_code_hash": "hash"})()),
+    )
+
+    state = await start_telethon_login(api_id=1, api_hash="hash", phone="+10000000000")
+
+    assert state.client._proxy == ("1.2.3.4", 443, "deadbeefdeadbeefdeadbeefdeadbeef")
+    assert state.client._connection is ConnectionTcpMTProxyRandomizedIntermediate
 
 
 def test_build_application_without_proxy_does_not_crash():
