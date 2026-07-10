@@ -13,9 +13,9 @@
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <div class="card">
-  <form method="post" action="/targets" style="display:flex; gap:8px;">
-    <input type="text" name="chat_id" placeholder="chat_id (напр. -1001234567890)" required style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
-    <input type="text" name="title" placeholder="название (опц.)" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+  <form method="post" action="/targets" class="inline-form">
+    <input type="text" name="chat_id" placeholder="chat_id (напр. -1001234567890)" required>
+    <input type="text" name="title" placeholder="название (опц.)">
     <button type="submit">Добавить</button>
   </form>
 </div>

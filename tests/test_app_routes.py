@@ -248,6 +248,65 @@ def test_sources_create_and_list_round_trip():
     assert "integration_test_chan" in r.text
 
 
+def test_source_detail_shows_targets_as_checkboxes():
+    """Новый роутинг (аудит UX): цели выбираются чекбоксами, а не вводом
+    chat_id вручную — на странице источника должны быть чекбоксы целей."""
+    from tg_repost import sources_repo, targets_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@routing_src")
+    targets_repo.add_target(-1001111, "Канал А")
+    targets_repo.add_target(-1002222, "Канал Б")
+
+    r = client.get(f"/sources/{src.id}")
+    assert r.status_code == 200
+    assert 'type="checkbox"' in r.text
+    assert "Канал А" in r.text and "Канал Б" in r.text
+    assert 'value="-1001111"' in r.text
+
+
+def test_source_update_checkboxes_map_to_target_chat_ids():
+    """Отмеченные чекбоксы целей должны сохраниться как CSV target_chat_ids
+    источника (маршрут «из этого источника — в эти группы»)."""
+    from tg_repost import sources_repo, targets_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@routing_src2")
+    targets_repo.add_target(-1003333, "В")
+    targets_repo.add_target(-1004444, "Г")
+
+    # Отмечаем две цели — httpx кодирует list-значение как повторяющиеся
+    # form-поля target_chat_ids=-1003333&target_chat_ids=-1004444.
+    r = client.post(
+        f"/sources/{src.id}",
+        data={"style_profile": "", "enrich_mode": "default",
+              "target_chat_ids": ["-1003333", "-1004444"]},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    updated = sources_repo.get_source(src.id)
+    assert set(updated.target_chat_ids.split(",")) == {"-1003333", "-1004444"}
+
+
+def test_source_update_no_checkboxes_clears_targets_to_all():
+    """Ни одна цель не отмечена — target_chat_ids очищается (публикация во
+    все активные), а не остаётся старое значение."""
+    from tg_repost import sources_repo, targets_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@routing_src3")
+    targets_repo.add_target(-1005555, "Д")
+    sources_repo.set_source_targets(src.id, "-1005555")
+
+    r = client.post(
+        f"/sources/{src.id}",
+        data={"style_profile": "", "enrich_mode": "default"},  # без target_chat_ids
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert sources_repo.get_source(src.id).target_chat_ids is None
+
+
 def test_best_times_apply_without_data_redirects_with_applied_zero():
     """F19 доделка: кнопка «Применить сейчас» на /stats/best-times не должна
     падать, если данных недостаточно — просто редиректит без изменений.

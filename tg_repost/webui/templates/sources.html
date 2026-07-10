@@ -11,8 +11,8 @@
 {% if truncated %}<p class="muted">Показаны первые 500 записей — деактивируй неиспользуемые источники, если список продолжает расти.</p>{% endif %}
 
 <div class="card">
-  <form method="post" action="/sources" style="display:flex; gap:8px;">
-    <input type="text" name="channel" placeholder="@username или t.me/channel" required style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+  <form method="post" action="/sources" class="inline-form">
+    <input type="text" name="channel" placeholder="@username или t.me/channel" required>
     <button type="submit">Добавить</button>
   </form>
 </div>
@@ -27,7 +27,7 @@
       <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a></td>
       <td>{{ s.style_profile or 'default' }}</td>
       <td>{{ {True: 'on', False: 'off', None: 'глоб.'}[s.enrich_sources] }}</td>
-      <td>{{ s.target_chat_ids or 'все' }}</td>
+      <td>{% if s.target_chat_ids %}{{ s.target_chat_ids.split(',')|length }} груп.{% else %}<span class="muted">все</span>{% endif %}</td>
       <td>
         <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline;">
           <button type="submit" class="secondary">Деактивировать</button>

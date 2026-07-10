@@ -10,7 +10,7 @@
   <form method="post" action="/sources/{{ source.id }}">
     <div class="field-row">
       <label for="style_profile">Стиль рерайта</label>
-      <select id="style_profile" name="style_profile" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+      <select id="style_profile" name="style_profile">
         <option value="" {{ 'selected' if not source.style_profile else '' }}>default</option>
         {% for st in known_styles %}
         <option value="{{ st }}" {{ 'selected' if source.style_profile == st else '' }}>{{ st }}</option>
@@ -19,15 +19,45 @@
     </div>
     <div class="field-row">
       <label for="enrich_mode">Добор источников (F16)</label>
-      <select id="enrich_mode" name="enrich_mode" style="flex:1; background:#11131a; border:1px solid var(--border); color:var(--text); padding:6px 8px; border-radius:6px;">
+      <select id="enrich_mode" name="enrich_mode">
         <option value="default" {{ 'selected' if source.enrich_sources is none else '' }}>по глобальной настройке</option>
         <option value="on" {{ 'selected' if source.enrich_sources == True else '' }}>включён</option>
         <option value="off" {{ 'selected' if source.enrich_sources == False else '' }}>выключен</option>
       </select>
     </div>
-    <div class="field-row">
-      <label for="target_chat_ids">Цели (chat_id через запятую, F12)</label>
-      <input type="text" id="target_chat_ids" name="target_chat_ids" value="{{ source.target_chat_ids or '' }}" placeholder="пусто — во все активные">
+    <div class="field-row" style="align-items: flex-start;">
+      <label>Куда публиковать</label>
+      <div style="flex:1;">
+        {% if targets or orphan_ids %}
+        <p class="muted" style="margin:0 0 8px;">
+          Отметь целевые группы, куда идут посты именно из этого источника.
+          Ничего не отмечено — публикуется во <strong>все активные</strong> цели.
+        </p>
+        <div class="check-list">
+          {% for t in targets %}
+          <label class="check-item">
+            <input type="checkbox" name="target_chat_ids" value="{{ t.chat_id }}"
+                   {{ 'checked' if t.chat_id in selected_chat_ids else '' }}>
+            <span>{{ t.title or t.chat_id }}
+              {% if not t.title %}{% else %}<span class="muted">· {{ t.chat_id }}</span>{% endif %}
+              {% if not t.is_active %}<span class="badge muted">неактивна</span>{% endif %}
+            </span>
+          </label>
+          {% endfor %}
+          {% for cid in orphan_ids %}
+          <label class="check-item">
+            <input type="checkbox" name="target_chat_ids" value="{{ cid }}" checked>
+            <span>{{ cid }} <span class="badge warn">нет в списке целей</span></span>
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted" style="margin:0;">
+          Целевых групп пока нет — <a href="/targets">добавь хотя бы одну</a>,
+          чтобы выбрать, куда публиковать. Сейчас посты идут во все активные цели.
+        </p>
+        {% endif %}
+      </div>
     </div>
     <button type="submit">Сохранить</button>
   </form>

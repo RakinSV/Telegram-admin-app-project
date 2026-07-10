@@ -23,7 +23,7 @@ from tg_repost import sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import InvalidStatusTransition
+from tg_repost.db.models import InvalidStatusTransition, parse_chat_ids_csv
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
@@ -68,48 +68,78 @@ def build_crud_router() -> APIRouter:
         )
         return RedirectResponse(url="/sources", status_code=303)
 
+    def _source_detail_context(source, error: str | None = None) -> dict:
+        """Контекст source_detail: источник + список целей с отметкой, куда
+        этот источник уже публикует (чекбоксы вместо ручного ввода chat_id).
+
+        Показываем ВСЕ цели (в т.ч. неактивные — с пометкой), плюс «осиротевшие»
+        chat_id из target_chat_ids источника, которых уже нет в таблице целей,
+        чтобы галочка по ним не терялась молча при сохранении."""
+        selected = set(parse_chat_ids_csv(source.target_chat_ids))
+        targets = targets_repo.list_targets()
+        known_chat_ids = {t.chat_id for t in targets}
+        orphan_ids = sorted(selected - known_chat_ids)
+        return {
+            "source": source,
+            "known_styles": KNOWN_STYLES,
+            "targets": targets,
+            "selected_chat_ids": selected,
+            "orphan_ids": orphan_ids,
+            "error": error,
+        }
+
     @router.get("/sources/{source_id}", response_class=HTMLResponse)
     async def source_detail(request: Request, source_id: int) -> Response:
         source = sources_repo.get_source(source_id)
         if source is None:
             return RedirectResponse(url="/sources", status_code=303)
-        return _templates.TemplateResponse(request, "source_detail.html", {
-            "source": source, "known_styles": KNOWN_STYLES, "error": None,
-        })
+        return _templates.TemplateResponse(
+            request, "source_detail.html", _source_detail_context(source),
+        )
 
     @router.post("/sources/{source_id}")
-    async def source_update(
-        request: Request,
-        source_id: int,
-        style_profile: str = Form(""),
-        enrich_mode: str = Form("default"),
-        target_chat_ids: str = Form(""),
-    ) -> Response:
+    async def source_update(request: Request, source_id: int) -> Response:
         source = sources_repo.get_source(source_id)
         if source is None:
             return RedirectResponse(url="/sources", status_code=303)
+
+        # `getlist` — чекбоксы целей шлют одноимённые поля target_chat_ids;
+        # надёжнее, чем list[str]=Form() (тот молча отдавал пустой список для
+        # повторяющихся полей на этой версии FastAPI — найдено тестом).
+        form = await request.form()
+        style_profile = str(form.get("style_profile", ""))
+        enrich_mode = str(form.get("enrich_mode", "default"))
+        checked_targets = [str(v) for v in form.getlist("target_chat_ids")]
 
         style = style_profile.strip().lower()
         if style and prompt_exists(style):
             sources_repo.set_source_style(source_id, style)
         if enrich_mode not in ("on", "off", "default"):
-            return _templates.TemplateResponse(request, "source_detail.html", {
-                "source": source, "known_styles": KNOWN_STYLES,
-                "error": "Недопустимый режим добора источников.",
-            }, status_code=400)
+            return _templates.TemplateResponse(
+                request, "source_detail.html",
+                _source_detail_context(source, "Недопустимый режим добора источников."),
+                status_code=400,
+            )
         sources_repo.set_source_enrich(source_id, enrich_mode)
+        # Чекбоксы шлют список выбранных chat_id; пусто — публикация во все
+        # активные цели (target_chat_ids=None). Собираем в тот же CSV-формат,
+        # что и раньше — set_source_targets валидирует, что всё числовое.
+        csv = ",".join(c.strip() for c in checked_targets if c.strip())
         try:
-            sources_repo.set_source_targets(source_id, target_chat_ids.strip() or None)
+            sources_repo.set_source_targets(source_id, csv or None)
         except ValueError:
-            return _templates.TemplateResponse(request, "source_detail.html", {
-                "source": sources_repo.get_source(source_id),
-                "known_styles": KNOWN_STYLES,
-                "error": "Цели должны быть числами (chat_id) через запятую.",
-            }, status_code=400)
+            return _templates.TemplateResponse(
+                request, "source_detail.html",
+                _source_detail_context(
+                    sources_repo.get_source(source_id),
+                    "Цели должны быть числами (chat_id).",
+                ),
+                status_code=400,
+            )
         audit.record_audit(
             "source_update", target=f"#{source_id}",
             detail=f"style={style or 'default'}, enrich={enrich_mode}, "
-                   f"targets={target_chat_ids.strip() or 'все'}",
+                   f"targets={csv or 'все'}",
         )
         return RedirectResponse(url=f"/sources/{source_id}", status_code=303)
 

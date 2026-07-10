@@ -8,7 +8,7 @@
 
 <div class="card">
   <form method="post" action="/moderation/{{ post.id }}/edit">
-    <textarea name="rewritten_text" rows="14" style="width:100%; background:#11131a; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; font-family:inherit;">{{ post.rewritten_text or post.original_text or '' }}</textarea>
+    <textarea name="rewritten_text" rows="14">{{ post.rewritten_text or post.original_text or '' }}</textarea>
     <div style="margin-top:10px;">
       <button type="submit">Сохранить текст</button>
     </div>
