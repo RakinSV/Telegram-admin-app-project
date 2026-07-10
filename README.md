@@ -271,16 +271,16 @@ Argon2id.
 
 ## Proxies
 
-Telethon (the user session) talks to Telegram directly over **MTProto** — a
-regular SOCKS5/HTTP proxy won't work there, it needs an actual
-**MTProto proxy**. The Bot API (posting/moderation for both bots), on the
-other hand, runs over plain HTTPS — MTProto is useless there, it needs
-**SOCKS5**. Many providers selling proxies "for Telegram automation" offer
-both endpoints on the same server.
+Telethon (the user session) can reach Telegram two ways: over its native
+**MTProto** protocol via an **MTProto proxy**, or tunneled through a plain
+**SOCKS5** proxy (Telethon connects to Telegram's real servers *through* the
+tunnel). The Bot API (posting/moderation for both bots) runs over plain
+HTTPS and needs **SOCKS5**.
 
 | What's proxied | Type | Where to configure |
 |---|---|---|
-| Telethon (main session + all of the F26 rotation) | MTProto | `/settings` (host/port) + `/secrets` (secret) — one shared proxy for every Telethon client |
+| Telethon — **recommended** | SOCKS5 tunnel | `/secrets` (`Telethon SOCKS5 Proxy URL`, `socks5://[user:pass@]host:port`) — no fake-TLS limitation; takes precedence over the MTProto proxy if both are set |
+| Telethon — alternative | MTProto | `/settings` (host/port) + `/secrets` (secret) — one shared proxy for every Telethon client (**but see the fake-TLS caveat below**) |
 | Repost bot's Bot API | SOCKS5 | `/secrets` (`Bot API Proxy URL`, the whole thing including credentials) |
 | Guardian's Bot API | SOCKS5 | **`.env` only** (`GUARDIAN_BOT_API_PROXY_URL`) — unlike the repost bot, Guardian has no live component restart; `Bot()` is built once at process start, same as `GUARDIAN_BOT_TOKEN`; changing it needs `docker compose restart guardian` |
 
@@ -293,8 +293,10 @@ configure if you don't need a proxy).
 > not something this project can patch around. Most modern public MTProto
 > proxies default to fake-TLS. If your proxy secret starts with `ee`,
 > Telethon will hang or fail with a garbled decryption error no matter what
-> you configure here. You need a classic secret (plain hex, or `dd`-prefixed)
-> from the same proxy, or a different proxy entirely. **Full details, real
+> you configure here. **The simplest fix is to skip the MTProto proxy and use
+> the SOCKS5 tunnel instead** (`Telethon SOCKS5 Proxy URL` on `/secrets`) —
+> a SOCKS5 tunnel has no fake-TLS limitation. Alternatively, get a classic
+> (plain hex / `dd`-prefixed) secret from the same proxy. **Full details, real
 > error messages, and a decision tree in the [Wiki's Proxy
 > Guide](../../wiki/Proxy-Guide).**
 

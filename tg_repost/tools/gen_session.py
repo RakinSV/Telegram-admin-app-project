@@ -25,7 +25,7 @@ from telethon.sessions import StringSession
 
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import ensure_utf8_stdout
-from tg_repost.telegram.listener import _mtproxy_kwargs
+from tg_repost.telegram.listener import _telethon_proxy_kwargs
 
 
 @dataclass
@@ -54,7 +54,7 @@ async def start_telethon_login(api_id: int, api_hash: str, phone: str) -> Teleth
     # реальном деплое — прокси был подключён только к уже работающему
     # клиенту, а не к самому первому логину, которым эта session string и
     # добывается).
-    client = TelegramClient(StringSession(), api_id, api_hash, **_mtproxy_kwargs(get_settings()))
+    client = TelegramClient(StringSession(), api_id, api_hash, **_telethon_proxy_kwargs(get_settings()))
     await client.connect()
     sent = await client.send_code_request(phone)
     return TelethonLoginState(client=client, phone=phone, phone_code_hash=sent.phone_code_hash)
@@ -94,7 +94,7 @@ async def _main() -> None:
     print("Понадобится номер телефона, код из Telegram и, при наличии, пароль 2FA.\n")
 
     async with TelegramClient(
-        StringSession(), settings.tg_api_id, settings.tg_api_hash, **_mtproxy_kwargs(settings)
+        StringSession(), settings.tg_api_id, settings.tg_api_hash, **_telethon_proxy_kwargs(settings)
     ) as client:
         session_string = client.session.save()
         me = await client.get_me()

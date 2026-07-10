@@ -21,6 +21,7 @@ import asyncio
 import re
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from telethon import TelegramClient, events
 from telethon.network.connection.tcpmtproxy import (
@@ -110,6 +111,41 @@ def _mtproxy_kwargs(settings: Settings) -> dict:
     }
 
 
+def _socks5_proxy_kwargs(settings: Settings) -> dict:
+    """Аргументы SOCKS5-туннеля для `TelegramClient` (TELETHON_PROXY_URL).
+
+    В отличие от MTProto-прокси, это обычный TCP-туннель — Telethon через него
+    ходит НАПРЯМУЮ к серверам Telegram, без MTProxy-класса и без ограничения
+    fake-TLS. `proxy`-кортеж в формате python_socks/PySocks:
+    (тип, host, port, rdns, [user], [pass]); rdns=True — резолвить DNS на
+    стороне прокси. Битый URL не роняет процесс (веб-панель должна
+    подниматься всегда, см. main.py) — логируем и идём без прокси."""
+    url = settings.telethon_proxy_url.strip()
+    if not url:
+        return {}
+    parsed = urlparse(url)
+    if parsed.scheme not in ("socks5", "socks5h") or not parsed.hostname or not parsed.port:
+        logger.error(
+            "TELETHON_PROXY_URL некорректен (ожидался socks5://[user:pass@]host:port) "
+            "— Telethon запускается БЕЗ прокси. Проверь формат на /secrets."
+        )
+        return {}
+    proxy: tuple = ("socks5", parsed.hostname, parsed.port, True)
+    if parsed.username or parsed.password:
+        proxy = proxy + (parsed.username or "", parsed.password or "")
+    return {"proxy": proxy}
+
+
+def _telethon_proxy_kwargs(settings: Settings) -> dict:
+    """Единый выбор прокси для ВСЕХ Telethon-клиентов (основной, F26-ротация,
+    визард логина в gen_session). SOCKS5-туннель ИМЕЕТ ПРИОРИТЕТ над
+    MTProto-прокси: он не упирается в fake-TLS-ограничение Telethon и обычно
+    надёжнее (см. config.py::telethon_proxy_url). Оба пусты — прямое
+    соединение."""
+    socks = _socks5_proxy_kwargs(settings)
+    return socks if socks else _mtproxy_kwargs(settings)
+
+
 def build_client() -> TelegramClient:
     """Создать ОСНОВНОЙ Telethon-клиент из настроек (без подключения)."""
     settings = get_settings()
@@ -117,7 +153,7 @@ def build_client() -> TelegramClient:
         StringSession(settings.tg_session_string),
         settings.tg_api_id,
         settings.tg_api_hash,
-        **_mtproxy_kwargs(settings),
+        **_telethon_proxy_kwargs(settings),
     )
 
 
@@ -139,7 +175,7 @@ def build_extra_clients() -> list[TelegramClient]:
             "распределяются только между оставшимися сессиями.",
             active_count - len(decrypted), active_count,
         )
-    proxy_kwargs = _mtproxy_kwargs(settings)
+    proxy_kwargs = _telethon_proxy_kwargs(settings)
     clients = []
     for _label, session_string in decrypted:
         clients.append(

@@ -262,6 +262,7 @@ SECRET_LABELS: dict[str, str] = {
     "brave_api_key": "Brave Search API Key",
     "unsplash_access_key": "Unsplash Access Key",
     "mtproto_proxy_secret": "MTProto Proxy Secret",
+    "telethon_proxy_url": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
     "bot_api_proxy_url": "Bot API Proxy URL (socks5://user:pass@host:port)",
 }
 
@@ -291,7 +292,14 @@ SECRET_HINTS: dict[str, str] = {
     "unsplash_access_key": "Для авто-обложек (F18), если выбрана стратегия unsplash в /settings. Без ключа обложка не генерируется, пост публикуется без неё.",
     "mtproto_proxy_secret": (
         "Секрет-часть MTProto-прокси для Telethon (не для ботов — Bot API "
-        "прокси ниже, отдельно). Host/port — в /settings, группа «Прокси»."
+        "прокси ниже, отдельно). Host/port — в /settings, группа «Прокси». "
+        "Внимание: секреты с префиксом ee (fake-TLS) Telethon НЕ поддерживает "
+        "— используй SOCKS5-прокси ниже вместо этого."
+    ),
+    "telethon_proxy_url": (
+        "SOCKS5-туннель для Telethon (юзер-сессия) — рекомендуемая замена "
+        "MTProto-прокси, БЕЗ ограничения fake-TLS. Если задан, имеет приоритет "
+        "над MTProto-прокси. Формат: socks5://[user:pass@]host:port."
     ),
     "bot_api_proxy_url": (
         "SOCKS5-прокси для Bot API репост-бота (постинг/модерация) — НЕ "

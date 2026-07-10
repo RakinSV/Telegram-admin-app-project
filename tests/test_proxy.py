@@ -31,7 +31,7 @@ _ENV_EXAMPLE = Path(__file__).parent.parent / ".env.example"
 def _isolated(monkeypatch):
     for key in (
         "MTPROTO_PROXY_HOST", "MTPROTO_PROXY_PORT", "MTPROTO_PROXY_SECRET",
-        "BOT_API_PROXY_URL", "GUARDIAN_BOT_API_PROXY_URL",
+        "TELETHON_PROXY_URL", "BOT_API_PROXY_URL", "GUARDIAN_BOT_API_PROXY_URL",
     ):
         monkeypatch.delenv(key, raising=False)
     invalidate_settings_cache()
@@ -105,6 +105,53 @@ async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
 
     assert state.client._proxy == ("1.2.3.4", 443, "ddeadbeefdeadbeefdeadbeefdeadbeef")
     assert state.client._connection is ConnectionTcpMTProxyRandomizedIntermediate
+
+
+async def test_build_client_with_socks5_uses_tunnel_not_mtproxy(monkeypatch):
+    # SOCKS5-туннель: Telethon ходит НАПРЯМУЮ к Telegram через прокси,
+    # без MTProxy-класса (иначе упёрлись бы в fake-TLS). Проверяем, что
+    # _proxy — socks5-кортеж, а connection НЕ MTProxy.
+    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://168.168.88.33:1080")
+    invalidate_settings_cache()
+
+    client = build_client()
+
+    assert client._proxy == ("socks5", "168.168.88.33", 1080, True)
+    assert client._connection is not ConnectionTcpMTProxyRandomizedIntermediate
+    assert client._connection is not ConnectionTcpMTProxyIntermediate
+
+
+async def test_build_client_socks5_with_auth_includes_credentials(monkeypatch):
+    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://user:pass@1.2.3.4:1080")
+    invalidate_settings_cache()
+
+    client = build_client()
+
+    assert client._proxy == ("socks5", "1.2.3.4", 1080, True, "user", "pass")
+
+
+async def test_socks5_takes_precedence_over_mtproto(monkeypatch):
+    # Оба заданы — SOCKS5 выигрывает (не упирается в fake-TLS, надёжнее).
+    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://1.2.3.4:1080")
+    monkeypatch.setenv("MTPROTO_PROXY_HOST", "5.6.7.8")
+    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
+    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
+    invalidate_settings_cache()
+
+    client = build_client()
+
+    assert client._proxy == ("socks5", "1.2.3.4", 1080, True)
+
+
+async def test_build_client_with_malformed_socks5_url_falls_back_direct(monkeypatch, caplog):
+    # Битый URL не роняет процесс (веб-панель должна подниматься всегда) —
+    # логируем и идём без прокси.
+    monkeypatch.setenv("TELETHON_PROXY_URL", "not-a-valid-url")
+    invalidate_settings_cache()
+
+    client = build_client()
+
+    assert client._proxy is None
 
 
 def test_build_application_without_proxy_does_not_crash():

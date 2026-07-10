@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     mtproto_proxy_host: str = Field("", alias="MTPROTO_PROXY_HOST")
     mtproto_proxy_port: int = Field(0, alias="MTPROTO_PROXY_PORT")
     mtproto_proxy_secret: str = Field("", alias="MTPROTO_PROXY_SECRET")
+    # SOCKS5-прокси для Telethon (юзер-сессия) — АЛЬТЕРНАТИВА MTProto-прокси
+    # выше. В отличие от MTProto-прокси, это обычный TCP-туннель: Telethon
+    # через него ходит НАПРЯМУЮ к настоящим серверам Telegram и говорит
+    # MTProto поверх туннеля. Не имеет ограничения fake-TLS (ee-секреты),
+    # которое есть у MTProto-прокси-класса Telethon (репо Telethon
+    # заархивирован 02.2026, fake-TLS так и не добавили). Имеет ПРИОРИТЕТ над
+    # MTPROTO_PROXY_* если задан (см. listener.py::_telethon_proxy_kwargs).
+    # URL socks5://[user:pass@]host:port — целиком секрет (может нести креды).
+    telethon_proxy_url: str = Field("", alias="TELETHON_PROXY_URL")
     # SOCKS5-прокси для Bot API (postинг/модерация репост-бота) — Bot API
     # ходит по HTTPS, MTProto-прокси тут не применим. URL обычно содержит
     # логин:пароль (socks5://user:pass@host:port) — целиком секрет.
@@ -273,6 +282,7 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "brave_api_key",
     "unsplash_access_key",
     "mtproto_proxy_secret",
+    "telethon_proxy_url",
     "bot_api_proxy_url",
 )
 
