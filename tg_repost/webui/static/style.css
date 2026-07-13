@@ -108,6 +108,9 @@ button, input[type=submit] {
 }
 button:hover, input[type=submit]:hover { opacity: .9; }
 button.secondary { background: #2a2f3a; }
+button.danger { background: transparent; color: var(--err); border: 1px solid var(--err); }
+button.danger:hover { background: rgba(224,82,79,.12); opacity: 1; }
+button.small { padding: 4px 10px; font-size: 12px; }
 
 .settings-group { margin-bottom: 22px; }
 .error { color: var(--err); margin-bottom: 12px; }

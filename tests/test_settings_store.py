@@ -115,6 +115,43 @@ def test_set_secret_rejects_empty_value():
         settings_store.set_secret("openai_api_key", "")
 
 
+def test_clear_secret_removes_db_row():
+    # Регрессия (жалоба пользователя): раньше на /secrets не было способа
+    # удалить сохранённый секрет — пустое value в POST molчa игнорировалось.
+    settings_store.set_secret("telethon_proxy_url", "socks5://1.2.3.4:1080")
+    assert get_settings().telethon_proxy_url == "socks5://1.2.3.4:1080"
+
+    cleared = settings_store.clear_secret("telethon_proxy_url")
+
+    assert cleared is True
+    assert get_settings().telethon_proxy_url == ""
+    status = next(s for s in settings_store.list_secret_status() if s.key == "telethon_proxy_url")
+    assert status.is_set is False
+    assert status.source == "unset"
+
+
+def test_clear_secret_returns_false_when_nothing_to_clear():
+    assert settings_store.clear_secret("telethon_proxy_url") is False
+
+
+def test_clear_secret_rejects_unknown_key():
+    with pytest.raises(ValueError):
+        settings_store.clear_secret("not_a_secret_field")
+
+
+def test_clear_secret_does_not_remove_env_sourced_value():
+    # Значение из .env — не в БД, veб-админка его не редактирует. clear_secret
+    # тут честно ничего не находит и не трогает эффективное значение.
+    os.environ["BRAVE_API_KEY"] = "env-only-key-9999"
+    try:
+        invalidate_settings_cache()
+        assert settings_store.clear_secret("brave_api_key") is False
+        assert get_settings().brave_api_key == "env-only-key-9999"
+    finally:
+        del os.environ["BRAVE_API_KEY"]
+        invalidate_settings_cache()
+
+
 def test_list_secret_status_unset_by_default():
     statuses = {s.key: s for s in settings_store.list_secret_status()}
     assert statuses["brave_api_key"].is_set is False

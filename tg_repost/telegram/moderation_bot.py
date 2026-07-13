@@ -247,7 +247,7 @@ def build_application() -> Application:
             raise  # ValueError не про прокси — не глотать чужую ошибку
         logger.error(
             "BOT_API_PROXY_URL некорректен (%s) — бот модерации запускается "
-            "БЕЗ прокси, напрямую. Проверь формат socks5://user:pass@host:port "
+            "БЕЗ прокси, напрямую. Проверь формат socks5://[user:pass@]host:port "
             "на /secrets.", exc,
         )
         application = Application.builder().token(settings.tg_bot_token).build()

@@ -238,6 +238,26 @@ def test_settings_save_invalid_number_does_not_partially_apply():
     assert "222" in r.text
 
 
+def test_secrets_clear_route_removes_saved_secret_via_http():
+    """Регрессия (жалоба пользователя): на /secrets не было способа
+    удалить сохранённый секрет (прокси и т.д.) — отправка формы с пустым
+    value молча ничего не делала. Теперь есть отдельная кнопка/роут."""
+    client = _client()
+    _bootstrap(client)
+    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://1.2.3.4:1080"})
+    r = client.get("/secrets")
+    assert "1.2.3.4:1080" not in r.text  # write-only, введённое значение не отдаётся обратно
+    section = r.text.split("Telethon SOCKS5")[1][:600]
+    assert "не задан" not in section  # секрет сохранён — статус "ok"
+
+    r = client.post("/secrets/telethon_proxy_url/clear", follow_redirects=False)
+    assert r.status_code == 303
+
+    r = client.get("/secrets")
+    section = r.text.split("Telethon SOCKS5")[1][:600]
+    assert "не задан" in section
+
+
 def test_sources_create_and_list_round_trip():
     client = _client()
     _bootstrap(client)

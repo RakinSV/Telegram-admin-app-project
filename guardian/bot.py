@@ -233,7 +233,7 @@ async def main() -> None:
         except ValueError as exc:
             logger.error(
                 "GUARDIAN_BOT_API_PROXY_URL некорректен (%s) — Guardian не может "
-                "стартовать. Формат: socks5://user:pass@host:port.", exc,
+                "стартовать. Формат: socks5://[user:pass@]host:port.", exc,
             )
             return
     bot = Bot(

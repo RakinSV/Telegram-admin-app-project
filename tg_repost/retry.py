@@ -52,7 +52,7 @@ async def retry_async(
         except exceptions as exc:  # noqa: BLE001 — намеренно широкий по умолчанию
             last_exc = exc
             # Ошибка МОЖЕТ быть сбоем подключения через BOT_API_PROXY_URL
-            # (socks5://user:pass@host:port) — httpx/socksio не гарантируют,
+            # (socks5://[user:pass@]host:port) — httpx/socksio не гарантируют,
             # что их исключения никогда не отразят URL целиком (найдено
             # security-ревью).
             safe_exc = sanitize_proxy_error(str(exc))

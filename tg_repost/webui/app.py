@@ -503,6 +503,18 @@ def _protected_router() -> APIRouter:
             {"secrets": settings_store.list_secret_status()},
         )
 
+    async def _resync_if_openai_key(key: str) -> None:
+        # `openai_api_key` используется долгоживущим `RewriterClient`
+        # (держится в _components.rewriter, не читается заново на каждый
+        # вызов, в отличие от Brave/Unsplash-клиентов) — resync_scheduler_jobs()
+        # пересобирает его со свежим (или очищенным) ключом. tg_*/mtproto_*
+        # секреты сюда не входят — им нужен полноценный
+        # restart_telethon_listener()/restart_moderation_bot() на /components,
+        # не просто ресинк джобов (найдено security-ревью).
+        if key == "openai_api_key" and get_components().is_running:
+            await resync_scheduler_jobs()
+            audit.record_audit("component_resync", target="scheduler")
+
     @router.post("/secrets/{key}")
     async def secrets_save(
         request: Request, key: str, value: str = Form("")
@@ -511,18 +523,26 @@ def _protected_router() -> APIRouter:
             try:
                 settings_store.set_secret(key, value.strip())
                 audit.record_audit("secret_set", target=key)
-                # `openai_api_key` используется долгоживущим `RewriterClient`
-                # (держится в _components.rewriter, не читается заново на
-                # каждый вызов, в отличие от Brave/Unsplash-клиентов) —
-                # resync_scheduler_jobs() пересобирает его со свежим ключом.
-                # tg_*/mtproto_* секреты сюда не входят — им нужен полноценный
-                # restart_telethon_listener()/restart_moderation_bot() на
-                # /components, не просто ресинк джобов (найдено security-ревью).
-                if key == "openai_api_key" and get_components().is_running:
-                    await resync_scheduler_jobs()
-                    audit.record_audit("component_resync", target="scheduler")
+                await _resync_if_openai_key(key)
             except ValueError as exc:
                 logger.warning("Не удалось сохранить секрет '%s': %s", key, exc)
+        return RedirectResponse(url="/secrets", status_code=303)
+
+    @router.post("/secrets/{key}/clear")
+    async def secrets_clear(request: Request, key: str) -> Response:
+        # Раньше не было способа очистить секрет из веб-формы — пустое
+        # value молча игнорировалось в secrets_save (реальная жалоба
+        # пользователя: "не удалить строчки"). Отдельный action явный и
+        # необратимый по кнопке, а не побочный эффект пустой отправки формы.
+        del request
+        try:
+            cleared = settings_store.clear_secret(key)
+        except ValueError as exc:
+            logger.warning("Не удалось очистить секрет '%s': %s", key, exc)
+            return RedirectResponse(url="/secrets", status_code=303)
+        if cleared:
+            audit.record_audit("secret_clear", target=key)
+            await _resync_if_openai_key(key)
         return RedirectResponse(url="/secrets", status_code=303)
 
     @router.get("/components", response_class=HTMLResponse)

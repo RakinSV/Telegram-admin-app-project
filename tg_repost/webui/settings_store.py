@@ -66,7 +66,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "(узнать у @userinfobot), кому бот шлёт посты на модерацию.",
     ),
     SettingsGroup(
-        "proxy", "Прокси (host/port — секрет см. /secrets)",
+        "proxy", "Прокси — MTProto для Telethon (альтернатива, host/port; секрет см. /secrets)",
         (
             # host/port сами по себе не секрет (бесполезны без mtproto_proxy_secret
             # с /secrets) — тот же класс полей, что "телеграм-идентичность" выше:
@@ -76,9 +76,12 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("mtproto_proxy_host", "MTProto proxy host (для Telethon)", "str"),
             SettingField("mtproto_proxy_port", "MTProto proxy port", "int"),
         ),
-        "Если Telegram зарезан у провайдера/на сервере. Только для Telethon "
-        "(юзер-сессия читает каналы) — Bot API ботов идёт через отдельный "
-        "SOCKS5-прокси на /secrets, это разные протоколы.",
+        "Если Telegram зарезан у провайдера/на сервере — сначала попробуй "
+        "«Telethon SOCKS5 Proxy URL» на /secrets, это ПРОЩЕ и БЕЗ ограничения "
+        "fake-TLS (см. подсказку там). Эта пара host/port — для альтернативного "
+        "MTProto-пути (секрет — отдельно на /secrets), не работает с секретами "
+        "формата ee. Bot API ботов проксируется отдельно, своим SOCKS5 на "
+        "/secrets — другой протокол, не путать.",
     ),
     SettingsGroup(
         "rewrite", "Рерайт — F06",
@@ -263,7 +266,7 @@ SECRET_LABELS: dict[str, str] = {
     "unsplash_access_key": "Unsplash Access Key",
     "mtproto_proxy_secret": "MTProto Proxy Secret",
     "telethon_proxy_url": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
-    "bot_api_proxy_url": "Bot API Proxy URL (socks5://user:pass@host:port)",
+    "bot_api_proxy_url": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
 }
 
 # Что это и где взять — показывается на /secrets рядом с полем, чтобы не
@@ -303,7 +306,8 @@ SECRET_HINTS: dict[str, str] = {
     ),
     "bot_api_proxy_url": (
         "SOCKS5-прокси для Bot API репост-бота (постинг/модерация) — НЕ "
-        "MTProto, другой протокол. Формат целиком: socks5://user:pass@host:port."
+        "MTProto, другой протокол. Логин:пароль опциональны, как и у "
+        "Telethon-прокси выше. Формат: socks5://[user:pass@]host:port."
     ),
 }
 
@@ -419,3 +423,27 @@ def set_secret(key: str, plaintext: str) -> None:
             session.add(Secret(key=key, encrypted_value=encrypted, masked_hint=masked_hint))
     invalidate_settings_cache()
     logger.info("Секрет '%s' обновлён через веб-админку", key)
+
+
+def clear_secret(key: str) -> bool:
+    """Удалить сохранённый секрет — `/secrets` раньше не давал способа
+    очистить поле (форма `POST /secrets/{key}` с пустым value молча ничего
+    не делала), например отключить прокси после его настройки без замены на
+    новый (реальная жалоба пользователя). Возвращает True, если запись в БД
+    была и удалена.
+
+    Если значение изначально пришло из `.env` (не из БД — см. source="env" в
+    `list_secret_status`), этот вызов его не уберёт: `.env` — bootstrap-файл,
+    веб-админка его не редактирует. В таком случае эффективное значение
+    после очистки останется тем же, что в `.env`, и это ожидаемо, не баг.
+    """
+    if key not in SECRET_FIELD_NAMES:
+        raise ValueError(f"Неизвестный секрет: {key}")
+    with session_scope() as session:
+        existing = session.query(Secret).filter(Secret.key == key).one_or_none()
+        if existing is None:
+            return False
+        session.delete(existing)
+    invalidate_settings_cache()
+    logger.info("Секрет '%s' очищен через веб-админку", key)
+    return True

@@ -67,9 +67,10 @@ class Settings(BaseSettings):
     # MTPROTO_PROXY_* если задан (см. listener.py::_telethon_proxy_kwargs).
     # URL socks5://[user:pass@]host:port — целиком секрет (может нести креды).
     telethon_proxy_url: str = Field("", alias="TELETHON_PROXY_URL")
-    # SOCKS5-прокси для Bot API (postинг/модерация репост-бота) — Bot API
-    # ходит по HTTPS, MTProto-прокси тут не применим. URL обычно содержит
-    # логин:пароль (socks5://user:pass@host:port) — целиком секрет.
+    # SOCKS5-прокси для Bot API (постинг/модерация репост-бота) — Bot API
+    # ходит по HTTPS, MTProto-прокси тут не применим. Логин:пароль в URL
+    # опциональны, как и у TELETHON_PROXY_URL выше — формат
+    # socks5://[user:pass@]host:port. URL целиком секрет (может нести креды).
     bot_api_proxy_url: str = Field("", alias="BOT_API_PROXY_URL")
 
     # --- Рерайт (OpenAI-совместимое API) ---

@@ -15,7 +15,7 @@ from logging.handlers import RotatingFileHandler
 _LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 _configured = False
 
-# user:pass@ в URL прокси (socks5://user:pass@host:port, BOT_API_PROXY_URL) —
+# user:pass@ в URL прокси (socks5://[user:pass@]host:port, BOT_API_PROXY_URL) —
 # ни `httpx`/`socksio`, ни `aiohttp_socks` не гарантируют, что их исключения
 # при сбое подключения/авторизации через прокси НИКОГДА не отразят исходный
 # URL целиком; код на нашей стороне логирует такие исключения как обычный
