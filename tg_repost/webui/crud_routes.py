@@ -75,13 +75,19 @@ def build_crud_router() -> APIRouter:
         )
         return RedirectResponse(url="/sources", status_code=303)
 
-    def _source_detail_context(source, error: str | None = None) -> dict:
+    def _source_detail_context(
+        source, error: str | None = None, backfilled: int | None = None,
+    ) -> dict:
         """Контекст source_detail: источник + список целей с отметкой, куда
         этот источник уже публикует (чекбоксы вместо ручного ввода chat_id).
 
         Показываем ВСЕ цели (в т.ч. неактивные — с пометкой), плюс «осиротевшие»
         chat_id из target_chat_ids источника, которых уже нет в таблице целей,
-        чтобы галочка по ним не терялась молча при сохранении."""
+        чтобы галочка по ним не терялась молча при сохранении.
+
+        `backfilled` — сколько сообщений обработал POST .../backfill в этом
+        же запросе (для баннера успеха), см. паттерн `just_applied` в
+        best_times.html."""
         selected = set(parse_chat_ids_csv(source.target_chat_ids))
         targets = targets_repo.list_targets()
         known_chat_ids = {t.chat_id for t in targets}
@@ -93,15 +99,19 @@ def build_crud_router() -> APIRouter:
             "selected_chat_ids": selected,
             "orphan_ids": orphan_ids,
             "error": error,
+            "backfilled": backfilled,
         }
 
     @router.get("/sources/{source_id}", response_class=HTMLResponse)
-    async def source_detail(request: Request, source_id: int) -> Response:
+    async def source_detail(
+        request: Request, source_id: int, backfilled: int | None = None,
+    ) -> Response:
         source = sources_repo.get_source(source_id)
         if source is None:
             return RedirectResponse(url="/sources", status_code=303)
         return _templates.TemplateResponse(
-            request, "source_detail.html", _source_detail_context(source),
+            request, "source_detail.html",
+            _source_detail_context(source, backfilled=backfilled),
         )
 
     @router.post("/sources/{source_id}")
@@ -149,6 +159,66 @@ def build_crud_router() -> APIRouter:
                    f"targets={csv or 'все'}",
         )
         return RedirectResponse(url=f"/sources/{source_id}", status_code=303)
+
+    _BACKFILL_MAX_LIMIT = 200
+
+    @router.post("/sources/{source_id}/backfill")
+    async def source_backfill(request: Request, source_id: int) -> Response:
+        """Разово собрать последние N сообщений источника через тот же
+        пайплайн, что и live-поток (жалоба пользователя: "надо чтобы это
+        делалось из админки" — раньше был только CLI `backfill-source`).
+
+        Использует УЖЕ подключённый `tele_client` из `get_components()`,
+        не открывает второе соединение — веб-запрос и так выполняется в
+        том же asyncio event loop, что и listener (см. архитектуру Фазы 5).
+        Лимит ограничен `_BACKFILL_MAX_LIMIT`: это СИНХРОННЫЙ HTTP-запрос
+        с антибан-джиттером между каждым сообщением (F17) — сотни сообщений
+        держали бы браузер/соединение открытым десятки минут. Для больших
+        объёмов подсказка в UI отправляет на CLI (без ограничения по времени
+        запроса, т.к. это обычный терминал, не HTTP)."""
+        source = sources_repo.get_source(source_id)
+        if source is None:
+            return RedirectResponse(url="/sources", status_code=303)
+
+        form = await request.form()
+        raw_limit = str(form.get("limit", "")).strip()
+        try:
+            limit = int(raw_limit)
+            if not (1 <= limit <= _BACKFILL_MAX_LIMIT):
+                raise ValueError
+        except ValueError:
+            return _templates.TemplateResponse(
+                request, "source_detail.html",
+                _source_detail_context(
+                    source,
+                    i18n.t(
+                        "source_detail.error_invalid_backfill_limit",
+                        max=_BACKFILL_MAX_LIMIT,
+                    ),
+                ),
+                status_code=400,
+            )
+
+        client = get_components().tele_client
+        if client is None:
+            return _templates.TemplateResponse(
+                request, "source_detail.html",
+                _source_detail_context(
+                    source, i18n.t("source_detail.error_backfill_not_running"),
+                ),
+                status_code=400,
+            )
+
+        from tg_repost.telegram.listener import backfill_source
+
+        count = await backfill_source(client, source, limit)
+        audit.record_audit(
+            "source_backfill", target=f"#{source_id}",
+            detail=f"@{source.channel_username} limit={limit} processed={count}",
+        )
+        return RedirectResponse(
+            url=f"/sources/{source_id}?backfilled={count}", status_code=303,
+        )
 
     @router.post("/sources/{source_id}/delete")
     async def source_delete(request: Request, source_id: int) -> Response:

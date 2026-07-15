@@ -350,6 +350,36 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "source_detail.inactive_badge": {"ru": "неактивна", "en": "inactive"},
     "source_detail.back_link": {"ru": "← К списку источников", "en": "← Back to sources"},
+    "source_detail.backfill_title": {"ru": "Сбор истории", "en": "Collect history"},
+    "source_detail.backfill_desc": {
+        "ru": "Live-поток ловит только новые сообщения. Чтобы забрать уже "
+        "вышедшие посты — укажи сколько последних сообщений собрать (через "
+        "тот же фильтр/дедуп, что и обычно). Для больших чисел (сотни +) "
+        "быстрее из терминала: <code>docker exec -it &lt;контейнер&gt; "
+        "python -m tg_repost.cli backfill-source @{channel} --limit N</code>.",
+        "en": "The live stream only catches new messages. To pull posts "
+        "that already went out — set how many recent messages to collect "
+        "(through the same filter/dedup as usual). For large numbers "
+        "(hundreds+), it's faster from a terminal: <code>docker exec -it "
+        "&lt;container&gt; python -m tg_repost.cli backfill-source "
+        "@{channel} --limit N</code>.",
+    },
+    "source_detail.backfill_limit_placeholder": {"ru": "Сколько сообщений", "en": "How many messages"},
+    "source_detail.backfill_submit": {"ru": "Собрать", "en": "Collect"},
+    "source_detail.backfill_success": {
+        "ru": "✅ Обработано сообщений: {count} (часть могла отфильтроваться/"
+        "задвоиться — это штатно, см. очередь модерации).",
+        "en": "✅ Processed {count} messages (some may have been filtered "
+        "out/deduped — that's expected, see the moderation queue).",
+    },
+    "source_detail.error_invalid_backfill_limit": {
+        "ru": "Количество должно быть целым числом от 1 до {max}.",
+        "en": "The count must be an integer from 1 to {max}.",
+    },
+    "source_detail.error_backfill_not_running": {
+        "ru": "Компоненты не запущены — сначала запусти их на странице «Компоненты».",
+        "en": "Components aren't running — start them on the “Components” page first.",
+    },
     "source_detail.error_invalid_enrich_mode": {
         "ru": "Недопустимый режим добора источников.", "en": "Invalid enrichment mode.",
     },
@@ -730,6 +760,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "audit.action.source_reactivate": {"ru": "Источник реактивирован", "en": "Source reactivated"},
     "audit.action.source_update": {"ru": "Источник изменён", "en": "Source updated"},
     "audit.action.source_deactivate": {"ru": "Источник деактивирован", "en": "Source deactivated"},
+    "audit.action.source_backfill": {"ru": "Собрана история источника", "en": "Source history collected"},
     "audit.action.target_add": {"ru": "Добавлена цель", "en": "Target added"},
     "audit.action.target_toggle": {"ru": "Цель переключена", "en": "Target toggled"},
     "audit.action.telethon_session_add": {"ru": "Добавлена доп. сессия", "en": "Extra session added"},

@@ -401,6 +401,69 @@ def test_source_update_no_checkboxes_clears_targets_to_all():
     assert sources_repo.get_source(src.id).target_chat_ids is None
 
 
+def test_source_backfill_without_running_components_shows_error():
+    """Жалоба пользователя: "надо чтобы это делалось из админки" — новая
+    кнопка на source_detail. Компоненты не запущены (обычное состояние в
+    этих тестах, start_components замокан на no-op) — понятная ошибка,
+    не 500/исключение."""
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@backfill_src1")
+
+    r = client.post(f"/sources/{src.id}/backfill", data={"limit": "10"})
+    assert r.status_code == 400
+    assert "Компоненты не запущены" in r.text
+
+
+def test_source_backfill_rejects_out_of_range_limit():
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@backfill_src2")
+
+    r = client.post(f"/sources/{src.id}/backfill", data={"limit": "0"})
+    assert r.status_code == 400
+    assert "от 1 до 200" in r.text
+
+    r = client.post(f"/sources/{src.id}/backfill", data={"limit": "not-a-number"})
+    assert r.status_code == 400
+
+
+def test_source_backfill_success_redirects_with_count():
+    """Успешный сценарий: components "запущены" (подсовываем фиктивный
+    tele_client в общий супервизор-синглтон), `listener.backfill_source`
+    замокан (реальный сетевой Telethon-вызов тут не нужен и невозможен)."""
+    from unittest.mock import AsyncMock
+
+    from tg_repost import sources_repo
+    from tg_repost.webui.supervisor import get_components
+
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@backfill_src3")
+
+    components = get_components()
+    components.tele_client = object()  # достаточно "не None" для проверки в роуте
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "tg_repost.telegram.listener.backfill_source",
+                AsyncMock(return_value=7),
+            )
+            r = client.post(
+                f"/sources/{src.id}/backfill", data={"limit": "50"},
+                follow_redirects=False,
+            )
+        assert r.status_code == 303
+        assert r.headers["location"] == f"/sources/{src.id}?backfilled=7"
+
+        r = client.get(f"/sources/{src.id}?backfilled=7")
+        assert "Обработано сообщений: 7" in r.text
+    finally:
+        components.tele_client = None  # не протекать в остальные тесты файла
+
+
 def test_best_times_apply_without_data_redirects_with_applied_zero():
     """F19 доделка: кнопка «Применить сейчас» на /stats/best-times не должна
     падать, если данных недостаточно — просто редиректит без изменений.
