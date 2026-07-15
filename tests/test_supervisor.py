@@ -88,6 +88,27 @@ def test_sync_jobs_rebuilds_rewriter_every_call():
     assert second_rewriter is not first_rewriter
 
 
+def test_sync_jobs_invalidates_listener_rewriter_cache_too():
+    """Регрессия (найдено на реальном деплое): `get_rewriter()` в
+    `listener.py` — ОТДЕЛЬНЫЙ `@lru_cache`-синглтон от `_components.rewriter`,
+    используется для эмбеддингов дедупа (F13) при захвате сообщения. Смена
+    OPENAI_MODEL/EMBEDDING_MODEL через /settings пересобирала
+    `_components.rewriter` (см. тест выше), но НЕ сбрасывала этот кэш —
+    listener.py продолжал бы получать эмбеддинги через старый клиент со
+    старой моделью бесконечно, без явного `invalidate_rewriter_cache()`."""
+    from tg_repost.rewriter.client import get_rewriter
+
+    settings = Settings()
+    scheduler = AsyncIOScheduler()
+    _sync_jobs(scheduler, settings)
+    first = get_rewriter()
+
+    _sync_jobs(scheduler, settings)
+    second = get_rewriter()
+
+    assert second is not first
+
+
 def test_sync_jobs_reschedule_does_not_duplicate_pipeline_tick():
     settings = Settings()
     scheduler = AsyncIOScheduler()

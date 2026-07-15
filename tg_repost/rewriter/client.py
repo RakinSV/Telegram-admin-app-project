@@ -127,5 +127,20 @@ class RewriterClient:
 
 @lru_cache
 def get_rewriter() -> RewriterClient:
-    """Кэшированный синглтон клиента рерайта/эмбеддингов."""
+    """Кэшированный синглтон клиента рерайта/эмбеддингов — используется
+    ТОЛЬКО `telegram/listener.py` для эмбеддингов дедупа (F13) при захвате
+    сообщения. Не путать с `webui.supervisor._components.rewriter` —
+    отдельный, независимо пересобираемый экземпляр для pipeline_tick/
+    digest_job. Два разных кэша одного и того же класса: `_sync_jobs()`
+    пересобирает `_components.rewriter`, но НЕ трогает этот — без явного
+    `invalidate_rewriter_cache()` эмбеддинги в listener.py продолжали бы
+    работать со старым base_url/моделью бесконечно, даже после resync
+    (найдено на реальном деплое: смена модели рерайта применилась к
+    pipeline_tick, а "Не удалось получить эмбеддинг" в listener.py — нет)."""
     return RewriterClient()
+
+
+def invalidate_rewriter_cache() -> None:
+    """Сбросить кэш `get_rewriter()` — вызывать вместе с пересборкой
+    `_components.rewriter` (см. `webui/supervisor.py::_sync_jobs`)."""
+    get_rewriter.cache_clear()

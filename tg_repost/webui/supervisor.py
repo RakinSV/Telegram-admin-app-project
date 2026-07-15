@@ -26,7 +26,7 @@ from telethon import TelegramClient
 
 from tg_repost.config import Settings, get_settings
 from tg_repost.logging_conf import get_logger
-from tg_repost.rewriter.client import RewriterClient
+from tg_repost.rewriter.client import RewriterClient, invalidate_rewriter_cache
 from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
@@ -106,6 +106,12 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     # из restart_telethon_listener()/restart_moderation_bot() — везде, где
     # нужен свежий rewriter.
     _components.rewriter = RewriterClient()
+    # Отдельный кэш get_rewriter() (см. его докстринг) для эмбеддингов
+    # дедупа в listener.py — не связан с `_components.rewriter`, без явного
+    # сброса продолжал бы работать со старым base_url/моделью бесконечно
+    # (найдено на реальном деплое: смена модели на роутер OpenRouter-типа
+    # применилась к рерайту, но не к эмбеддингам при захвате сообщения).
+    invalidate_rewriter_cache()
     rewriter = _components.rewriter
     application = _components.application
     tele_client = _components.tele_client

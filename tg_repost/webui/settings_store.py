@@ -96,8 +96,17 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
     SettingsGroup(
         "rewrite", "Рерайт — F06",
         (
-            SettingField("openai_base_url", "Base URL", "str"),
-            SettingField("openai_model", "Модель", "str"),
+            # needs_resync=True — RewriterClient кэширует base_url/model в
+            # конструкторе (см. rewriter/client.py::__init__: self._model =
+            # settings.openai_model), не перечитывает на каждый вызов.
+            # Раньше resync триггерился ТОЛЬКО сменой openai_api_key
+            # (см. app.py::_resync_if_openai_key) — смена модели/base_url
+            # молча не применялась до полного рестарта контейнера, хотя
+            # текст на /settings обещает "применяется сразу" (найдено на
+            # реальном деплое: смена модели на OpenRouter-совместимый
+            # провайдер повисла в БД, рерайт продолжал падать со старой).
+            SettingField("openai_base_url", "Base URL", "str", needs_resync=True),
+            SettingField("openai_model", "Модель", "str", needs_resync=True),
         ),
         "Куда идут запросы на переписывание постов. Любой OpenAI-совместимый "
         "провайдер — не обязательно сам OpenAI (локальная Ollama, прокси и т.д.).",
@@ -149,7 +158,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "semantic_dedup", "Семантический дубль-чек — F13",
         (
             SettingField("semantic_dedup_enabled", "Включён", "bool"),
-            SettingField("openai_embedding_model", "Модель эмбеддингов", "str"),
+            SettingField("openai_embedding_model", "Модель эмбеддингов", "str", needs_resync=True),
             SettingField("semantic_similarity_threshold", "Порог сходства", "float"),
             SettingField("dedup_window_days", "Окно сравнения, дней", "int"),
         ),
