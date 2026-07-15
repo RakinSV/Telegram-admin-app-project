@@ -241,6 +241,16 @@ class Post(Base):
     # слать повторно на каждый цикл сбора статистики, пока порог превышен).
     negative_alert_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # F06/F18-доп.: настраиваемое число вариантов рерайта/обложки на пост
+    # (см. `post_variants_repo.py`, таблицы ниже). Индекс АКТИВНОГО варианта
+    # среди сгенерированных — денормализован сюда, а не хранится флагом на
+    # самой строке варианта, чтобы `rewritten_text`/`media_path` оставались
+    # единственным источником истины для publish_post/дашборда/статистики —
+    # им не нужно знать о существовании вариантов вообще. NULL, если
+    # вариантов не было (пост создан до этой фичи, либо генерация вернула 0).
+    active_rewrite_variant_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active_cover_variant_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Индекс — дашборд (`webui/dashboard.py`) фильтрует/сортирует по этому
     # полю на каждой загрузке (recent_posts, todays_rewrite_tokens,
     # error_rate); без индекса это full table scan при росте `posts`,
@@ -279,6 +289,35 @@ class PostStat(Base):
     forward_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reaction_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class PostRewriteVariant(Base):
+    """Один из N сгенерированных вариантов рерайта поста (F06-доп.), число N —
+    настройка `rewrite_variant_count`. Активный вариант см.
+    `Post.active_rewrite_variant_index`/`rewritten_text` (денормализовано)."""
+
+    __tablename__ = "post_rewrite_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    variant_index: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class PostCoverVariant(Base):
+    """Один из N сгенерированных вариантов обложки поста (F18-доп.), число N —
+    настройка `cover_variant_count`. Активный вариант см.
+    `Post.active_cover_variant_index`/`media_path` (денормализовано)."""
+
+    __tablename__ = "post_cover_variants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    variant_index: Mapped[int] = mapped_column(Integer)
+    media_path: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class AdBrief(Base):

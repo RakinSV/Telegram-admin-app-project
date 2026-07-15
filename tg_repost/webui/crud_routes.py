@@ -15,11 +15,11 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from tg_repost import discovered_chats_repo, sources_repo, targets_repo, telethon_sessions_repo
+from tg_repost import discovered_chats_repo, post_variants_repo, sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
 from tg_repost.config import get_settings
@@ -51,6 +51,18 @@ _templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 _templates.env.globals["t"] = i18n.t
 _templates.env.globals["current_lang"] = i18n.get_current_lang
 _templates.env.globals["humanize_action"] = i18n.humanize_action
+
+
+def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
+    """Контекст для `moderation_detail.html` — переиспользуется GET
+    `/moderation/{id}` и обработчиками ошибок approve/reject (F06/F18-доп.:
+    без вариантов в контексте шаблон падал бы с UndefinedError на `{% for %}`)."""
+    return {
+        "post": moderation_repo.get_post(post_id),
+        "error": error,
+        "rewrite_variants": post_variants_repo.list_rewrite_variants(post_id),
+        "cover_variants": post_variants_repo.list_cover_variants(post_id),
+    }
 
 
 def build_crud_router() -> APIRouter:
@@ -303,7 +315,7 @@ def build_crud_router() -> APIRouter:
         if post is None:
             return RedirectResponse(url="/moderation", status_code=303)
         return _templates.TemplateResponse(
-            request, "moderation_detail.html", {"post": post, "error": None},
+            request, "moderation_detail.html", _moderation_detail_context(post_id),
         )
 
     @router.post("/moderation/{post_id}/approve")
@@ -312,8 +324,7 @@ def build_crud_router() -> APIRouter:
         if application is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
-                {"post": moderation_repo.get_post(post_id),
-                 "error": i18n.t("moderation_detail.error_bot_not_running")},
+                _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
         try:
@@ -321,7 +332,7 @@ def build_crud_router() -> APIRouter:
         except InvalidStatusTransition as exc:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
-                {"post": moderation_repo.get_post(post_id), "error": str(exc)},
+                _moderation_detail_context(post_id, str(exc)),
                 status_code=400,
             )
         audit.record_audit("post_approve", target=f"#{post_id}", detail=outcome)
@@ -334,7 +345,7 @@ def build_crud_router() -> APIRouter:
         except InvalidStatusTransition as exc:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
-                {"post": moderation_repo.get_post(post_id), "error": str(exc)},
+                _moderation_detail_context(post_id, str(exc)),
                 status_code=400,
             )
         if found:
@@ -349,6 +360,42 @@ def build_crud_router() -> APIRouter:
         if moderation_repo.edit_post_text(post_id, rewritten_text):
             audit.record_audit("post_edit", target=f"#{post_id}")
         return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/select-rewrite/{variant_index}")
+    async def moderation_select_rewrite(
+        request: Request, post_id: int, variant_index: int
+    ) -> Response:
+        del request
+        if post_variants_repo.select_rewrite_variant(post_id, variant_index):
+            audit.record_audit(
+                "post_select_rewrite_variant", target=f"#{post_id}", detail=f"index={variant_index}",
+            )
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/select-cover/{variant_index}")
+    async def moderation_select_cover(
+        request: Request, post_id: int, variant_index: int
+    ) -> Response:
+        del request
+        if post_variants_repo.select_cover_variant(post_id, variant_index):
+            audit.record_audit(
+                "post_select_cover_variant", target=f"#{post_id}", detail=f"index={variant_index}",
+            )
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.get("/media/{filename}")
+    async def serve_media(request: Request, filename: str) -> Response:
+        """Отдать файл из media_dir (обложки постов) — только для залогиненного
+        владельца (роутер защищён `require_login` на уровне `APIRouter`).
+        `filename` — просто basename, без слэшей/`..`: путь всегда строится
+        от `media_dir`, наружу выйти нельзя (CWE-22, path traversal)."""
+        del request
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(status_code=404)
+        path = Path(get_settings().media_dir) / filename
+        if not path.is_file():
+            raise HTTPException(status_code=404)
+        return FileResponse(path)
 
     # --- Реклама (F21) ---
 

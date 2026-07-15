@@ -15,10 +15,58 @@
   </form>
 </div>
 
+{% if rewrite_variants|length > 1 %}
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('moderation_detail.rewrite_variants_title') }}</h2>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    {% for v in rewrite_variants %}
+    <div style="border:1px solid var(--border); border-radius:6px; padding:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <strong>{{ t('moderation_detail.variant_n', n=v.variant_index + 1) }}</strong>
+        {% if v.variant_index == (post.active_rewrite_variant_index or 0) %}
+          <span class="badge ok">{{ t('moderation_detail.active') }}</span>
+        {% else %}
+          <form method="post" action="/moderation/{{ post.id }}/select-rewrite/{{ v.variant_index }}" style="display:inline;">
+            <button type="submit" class="secondary">{{ t('moderation_detail.select') }}</button>
+          </form>
+        {% endif %}
+      </div>
+      <p class="muted" style="white-space:pre-wrap; margin:0;">{{ v.text[:400] }}{{ '…' if v.text|length > 400 else '' }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if post.media_path %}
+<div class="card">
+  <img src="/media/{{ post.media_path.split('/')[-1] }}" alt="" style="max-width:100%; border-radius:6px;">
+</div>
+{% endif %}
+
+{% if cover_variants|length > 1 %}
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('moderation_detail.cover_variants_title') }}</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:12px;">
+    {% for v in cover_variants %}
+    <div style="text-align:center;">
+      <img src="/media/{{ v.media_path.split('/')[-1] }}" alt="" style="max-width:160px; border-radius:6px; display:block; margin-bottom:6px;">
+      {% if v.variant_index == (post.active_cover_variant_index or 0) %}
+        <span class="badge ok">{{ t('moderation_detail.active') }}</span>
+      {% else %}
+        <form method="post" action="/moderation/{{ post.id }}/select-cover/{{ v.variant_index }}">
+          <button type="submit" class="secondary">{{ t('moderation_detail.select') }}</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if post.source_link %}
 <p class="muted">🔗 <a href="{{ post.source_link }}" target="_blank" rel="noopener noreferrer">{{ t('moderation_detail.source_link') }}</a></p>
 {% endif %}
-{% if post.media_path %}<p class="muted">{{ t('moderation_detail.has_media') }}</p>{% endif %}
 
 <div class="card" style="display:flex; gap:10px;">
   <form method="post" action="/moderation/{{ post.id }}/approve">

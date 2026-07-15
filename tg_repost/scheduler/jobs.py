@@ -17,7 +17,7 @@ from telegram.ext import Application
 from tg_repost.ads.injector import inject_native_ad
 from tg_repost.config import get_settings
 from tg_repost.covers.dispatcher import generate_cover
-from tg_repost.db.models import Post, PostStatus
+from tg_repost.db.models import Post, PostCoverVariant, PostRewriteVariant, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.enrichment.enricher import enrich_post, enrichment_enabled_for
 from tg_repost.enrichment.link_content import (
@@ -31,6 +31,10 @@ from tg_repost.telegram.moderation_bot import send_pending_for_approval
 from tg_repost.telegram.publisher import publish_post
 
 logger = get_logger(__name__)
+
+# Защита от опечатки в настройке (500 вместо 5) — каждый вариант это отдельный
+# платный вызов LLM/генератора картинок, не даём случайно разорить бюджет.
+_MAX_VARIANTS = 10
 
 
 async def _save_link_image(post_id: int, image_url: str) -> str | None:
@@ -95,43 +99,87 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                     link_text = link_content.text
                     link_image_url = link_content.image_url
 
-        try:
-            result = await rewriter.rewrite(original, prompt_name=prompt_name, link_content=link_text)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Рерайт поста %s провален: %s", post_id, exc)
+        # F06-доп. — N вариантов текста (settings.rewrite_variant_count),
+        # владелец выбирает лучший при модерации (бот/веб-админка). Каждый
+        # вариант — отдельный вызов LLM, генерируются последовательно (не
+        # asyncio.gather) — параллельные вызовы на один пост раньше времени
+        # упирались бы в rate-limit провайдера сильнее, чем последовательные
+        # (см. antiban-комментарии в других местах пайплайна). Провал ОДНОГО
+        # варианта из нескольких не фатален — фатально только если не вышло
+        # получить НИ ОДНОГО (сохраняет прежнее поведение при variant_count=1).
+        rewrite_count = max(1, min(get_settings().rewrite_variant_count, _MAX_VARIANTS))
+        rewrite_texts: list[str] = []
+        rewrite_tokens_list: list[int] = []
+        last_exc: Exception | None = None
+        for _ in range(rewrite_count):
+            try:
+                result = await rewriter.rewrite(
+                    original, prompt_name=prompt_name, link_content=link_text,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning("Вариант рерайта поста %s не удался: %s", post_id, exc)
+                continue
+            rewrite_texts.append(result.text)
+            rewrite_tokens_list.append(result.total_tokens)
+
+        if not rewrite_texts:
+            logger.error("Рерайт поста %s провален (все варианты): %s", post_id, last_exc)
             with session_scope() as session:
                 post = session.get(Post, post_id)
                 if post:
-                    post.set_status(PostStatus.FAILED, reason=f"ошибка рерайта: {exc}")
+                    post.set_status(PostStatus.FAILED, reason=f"ошибка рерайта: {last_exc}")
             continue
 
-        final_text = result.text
         # F16 — добор источников (не критично: при ошибке просто без блока).
+        # Один общий блок на ВСЕ варианты — источники не зависят от того,
+        # какими словами переписан пост, второй LLM-вызов на вариант был бы
+        # чистым расточительством токенов.
         if enrich:
             block = await enrich_post(rewriter, original)
             if block:
-                final_text = f"{final_text}\n{block}"
+                rewrite_texts = [f"{t}\n{block}" for t in rewrite_texts]
 
         # Обложка, только если у поста ещё нет своего медиа: сперва пробуем
         # реальную картинку статьи по ссылке (F16-доп.) — она информативнее
-        # универсальной AI/стоковой обложки; F18 авто-обложка — запасной путь.
-        cover_path: str | None = None
+        # универсальной AI/стоковой, идёт вариантом №1; F18 авто-обложка
+        # добирает остальные N-1 (или все N, если картинки по ссылке не было).
+        cover_count = max(1, min(get_settings().cover_variant_count, _MAX_VARIANTS))
+        cover_paths: list[str] = []
         if not has_media and link_image_url:
-            cover_path = await _save_link_image(post_id, link_image_url)
-        if not has_media and not cover_path:
-            cover_path = await generate_cover(rewriter, original)
+            link_cover = await _save_link_image(post_id, link_image_url)
+            if link_cover:
+                cover_paths.append(link_cover)
+        if not has_media:
+            for _ in range(max(0, cover_count - len(cover_paths))):
+                cover_path = await generate_cover(rewriter, original)
+                if cover_path:
+                    cover_paths.append(cover_path)
 
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post:
-                post.rewritten_text = final_text
-                post.rewrite_tokens = result.total_tokens
-                if cover_path:
-                    post.media_path = cover_path
+                post.rewritten_text = rewrite_texts[0]
+                post.rewrite_tokens = sum(rewrite_tokens_list)
+                post.active_rewrite_variant_index = 0
+                for idx, text in enumerate(rewrite_texts):
+                    session.add(PostRewriteVariant(
+                        post_id=post_id, variant_index=idx, text=text,
+                        tokens=rewrite_tokens_list[idx],
+                    ))
+                if cover_paths:
+                    post.media_path = cover_paths[0]
+                    post.active_cover_variant_index = 0
+                    for idx, path in enumerate(cover_paths):
+                        session.add(PostCoverVariant(
+                            post_id=post_id, variant_index=idx, media_path=path,
+                        ))
                 post.set_status(PostStatus.REWRITTEN)
         logger.info(
-            "Пост %s рерайчен (стиль=%s, ссылка=%s, обогащение=%s, обложка=%s, %d токенов)",
-            post_id, prompt_name, bool(link_text), enrich, bool(cover_path), result.total_tokens,
+            "Пост %s рерайчен (стиль=%s, вариантов текста=%d, вариантов обложки=%d, "
+            "ссылка=%s, обогащение=%s, %d токенов)",
+            post_id, prompt_name, len(rewrite_texts), len(cover_paths),
+            bool(link_text), enrich, sum(rewrite_tokens_list),
         )
 
 

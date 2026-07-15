@@ -112,6 +112,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             # model выше, которые сидят в конструкторе клиента).
             SettingField("fetch_link_content_enabled", "Переходить по ссылке в посте", "bool"),
             SettingField("rewrite_prompt_template", "Промпт рерайта", "text"),
+            # Живое поле — читается в scheduler/jobs.py на каждый тик, не
+            # кэшируется ни в каком клиенте, needs_resync не нужен.
+            SettingField("rewrite_variant_count", "Вариантов текста на пост", "int"),
         ),
         "Куда идут запросы на переписывание постов. Любой OpenAI-совместимый "
         "провайдер — не обязательно сам OpenAI (локальная Ollama, прокси и т.д.).",
@@ -224,6 +227,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField(
                 "cover_strategy", "Стратегия", "str", choices=("unsplash", "comfyui", "openai"),
             ),
+            SettingField("cover_variant_count", "Вариантов обложки на пост", "int"),
             SettingField("cover_openai_model", "Модель (openai-стратегия)", "str"),
             SettingField("cover_image_prompt_template", "Промпт генерации (openai-стратегия)", "text"),
             SettingField("unsplash_api_url", "Unsplash API URL", "str"),

@@ -430,11 +430,19 @@ STRINGS: dict[str, dict[str, str]] = {
     "moderation.col_created": {"ru": "Создан", "en": "Created"},
     "moderation_detail.title": {"ru": "Пост на модерации", "en": "Post under review"},
     "moderation_detail.source_link": {"ru": "Источник", "en": "Source"},
-    "moderation_detail.has_media": {"ru": "🖼 Есть медиа", "en": "🖼 Has media"},
     "moderation_detail.save_text": {"ru": "Сохранить текст", "en": "Save text"},
     "moderation_detail.approve": {"ru": "✅ Одобрить", "en": "✅ Approve"},
     "moderation_detail.reject": {"ru": "❌ Отклонить", "en": "❌ Reject"},
     "moderation_detail.back_link": {"ru": "← К очереди модерации", "en": "← Back to moderation queue"},
+    "moderation_detail.rewrite_variants_title": {
+        "ru": "Варианты текста", "en": "Text variants",
+    },
+    "moderation_detail.cover_variants_title": {
+        "ru": "Варианты обложки", "en": "Cover variants",
+    },
+    "moderation_detail.variant_n": {"ru": "Вариант {n}", "en": "Variant {n}"},
+    "moderation_detail.active": {"ru": "Активен", "en": "Active"},
+    "moderation_detail.select": {"ru": "Выбрать", "en": "Select"},
     "moderation_detail.confirm_reject": {
         "ru": "Отклонить пост? Действие необратимо.",
         "en": "Reject this post? This cannot be undone.",
@@ -948,6 +956,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Переходить по ссылке в посте", "en": "Follow link in post",
     },
     "settings.field.rewrite_prompt_template.label": {"ru": "Промпт рерайта", "en": "Rewrite prompt"},
+    "settings.field.rewrite_variant_count.label": {
+        "ru": "Вариантов текста на пост", "en": "Text variants per post",
+    },
     "settings.field.filter_stop_words.label": {"ru": "Стоп-слова", "en": "Stop words"},
     "settings.field.filter_required_words.label": {"ru": "Обязательные слова", "en": "Required words"},
     "settings.field.pipeline_interval_seconds.label": {"ru": "Интервал тика, сек", "en": "Tick interval, sec"},
@@ -977,6 +988,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.version_comparison_enabled.label": {"ru": "Сравнение версий источников", "en": "Compare source versions"},
     "settings.field.enable_auto_cover.label": {"ru": "Включены", "en": "Enabled"},
     "settings.field.cover_strategy.label": {"ru": "Стратегия", "en": "Strategy"},
+    "settings.field.cover_variant_count.label": {
+        "ru": "Вариантов обложки на пост", "en": "Cover variants per post",
+    },
     "settings.field.cover_openai_model.label": {
         "ru": "Модель (openai-стратегия)", "en": "Model (openai strategy)",
     },

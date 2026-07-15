@@ -147,6 +147,12 @@ class Settings(BaseSettings):
     link_content_max_chars: int = Field(6000, alias="LINK_CONTENT_MAX_CHARS")
     link_fetch_timeout_seconds: float = Field(10.0, alias="LINK_FETCH_TIMEOUT_SECONDS")
 
+    # --- F06-доп.: N вариантов рерайта на пост, выбор — в боте/веб-админке ---
+    # Каждый вариант — отдельный LLM-вызов (см. scheduler/jobs.py), поэтому
+    # токены/стоимость растут линейно с этим числом. 1 = старое поведение
+    # (единственный текст, без кнопок переключения вариантов).
+    rewrite_variant_count: int = Field(1, alias="REWRITE_VARIANT_COUNT")
+
     # --- F23: веб-админка (Фаза 5) ---
     # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
     # секретов ключом из той же БД не защищало бы ни от чего). Генерируются
@@ -248,6 +254,10 @@ class Settings(BaseSettings):
     cover_image_prompt_template: str = Field(
         _DEFAULT_COVER_IMAGE_PROMPT, alias="COVER_IMAGE_PROMPT_TEMPLATE"
     )
+    # F18-доп.: N вариантов обложки на пост (отдельно от rewrite_variant_count
+    # выше — можно, например, хотеть 3 текста и 1 обложку). Каждый вариант —
+    # отдельный вызов генератора (см. scheduler/jobs.py). 1 = старое поведение.
+    cover_variant_count: int = Field(1, alias="COVER_VARIANT_COUNT")
     unsplash_access_key: str = Field("", alias="UNSPLASH_ACCESS_KEY")
     unsplash_api_url: str = Field(
         "https://api.unsplash.com/photos/random", alias="UNSPLASH_API_URL"
