@@ -904,9 +904,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.group.covers.title": {"ru": "Авто-обложки", "en": "Auto covers"},
     "settings.group.covers.desc": {
         "ru": "unsplash — стоковое фото по ключевым словам; comfyui — "
-        "AI-генерация через локальную установку.",
+        "AI-генерация через локальную установку; openai — генерация через "
+        "уже настроенный OpenAI-совместимый провайдер рерайта, свой ключ не нужен.",
         "en": "unsplash — stock photo by keywords; comfyui — AI generation "
-        "via your local install.",
+        "via your local install; openai — generation via the already "
+        "configured OpenAI-compatible rewrite provider, no separate key needed.",
     },
     "settings.group.smart_schedule.title": {"ru": "Умное расписание", "en": "Smart schedule"},
     "settings.group.smart_schedule.desc": {
@@ -975,6 +977,12 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.version_comparison_enabled.label": {"ru": "Сравнение версий источников", "en": "Compare source versions"},
     "settings.field.enable_auto_cover.label": {"ru": "Включены", "en": "Enabled"},
     "settings.field.cover_strategy.label": {"ru": "Стратегия", "en": "Strategy"},
+    "settings.field.cover_openai_model.label": {
+        "ru": "Модель (openai-стратегия)", "en": "Model (openai strategy)",
+    },
+    "settings.field.cover_image_prompt_template.label": {
+        "ru": "Промпт генерации (openai-стратегия)", "en": "Generation prompt (openai strategy)",
+    },
     "settings.field.unsplash_api_url.label": {"ru": "Unsplash API URL", "en": "Unsplash API URL"},
     "settings.field.comfyui_base_url.label": {"ru": "ComfyUI base URL", "en": "ComfyUI base URL"},
     "settings.field.comfyui_workflow_path.label": {"ru": "Путь к workflow JSON", "en": "Workflow JSON path"},

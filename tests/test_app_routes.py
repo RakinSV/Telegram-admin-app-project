@@ -219,6 +219,25 @@ def test_settings_save_cover_strategy_accepts_valid_choice():
     assert "comfyui" in r.text
 
 
+def test_settings_save_cover_strategy_accepts_openai_choice():
+    # F18-доп.: третья стратегия — генерация через уже настроенный
+    # OpenAI-совместимый провайдер рерайта, без своего API-ключа.
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/settings/covers",
+        data=_covers_form(
+            cover_strategy="openai",
+            cover_openai_model="black-forest-labs/flux.2-klein-4b",
+            cover_image_prompt_template="Cover for: {post_text}",
+        ),
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = client.get("/settings")
+    assert "black-forest-labs/flux.2-klein-4b" in r.text
+
+
 def test_settings_save_invalid_number_does_not_partially_apply():
     """Регрессия: раньше поля сохранялись по одному в цикле — плохое
     значение в одном поле не должно оставлять СОСЕДНИЕ поля из той же формы

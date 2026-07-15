@@ -1,6 +1,7 @@
-"""Тесты авто-обложек (F18): чистые функции ComfyUI/Unsplash клиентов."""
+"""Тесты авто-обложек (F18): чистые функции ComfyUI/Unsplash/openai клиентов."""
 
 from tg_repost.covers.comfyui import extract_first_image, inject_prompt_into_workflow
+from tg_repost.covers.openai_compatible import _decode_image
 from tg_repost.covers.unsplash import UnsplashClient
 
 
@@ -55,3 +56,19 @@ def test_unsplash_extract_image_url_missing():
 def test_unsplash_configured_false_without_key():
     # Тестовое окружение (conftest.py) не задаёт UNSPLASH_ACCESS_KEY.
     assert UnsplashClient().configured is False
+
+
+def test_decode_image_valid_base64():
+    import base64
+
+    payload = base64.b64encode(b"fake-image-bytes").decode()
+    assert _decode_image(payload) == b"fake-image-bytes"
+
+
+def test_decode_image_none_when_missing():
+    assert _decode_image(None) is None
+    assert _decode_image("") is None
+
+
+def test_decode_image_none_when_not_valid_base64():
+    assert _decode_image("not-valid-base64!!!") is None

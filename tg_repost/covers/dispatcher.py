@@ -1,9 +1,11 @@
 """Оркестрация авто-обложек (F18): выбор стратегии, сохранение файла.
 
-Если у поста нет медиа и обложки включены — LLM формулирует короткий
-англоязычный промпт по теме поста, затем генерация через Unsplash (стоковое
-фото) или ComfyUI (уникальная AI-картинка), выбор стратегии — `COVER_STRATEGY`.
-Любая ошибка → None, рерайт никогда не должен падать из-за обложки.
+Если у поста нет медиа и обложки включены — генерация через Unsplash
+(стоковое фото по короткому запросу), ComfyUI (уникальная AI-картинка) или
+"openai" (F18-доп.: любой OpenAI-совместимый провайдер картинок, уже
+настроенный для рерайта, — свой промпт и модель, без search-запроса, см.
+`covers/openai_compatible.py`). Выбор стратегии — `COVER_STRATEGY`. Любая
+ошибка → None, рерайт никогда не должен падать из-за обложки.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from pathlib import Path
 
 from tg_repost.config import get_settings
 from tg_repost.covers.comfyui import ComfyUIClient
+from tg_repost.covers.openai_compatible import OpenAICompatibleImageClient
 from tg_repost.covers.unsplash import UnsplashClient
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, load_prompt
@@ -21,7 +24,8 @@ from tg_repost.rewriter.client import RewriterClient, load_prompt
 logger = get_logger(__name__)
 
 
-async def _generate_bytes(prompt: str) -> bytes | None:
+async def _generate_by_search_query(prompt: str) -> bytes | None:
+    """Unsplash/ComfyUI — оба принимают КОРОТКИЙ search-подобный запрос."""
     settings = get_settings()
     if settings.cover_strategy == "comfyui":
         return await ComfyUIClient().generate_image_bytes(prompt)
@@ -38,14 +42,21 @@ async def generate_cover(rewriter: RewriterClient, post_text: str) -> str | None
         return None
 
     try:
-        query = await rewriter.complete(
-            load_prompt("cover_prompt").format(post_text=post_text)
-        )
-        query = query.strip().splitlines()[0] if query.strip() else ""
-        if not query:
-            return None
+        if settings.cover_strategy == "openai":
+            # Реальный генератор картинок, не поиск — можно отдать полный
+            # описательный промпт напрямую, без промежуточного LLM-вызова
+            # для короткого search-запроса (в отличие от unsplash/comfyui).
+            prompt = settings.cover_image_prompt_template.format(post_text=post_text)
+            image_bytes = await OpenAICompatibleImageClient().generate_image_bytes(prompt)
+        else:
+            query = await rewriter.complete(
+                load_prompt("cover_prompt").format(post_text=post_text)
+            )
+            query = query.strip().splitlines()[0] if query.strip() else ""
+            if not query:
+                return None
+            image_bytes = await _generate_by_search_query(query)
 
-        image_bytes = await _generate_bytes(query)
         if not image_bytes:
             return None
 
@@ -57,8 +68,7 @@ async def generate_cover(rewriter: RewriterClient, post_text: str) -> str | None
             path.write_bytes(image_bytes)
 
         await asyncio.to_thread(_save)
-        logger.info("Обложка сгенерирована (%s, запрос '%s'): %s",
-                    settings.cover_strategy, query, path)
+        logger.info("Обложка сгенерирована (%s): %s", settings.cover_strategy, path)
         return str(path)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Генерация обложки не удалась: %s", exc)

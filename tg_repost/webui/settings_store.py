@@ -222,8 +222,10 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         (
             SettingField("enable_auto_cover", "Включены", "bool"),
             SettingField(
-                "cover_strategy", "Стратегия", "str", choices=("unsplash", "comfyui"),
+                "cover_strategy", "Стратегия", "str", choices=("unsplash", "comfyui", "openai"),
             ),
+            SettingField("cover_openai_model", "Модель (openai-стратегия)", "str"),
+            SettingField("cover_image_prompt_template", "Промпт генерации (openai-стратегия)", "text"),
             SettingField("unsplash_api_url", "Unsplash API URL", "str"),
             SettingField("comfyui_base_url", "ComfyUI base URL", "str"),
             SettingField("comfyui_workflow_path", "Путь к workflow JSON", "str"),
@@ -234,7 +236,10 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "Если у поста нет своей картинки: unsplash — стоковое фото по "
         "ключевым словам (быстро, бесплатно, не уникально); comfyui — "
         "AI-генерация через твою локальную установку (нужны workflow JSON "
-        "в API-формате и ID узла промпта — специфично для конкретной установки).",
+        "в API-формате и ID узла промпта — специфично для конкретной установки); "
+        "openai — генерация через уже настроенный OpenAI-совместимый провайдер "
+        "рерайта (см. группу «Рерайт» выше) — свой ключ не нужен, только "
+        "модель и промпт ниже.",
         secret_keys=("unsplash_access_key",),
     ),
     SettingsGroup(

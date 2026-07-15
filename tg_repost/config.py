@@ -61,6 +61,19 @@ _DEFAULT_REWRITE_PROMPT = """Ты — редактор Telegram-канала. С
 ---
 """
 
+# Дефолт для `cover_image_prompt_template` (F18-доп., стратегия "openai") —
+# промпт для самого генератора картинок (не для LLM, выбирающего короткий
+# search-запрос, как в cover_prompt.txt для unsplash/comfyui). `{post_text}` —
+# исходный пост, редактируется в /settings (textarea).
+_DEFAULT_COVER_IMAGE_PROMPT = """Photorealistic cover image for a Telegram news post, no text or watermarks \
+in the image, 16:9-friendly composition.
+
+Post topic:
+---
+{post_text}
+---
+"""
+
 
 class Settings(BaseSettings):
     """Типизированные настройки приложения."""
@@ -223,7 +236,18 @@ class Settings(BaseSettings):
 
     # --- F18: авто-обложки ---
     enable_auto_cover: bool = Field(False, alias="ENABLE_AUTO_COVER")
-    cover_strategy: str = Field("unsplash", alias="COVER_STRATEGY")  # unsplash | comfyui
+    cover_strategy: str = Field("unsplash", alias="COVER_STRATEGY")  # unsplash | comfyui | openai
+    # "openai" — генерация через УЖЕ настроенный OpenAI-совместимый провайдер
+    # рерайта (openai_base_url/openai_api_key, см. группу "rewrite") — свой
+    # ключ здесь не нужен, только своя модель (картиночная, не чат) и свой
+    # промпт. Работает с любым провайдером, отдающим data[].b64_json из
+    # images.generate() — так же, как реальный OpenAI DALL-E.
+    cover_openai_model: str = Field(
+        "black-forest-labs/flux.2-klein-4b", alias="COVER_OPENAI_MODEL"
+    )
+    cover_image_prompt_template: str = Field(
+        _DEFAULT_COVER_IMAGE_PROMPT, alias="COVER_IMAGE_PROMPT_TEMPLATE"
+    )
     unsplash_access_key: str = Field("", alias="UNSPLASH_ACCESS_KEY")
     unsplash_api_url: str = Field(
         "https://api.unsplash.com/photos/random", alias="UNSPLASH_API_URL"
