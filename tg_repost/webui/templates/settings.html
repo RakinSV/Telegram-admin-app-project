@@ -34,6 +34,8 @@
           <input type="checkbox" id="{{ field.name }}" name="{{ field.name }}" {{ "checked" if field.value else "" }}>
         {% elif field.value_type == "csv_list" %}
           <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value|join(', ') }}">
+        {% elif field.value_type == "text" %}
+          <textarea id="{{ field.name }}" name="{{ field.name }}" rows="14" style="flex-basis: 100%; font-family: monospace; font-size: 12px;">{{ field.value }}</textarea>
         {% elif field.value_type in ("int", "float") %}
           <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% else %}

@@ -107,6 +107,11 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             # провайдер повисла в БД, рерайт продолжал падать со старой).
             SettingField("openai_base_url", "Base URL", "str", needs_resync=True),
             SettingField("openai_model", "Модель", "str", needs_resync=True),
+            # Живое поле — RewriterClient.rewrite() читает его из get_settings()
+            # на каждый вызов, needs_resync не нужен (в отличие от base_url/
+            # model выше, которые сидят в конструкторе клиента).
+            SettingField("fetch_link_content_enabled", "Переходить по ссылке в посте", "bool"),
+            SettingField("rewrite_prompt_template", "Промпт рерайта", "text"),
         ),
         "Куда идут запросы на переписывание постов. Любой OpenAI-совместимый "
         "провайдер — не обязательно сам OpenAI (локальная Ollama, прокси и т.д.).",

@@ -8,6 +8,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import uuid
+from pathlib import Path
+
 from telegram.ext import Application
 
 from tg_repost.ads.injector import inject_native_ad
@@ -16,12 +20,38 @@ from tg_repost.covers.dispatcher import generate_cover
 from tg_repost.db.models import Post, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.enrichment.enricher import enrich_post, enrichment_enabled_for
+from tg_repost.enrichment.link_content import (
+    download_link_image,
+    extract_first_url,
+    fetch_link_content,
+)
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, resolve_style_prompt
 from tg_repost.telegram.moderation_bot import send_pending_for_approval
 from tg_repost.telegram.publisher import publish_post
 
 logger = get_logger(__name__)
+
+
+async def _save_link_image(post_id: int, image_url: str) -> str | None:
+    """Скачать обложку статьи по ссылке и сохранить в media_dir. None при
+    любой проблеме (не критично — рерайт продолжается без картинки, F18
+    авто-обложка ниже подхватит, если включена)."""
+    downloaded = await download_link_image(image_url)
+    if downloaded is None:
+        return None
+    data, ext = downloaded
+
+    settings = get_settings()
+    media_dir = Path(settings.media_dir)
+    dest = media_dir / f"link_{post_id}_{uuid.uuid4().hex}{ext}"
+
+    def _save() -> None:
+        media_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+
+    await asyncio.to_thread(_save)
+    return str(dest)
 
 
 async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
@@ -50,8 +80,23 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             has_media = bool(post.media_path)
 
         prompt_name = resolve_style_prompt(style)
+
+        # F16-доп. — переход по первой ссылке в посте: без этого рерайт
+        # неизбежно синонимайзит короткий тизер вместо пересказа по существу
+        # (см. enrichment/link_content.py). Ошибка/недоступность ссылки не
+        # должна ронять рерайт — тогда просто работаем по одному посту, как раньше.
+        link_text = ""
+        link_image_url: str | None = None
+        if get_settings().fetch_link_content_enabled:
+            url = extract_first_url(original)
+            if url:
+                link_content = await fetch_link_content(url)
+                if link_content:
+                    link_text = link_content.text
+                    link_image_url = link_content.image_url
+
         try:
-            result = await rewriter.rewrite(original, prompt_name=prompt_name)
+            result = await rewriter.rewrite(original, prompt_name=prompt_name, link_content=link_text)
         except Exception as exc:  # noqa: BLE001
             logger.error("Рерайт поста %s провален: %s", post_id, exc)
             with session_scope() as session:
@@ -67,9 +112,13 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             if block:
                 final_text = f"{final_text}\n{block}"
 
-        # F18 — авто-обложка, только если у поста ещё нет своего медиа.
+        # Обложка, только если у поста ещё нет своего медиа: сперва пробуем
+        # реальную картинку статьи по ссылке (F16-доп.) — она информативнее
+        # универсальной AI/стоковой обложки; F18 авто-обложка — запасной путь.
         cover_path: str | None = None
-        if not has_media:
+        if not has_media and link_image_url:
+            cover_path = await _save_link_image(post_id, link_image_url)
+        if not has_media and not cover_path:
             cover_path = await generate_cover(rewriter, original)
 
         with session_scope() as session:
@@ -81,8 +130,8 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                     post.media_path = cover_path
                 post.set_status(PostStatus.REWRITTEN)
         logger.info(
-            "Пост %s рерайчен (стиль=%s, обогащение=%s, обложка=%s, %d токенов)",
-            post_id, prompt_name, enrich, bool(cover_path), result.total_tokens,
+            "Пост %s рерайчен (стиль=%s, ссылка=%s, обогащение=%s, обложка=%s, %d токенов)",
+            post_id, prompt_name, bool(link_text), enrich, bool(cover_path), result.total_tokens,
         )
 
 

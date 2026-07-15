@@ -63,6 +63,20 @@ def resolve_style_prompt(style: str | None) -> str:
     return "default"
 
 
+def resolve_rewrite_template(prompt_name: str) -> str:
+    """Выбрать шаблон промпта для `RewriterClient.rewrite()`.
+
+    Стиль "default" читается из редактируемой в `/settings` настройки
+    `rewrite_prompt_template` (пользователь правит текст без git/передеплоя);
+    `default.txt` — запасной вариант только если поле очистили пустым.
+    Остальные стили (news/opinion/instruction/humor, F15) — по-прежнему
+    из файлов `prompts/*.txt`, как раньше.
+    """
+    if prompt_name == "default":
+        return get_settings().rewrite_prompt_template.strip() or load_prompt("default")
+    return load_prompt(prompt_name)
+
+
 class RewriterClient:
     """Асинхронный клиент рерайта/эмбеддингов."""
 
@@ -75,10 +89,18 @@ class RewriterClient:
         self._model = settings.openai_model
         self._embedding_model = settings.openai_embedding_model
 
-    async def rewrite(self, post_text: str, prompt_name: str = "default") -> RewriteResult:
-        """Переписать текст поста выбранным стиль-профилем (F06/F15)."""
-        template = load_prompt(prompt_name)
-        prompt = template.format(post_text=post_text)
+    async def rewrite(
+        self, post_text: str, prompt_name: str = "default", link_content: str = "",
+    ) -> RewriteResult:
+        """Переписать текст поста выбранным стиль-профилем (F06/F15).
+
+        `link_content` — текст статьи по ссылке из поста (F16-доп., см.
+        `enrichment/link_content.py`), пусто — если ссылки не было или
+        переход не удался, тогда рерайт идёт только по `post_text`, как
+        раньше.
+        """
+        template = resolve_rewrite_template(prompt_name)
+        prompt = template.format(post_text=post_text, link_content=link_content)
 
         logger.debug(
             "Запрос рерайта: model=%s, стиль=%s, длина=%d",

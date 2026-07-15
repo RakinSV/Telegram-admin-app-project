@@ -14,6 +14,7 @@ python-dotenv==1.2.2          # CVE-2026-28684 fixed in 1.2.2
 # --- Рерайт (любой OpenAI-совместимый API) ---
 openai==1.51.0
 httpx[socks]==0.27.2          # [socks] = socksio — SOCKS5-прокси для Bot API (BOT_API_PROXY_URL)
+beautifulsoup4==4.14.3         # разбор HTML статьи по ссылке из поста (enrichment/link_content.py)
 
 # --- Планировщик ---
 APScheduler==3.10.4

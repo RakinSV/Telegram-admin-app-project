@@ -825,8 +825,12 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.group.rewrite.title": {"ru": "Рерайт", "en": "Rewrite"},
     "settings.group.rewrite.desc": {
-        "ru": "Любой OpenAI-совместимый провайдер — необязательно сам OpenAI.",
-        "en": "Any OpenAI-compatible provider — not necessarily OpenAI itself.",
+        "ru": "Любой OpenAI-совместимый провайдер — необязательно сам OpenAI. "
+        "Если в посте есть ссылка — бот переходит по ней и рерайтит по "
+        "полному тексту статьи, а не только по короткому анонсу.",
+        "en": "Any OpenAI-compatible provider — not necessarily OpenAI itself. "
+        "If the post contains a link, the bot follows it and rewrites from "
+        "the full article text, not just the short teaser.",
     },
     "settings.group.filtering.title": {"ru": "Фильтрация по словам", "en": "Word filtering"},
     "settings.group.filtering.desc": {
@@ -928,6 +932,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.mtproto_proxy_port.label": {"ru": "MTProto port", "en": "MTProto port"},
     "settings.field.openai_base_url.label": {"ru": "Base URL", "en": "Base URL"},
     "settings.field.openai_model.label": {"ru": "Модель", "en": "Model"},
+    "settings.field.fetch_link_content_enabled.label": {
+        "ru": "Переходить по ссылке в посте", "en": "Follow link in post",
+    },
+    "settings.field.rewrite_prompt_template.label": {"ru": "Промпт рерайта", "en": "Rewrite prompt"},
     "settings.field.filter_stop_words.label": {"ru": "Стоп-слова", "en": "Stop words"},
     "settings.field.filter_required_words.label": {"ru": "Обязательные слова", "en": "Required words"},
     "settings.field.pipeline_interval_seconds.label": {"ru": "Интервал тика, сек", "en": "Tick interval, sec"},
