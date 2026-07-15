@@ -21,6 +21,7 @@ import asyncio
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from telethon import TelegramClient, events
@@ -219,10 +220,13 @@ def _find_source_id(channel_id: int, channel_username: str | None) -> int | None
         return source.id if source else None
 
 
-async def _handle_new_message(event: events.NewMessage.Event) -> None:
-    """Обработать новое сообщение из источника (F02 → F03 → F04 → F13)."""
+async def _process_message(client: TelegramClient, chat: Any, message: Any) -> None:
+    """Общая логика F02→F03→F04→F13 для одного сообщения — извлечена из
+    `_handle_new_message`, чтобы её же переиспользовал `backfill_source`
+    (F02-доп): live-обработчик получает `chat`/`message` из Telethon-события,
+    бэкфилл — из `client.iter_messages()`, дальше путь идентичный (включая
+    антибан-джиттер F17 — бэкфилл не должен идти быстрее живого потока)."""
     settings = get_settings()
-    message = event.message
     text = message.message or ""
 
     # F17 — джиттер: случайная пауза, чтобы не обрабатывать пачку мгновенно.
@@ -230,7 +234,6 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
         settings.listener_min_delay_seconds, settings.listener_max_delay_seconds
     )
 
-    chat = await event.get_chat()
     username = getattr(chat, "username", None)
     channel_id = getattr(chat, "id", None)
     if channel_id is None:
@@ -337,7 +340,7 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
     # Скачивание медиа вне сессии (F17: под почасовым лимитом «тяжёлых» действий,
     # свой лимит на каждый клиент — F26).
     if message.media:
-        await _get_rate_limiter(event.client).acquire()
+        await _get_rate_limiter(client).acquire()
         try:
             # Скачиваем В ПАМЯТЬ (file=bytes), а не доверяем Telethon выбор
             # имени файла из вложения: при file=<директория> Telethon берёт имя
@@ -364,6 +367,39 @@ async def _handle_new_message(event: events.NewMessage.Event) -> None:
                 saved = session.get(Post, post_id)
                 if saved is not None:
                     saved.media_path = str(dest)
+
+
+async def _handle_new_message(event: events.NewMessage.Event) -> None:
+    """Обработчик живого потока (F02) — тонкая обёртка над `_process_message`."""
+    chat = await event.get_chat()
+    await _process_message(event.client, chat, event.message)
+
+
+async def backfill_source(
+    client: TelegramClient, source: Source, limit: int = 50
+) -> int:
+    """F02-доп: разово собрать последние `limit` сообщений источника через
+    ТОТ ЖЕ пайплайн фильтр/дедуп/эмбеддинг/медиа, что и live-слушатель.
+
+    Нужен, т.к. `start_listeners` — чисто live-обработчик: сообщения,
+    вышедшие ДО момента, когда Telegram начал присылать апдейты по каналу
+    этому аккаунту (обычно — до подписки аккаунта на канал), никогда не
+    попадут в очередь сами по себе (жалоба пользователя: "как собрать
+    старые посты"). `client.iter_messages()` без `reverse` отдаёт от
+    новых к старым — набираем `limit` штук и разворачиваем, чтобы отправить
+    в `_process_message` в хронологическом порядке (старые → новые), как
+    если бы это был настоящий живой поток; дедуп/джиттер не зависят от
+    порядка, но так естественнее читать очередь модерации потом.
+
+    Возвращает число сообщений, дошедших до `_process_message` (не то же
+    самое, что число реально поставленных в очередь — часть могла
+    отфильтроваться/оказаться дублём, это штатно, см. `_process_message`).
+    """
+    entity = await client.get_entity(source.channel_username)
+    messages = [m async for m in client.iter_messages(entity, limit=limit)]
+    for message in reversed(messages):
+        await _process_message(client, entity, message)
+    return len(messages)
 
 
 async def start_listeners(clients: list[TelegramClient]) -> None:

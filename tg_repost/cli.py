@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import getpass
 import sys
 
@@ -108,6 +109,46 @@ def cmd_set_source_targets(args: argparse.Namespace) -> int:
         return 1
     print(f"✅ Источник @{source.channel_username} → цели {args.chat_ids}")
     return 0
+
+
+def cmd_backfill_source(args: argparse.Namespace) -> int:
+    """F02-доп: собрать последние N сообщений источника, которые
+    live-слушатель не мог поймать сам (не бэкфиллит историю — только
+    сообщения с момента, когда Telegram начал слать апдейты этому
+    аккаунту, обычно с момента подписки). Разовая операция поверх ОСНОВНОЙ
+    Telethon-сессии (TG_SESSION_STRING), не F26-ротации — распределять
+    между несколькими аккаунтами тут нечего."""
+    from tg_repost.telegram.listener import backfill_source, build_client
+
+    source = sources_repo.find_source_by_username(args.channel)
+    if source is None:
+        print(
+            f"Источник @{sources_repo.normalize_username(args.channel)} не найден "
+            f"— сначала добавь его (add-source)."
+        )
+        return 1
+
+    async def _run() -> int:
+        client = build_client()
+        await client.connect()
+        if not await client.is_user_authorized():
+            print(
+                "Telethon-сессия не авторизована. Сгенерируй: "
+                "python -m tg_repost.tools.gen_session"
+            )
+            return 1
+        try:
+            count = await backfill_source(client, source, args.limit)
+        finally:
+            await client.disconnect()
+        print(
+            f"✅ Обработано {count} сообщений из @{source.channel_username} "
+            f"(часть могла отфильтроваться/задвоиться — это штатно, см. "
+            f"очередь модерации в веб-админке)."
+        )
+        return 0
+
+    return asyncio.run(_run())
 
 
 def cmd_add_target(args: argparse.Namespace) -> int:
@@ -240,6 +281,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("channel", help="@username источника")
     p.add_argument("mode", choices=["on", "off", "default"], help="on/off/default")
     p.set_defaults(func=cmd_set_source_enrich)
+
+    p = sub.add_parser(
+        "backfill-source",
+        help="F02-доп: собрать последние N сообщений источника (упущенную историю)",
+    )
+    p.add_argument("channel", help="@username источника (должен быть уже добавлен)")
+    p.add_argument(
+        "--limit", type=int, default=50,
+        help="сколько последних сообщений собрать (по умолчанию 50)",
+    )
+    p.set_defaults(func=cmd_backfill_source)
 
     p = sub.add_parser("add-target", help="Добавить целевую группу")
     p.add_argument("chat_id", type=int, help="chat_id (для каналов со знаком минус)")
