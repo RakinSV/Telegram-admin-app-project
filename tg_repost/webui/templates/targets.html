@@ -14,6 +14,29 @@
   </form>
 </div>
 
+{% if discovered %}
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('targets.discovered_title') }}</h2>
+  <p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ t('targets.discovered_desc') }}</p>
+  <table>
+    <tr><th>{{ t('targets.col_chat_id') }}</th><th>{{ t('targets.col_title') }}</th><th></th></tr>
+    {% for d in discovered %}
+    <tr>
+      <td>{{ d.chat_id }}</td>
+      <td>{{ d.title or '' }} <span class="muted">({{ d.chat_type }})</span></td>
+      <td>
+        <form method="post" action="/targets" style="display:inline;">
+          <input type="hidden" name="chat_id" value="{{ d.chat_id }}">
+          <input type="hidden" name="title" value="{{ d.title or '' }}">
+          <button type="submit">{{ t('targets.discovered_add') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
 <div class="card">
   <table>
     <tr><th>ID</th><th>{{ t('targets.col_active') }}</th><th>{{ t('targets.col_chat_id') }}</th><th>{{ t('targets.col_title') }}</th><th></th></tr>

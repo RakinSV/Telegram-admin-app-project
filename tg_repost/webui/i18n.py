@@ -405,6 +405,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "targets.error_invalid_chat_id": {
         "ru": "chat_id должен быть целым числом.", "en": "chat_id must be an integer.",
     },
+    "targets.discovered_title": {"ru": "Обнаруженные чаты", "en": "Discovered chats"},
+    "targets.discovered_desc": {
+        "ru": "Бот уже состоит в этих чатах, но они ещё не добавлены как цели "
+        "публикации — просто добавь бота в нужную группу/канал, chat_id "
+        "определится сам.",
+        "en": "The bot is already a member of these chats, but they aren't "
+        "publish targets yet — just add the bot to the group/channel you "
+        "want, and chat_id is picked up automatically.",
+    },
+    "targets.discovered_add": {"ru": "Добавить как цель", "en": "Add as target"},
 
     # --- Модерация ---
     "moderation.title": {"ru": "Очередь модерации", "en": "Moderation queue"},

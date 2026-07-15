@@ -15,12 +15,14 @@ from telegram import (
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ChatMemberHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
 )
 
+from tg_repost import discovered_chats_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
@@ -32,6 +34,11 @@ logger = get_logger(__name__)
 # Ключ в user_data: id поста, для которого ждём новый текст (режим редактирования).
 _EDIT_KEY = "editing_post_id"
 _PREVIEW_LEN = 3500
+
+# Статусы ChatMember, при которых бот реально состоит в чате (F08-доп.) —
+# остальные ("left", "kicked", "restricted" без прав) значат, что бота
+# из чата убрали/он вышел.
+_ACTIVE_MEMBER_STATUSES = {"member", "administrator", "creator"}
 
 
 def _keyboard(post_id: int) -> InlineKeyboardMarkup:
@@ -191,6 +198,31 @@ async def _cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
 
+async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """F08-доп.: авто-обнаружение чатов для целевых групп публикации.
+
+    Telegram шлёт `my_chat_member`-апдейт при ЛЮБОЙ смене статуса САМОГО
+    бота в чате (добавили/удалили/повысили до админа) — не привязано к
+    owner_filter, это системное событие про бота, не сообщение пользователя.
+    Личка (chat.type == "private") пропускается — это не целевая группа,
+    там `my_chat_member` тоже стреляет при /start или блокировке бота.
+    """
+    del context
+    membership = update.my_chat_member
+    if membership is None or membership.chat.type == "private":
+        return
+    chat = membership.chat
+    if membership.new_chat_member.status in _ACTIVE_MEMBER_STATUSES:
+        discovered_chats_repo.record_discovered_chat(chat.id, chat.title, chat.type)
+        logger.info(
+            "Бот добавлен в чат '%s' (%s, id=%s) — доступен для добавления в /targets",
+            chat.title, chat.type, chat.id,
+        )
+    else:
+        discovered_chats_repo.remove_discovered_chat(chat.id)
+        logger.info("Бот удалён из чата id=%s (%s)", chat.id, membership.new_chat_member.status)
+
+
 async def _cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /stats — сводка просмотров за период (F14)."""
     from tg_repost.scheduler.stats import stats_summary
@@ -259,4 +291,5 @@ def build_application() -> Application:
     application.add_handler(
         MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _on_text)
     )
+    application.add_handler(ChatMemberHandler(_on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
     return application

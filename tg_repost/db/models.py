@@ -154,6 +154,23 @@ class TargetGroup(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class DiscoveredChat(Base):
+    """Чат, куда владелец добавил репост-бота, но ещё не подтвердил как
+    целевую группу (F08-доп.) — заполняется автоматически из апдейта
+    `my_chat_member`, избавляет от ручного поиска chat_id через сторонних
+    ботов (см. `telegram/moderation_bot.py::_on_my_chat_member`). Строка
+    удаляется, когда бот покидает чат — список в админке всегда отражает
+    ТЕКУЩЕЕ членство бота, а не историю."""
+
+    __tablename__ = "discovered_chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    chat_type: Mapped[str] = mapped_column(String(32), default="")
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Post(Base):
     """Пост в пайплайне (F02, F05). Хранит оригинал, рерайт и метрики."""
 

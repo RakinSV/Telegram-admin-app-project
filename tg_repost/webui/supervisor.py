@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from telegram import Update
 from telegram.ext import Application
 from telethon import TelegramClient
 
@@ -203,7 +204,13 @@ async def start_components(settings: Settings | None = None) -> None:
     await _components.application.initialize()
     await _components.application.start()
     assert _components.application.updater is not None  # build_application() не отключает updater
-    await _components.application.updater.start_polling(drop_pending_updates=True)
+    # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
+    # my_chat_member нужен для обнаружения чатов (F08-доп., см.
+    # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
+    # недокументированного здесь дефолтного поведения getUpdates.
+    await _components.application.updater.start_polling(
+        drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
+    )
     runtime_state.set_component_status("bot", True)
     logger.info("Бот модерации запущен")
 
@@ -286,7 +293,13 @@ async def restart_moderation_bot() -> None:
     await _components.application.initialize()
     await _components.application.start()
     assert _components.application.updater is not None  # build_application() не отключает updater
-    await _components.application.updater.start_polling(drop_pending_updates=True)
+    # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
+    # my_chat_member нужен для обнаружения чатов (F08-доп., см.
+    # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
+    # недокументированного здесь дефолтного поведения getUpdates.
+    await _components.application.updater.start_polling(
+        drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
+    )
     runtime_state.set_component_status("bot", True)
     if _components.scheduler is not None:
         _sync_jobs(_components.scheduler, get_settings())

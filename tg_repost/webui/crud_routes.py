@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from tg_repost import sources_repo, targets_repo, telethon_sessions_repo
+from tg_repost import discovered_chats_repo, sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
 from tg_repost.config import get_settings
@@ -234,6 +234,7 @@ def build_crud_router() -> APIRouter:
         targets = targets_repo.list_targets()
         return _templates.TemplateResponse(request, "targets.html", {
             "targets": targets, "truncated": len(targets) >= _LIST_LIMIT, "error": None,
+            "discovered": discovered_chats_repo.list_pending_discovered_chats(),
         })
 
     @router.post("/targets")
@@ -245,6 +246,7 @@ def build_crud_router() -> APIRouter:
         except ValueError:
             return _templates.TemplateResponse(request, "targets.html", {
                 "targets": targets_repo.list_targets(),
+                "discovered": discovered_chats_repo.list_pending_discovered_chats(),
                 "error": i18n.t("targets.error_invalid_chat_id"),
             }, status_code=400)
         targets_repo.add_target(chat_id_int, title.strip() or None)
