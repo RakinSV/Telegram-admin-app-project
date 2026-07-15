@@ -172,3 +172,31 @@ async def test_download_link_image_returns_none_for_unsafe_url():
     from tg_repost.enrichment.link_content import download_link_image
 
     assert await download_link_image("http://127.0.0.1/x.jpg") is None
+
+
+async def test_is_safe_url_async_does_not_block_event_loop(monkeypatch):
+    # Регрессия (найдено на реальном деплое): `socket.getaddrinfo()` внутри
+    # `_is_public_host()` — блокирующий вызов. Весь процесс (Telethon-
+    # listener, бот, планировщик) живёт на ОДНОМ event loop — прямой вызов
+    # синхронно стопорил бы вообще всё на время DNS-резолва, а не только
+    # текущий рерайт. `_is_safe_url_async()` обязана уносить его в поток.
+    import asyncio
+    import time
+
+    from tg_repost.enrichment.link_content import _is_safe_url_async
+
+    def _slow_getaddrinfo(host, port):
+        time.sleep(0.3)
+        return [(socket.AF_INET, None, None, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _slow_getaddrinfo)
+
+    progressed = False
+
+    async def _tick_marker():
+        nonlocal progressed
+        await asyncio.sleep(0.05)
+        progressed = True
+
+    await asyncio.gather(_is_safe_url_async("https://example.com/x"), _tick_marker())
+    assert progressed is True

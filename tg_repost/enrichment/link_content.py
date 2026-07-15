@@ -19,6 +19,7 @@ localhost/VPN — см. план Фазы 5) без отдельного pinned-
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
 import socket
@@ -106,6 +107,20 @@ def _is_safe_url(url: str) -> bool:
     return _is_public_host(parsed.hostname)
 
 
+async def _is_safe_url_async(url: str) -> bool:
+    """Обёртка `_is_safe_url()` для вызова из async-кода.
+
+    `socket.getaddrinfo()` внутри — БЛОКИРУЮЩИЙ синхронный вызов. Весь
+    процесс (Telethon-listener, бот модерации, APScheduler) работает на
+    ОДНОМ общем event loop — прямой вызов застопорил бы вообще всё, пока
+    идёт DNS-резолв, а не только текущий рерайт (найдено на реальном
+    деплое: после включения перехода по ссылкам пайплайн полностью замолкал
+    без единой ошибки в логах — event loop был заблокирован синхронным
+    резолвом хоста из ссылки в посте). `asyncio.to_thread` уносит это в
+    отдельный поток, не трогая event loop."""
+    return await asyncio.to_thread(_is_safe_url, url)
+
+
 def _extract_main_text(soup: BeautifulSoup, max_chars: int) -> str:
     """Грубая эвристика извлечения тела статьи: <article>/<main>, иначе
     весь <body> с вырезанными служебными тегами; абзацы <p> длиннее шума."""
@@ -133,7 +148,7 @@ def _extract_image(soup: BeautifulSoup, base_url: str) -> str | None:
 
 async def fetch_link_content(url: str) -> LinkContent | None:
     """Скачать и разобрать HTML-страницу по ссылке. None при любой проблеме."""
-    if not _is_safe_url(url):
+    if not await _is_safe_url_async(url):
         logger.debug("Ссылка отклонена (не http(s) либо непубличный хост): %s", url)
         return None
 
@@ -182,7 +197,7 @@ async def download_link_image(image_url: str) -> tuple[bytes, str] | None:
     размера. Расширение всегда из белого списка content-type (никогда из
     URL/имени файла, которое полностью контролируется автором исходной
     страницы — та же логика, что в `telegram/listener.py::_safe_media_extension`)."""
-    if not _is_safe_url(image_url):
+    if not await _is_safe_url_async(image_url):
         return None
     try:
         async with httpx.AsyncClient(
