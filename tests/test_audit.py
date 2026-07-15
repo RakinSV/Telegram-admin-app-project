@@ -59,8 +59,9 @@ def test_record_audit_truncates_long_detail():
 
 def test_record_audit_never_stores_secret_values():
     """Регрессия/инвариант: запись о смене секрета несёт только имя ключа
-    (target), НИКОГДА само значение — секреты в этой системе write-only
-    (см. secrets.html / settings_store.set_secret)."""
+    (target), НИКОГДА само значение — секреты в этой системе write-only по
+    умолчанию, показ значения возможен только через отдельный пароль-гейт
+    (см. settings.html / settings_store.set_secret / app.py::secrets_reveal)."""
     _clear_audit_log()
     audit.record_audit("secret_set", target="openai_api_key")
     entries = audit.list_audit_log()

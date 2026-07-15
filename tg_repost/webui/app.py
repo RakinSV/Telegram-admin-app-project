@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from tg_repost import crypto
-from tg_repost.config import get_settings, invalidate_settings_cache
+from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
     audit,
@@ -100,9 +100,20 @@ def require_setup_token(request: Request, token: str | None = None) -> None:
     raise SetupTokenRequiredError()
 
 
-def _settings_groups_context() -> list[dict]:
+def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dict]:
     """Собрать контекст `groups` для `settings.html` — переиспользуется GET
-    `/settings` и обработчиком ошибки валидации в POST `/settings/{group}`."""
+    `/settings`, обработчиком ошибки валидации в POST `/settings/{group}` и
+    POST `/secrets/{key}/reveal` (секреты и настройки на одной странице,
+    сгруппированные тематически — раньше были разнесены по /settings и
+    /secrets, что пользователь называл путаницей: "в одной указано одно,
+    в другой другое").
+
+    `revealed` — ключ секрета → расшифрованное значение, только для ЭТОГО
+    одного ответа (никогда не кэшируется и не переживает следующий GET) —
+    см. POST `/secrets/{key}/reveal`.
+    """
+    revealed = revealed or {}
+    all_secrets = {s.key: s for s in settings_store.list_secret_status()}
     return [
         {
             "key": group.key,
@@ -118,6 +129,18 @@ def _settings_groups_context() -> list[dict]:
                     "value": settings_store.effective_value(f),
                 }
                 for f in group.fields
+            ],
+            "secrets": [
+                {
+                    "key": s.key,
+                    "label": s.label,
+                    "description": s.description,
+                    "is_set": s.is_set,
+                    "masked_hint": s.masked_hint,
+                    "source": s.source,
+                    "revealed_value": revealed.get(s.key),
+                }
+                for s in (all_secrets[key] for key in group.secret_keys)
             ],
         }
         for group in settings_store.SETTINGS_GROUPS
@@ -436,6 +459,14 @@ def _protected_router() -> APIRouter:
             {"groups": _settings_groups_context(), "error": None},
         )
 
+    @router.get("/secrets", response_class=HTMLResponse)
+    async def secrets_page_redirect(request: Request) -> Response:
+        # Секреты и настройки теперь на одной странице (пользователь называл
+        # раздельные /settings и /secrets путаницей) — старая ссылка/закладка
+        # просто ведёт на объединённую страницу.
+        del request
+        return RedirectResponse(url="/settings", status_code=308)
+
     @router.post("/settings/{group_key}")
     async def settings_save(request: Request, group_key: str) -> Response:
         group = next(
@@ -495,14 +526,6 @@ def _protected_router() -> APIRouter:
                 audit.record_audit("component_resync", target="scheduler")
         return RedirectResponse(url="/settings", status_code=303)
 
-    @router.get("/secrets", response_class=HTMLResponse)
-    async def secrets_page(request: Request) -> Response:
-        return _templates.TemplateResponse(
-            request,
-            "secrets.html",
-            {"secrets": settings_store.list_secret_status()},
-        )
-
     async def _resync_if_openai_key(key: str) -> None:
         # `openai_api_key` используется долгоживущим `RewriterClient`
         # (держится в _components.rewriter, не читается заново на каждый
@@ -526,7 +549,7 @@ def _protected_router() -> APIRouter:
                 await _resync_if_openai_key(key)
             except ValueError as exc:
                 logger.warning("Не удалось сохранить секрет '%s': %s", key, exc)
-        return RedirectResponse(url="/secrets", status_code=303)
+        return RedirectResponse(url="/settings", status_code=303)
 
     @router.post("/secrets/{key}/clear")
     async def secrets_clear(request: Request, key: str) -> Response:
@@ -539,11 +562,55 @@ def _protected_router() -> APIRouter:
             cleared = settings_store.clear_secret(key)
         except ValueError as exc:
             logger.warning("Не удалось очистить секрет '%s': %s", key, exc)
-            return RedirectResponse(url="/secrets", status_code=303)
+            return RedirectResponse(url="/settings", status_code=303)
         if cleared:
             audit.record_audit("secret_clear", target=key)
             await _resync_if_openai_key(key)
-        return RedirectResponse(url="/secrets", status_code=303)
+        return RedirectResponse(url="/settings", status_code=303)
+
+    @router.post("/secrets/{key}/reveal", response_class=HTMLResponse)
+    async def secrets_reveal(
+        request: Request, key: str, password: str = Form(...)
+    ) -> Response:
+        """Показать расшифрованное значение секрета — требует повторного
+        пароля администратора (жалоба пользователя: секреты в /secrets были
+        write-only без исключений, видно было только маску последних
+        символов). Значение возвращается ТОЛЬКО в этом одном HTML-ответе,
+        нигде не кэшируется и не переживает следующий GET /settings.
+
+        Тот же rate-limit, что и на /login (`is_login_locked`/
+        `register_failed_login`) — этот роут точно так же перебирает пароль
+        администратора, отдельный счётчик не нужен, риск тот же."""
+        if key not in SECRET_FIELD_NAMES:
+            return RedirectResponse(url="/settings", status_code=303)
+
+        client_key = request.client.host if request.client else "unknown"
+        if is_login_locked(client_key):
+            return _templates.TemplateResponse(
+                request,
+                "settings.html",
+                {
+                    "groups": _settings_groups_context(),
+                    "error": "Слишком много неудачных попыток — подожди немного и попробуй снова.",
+                },
+                status_code=429,
+            )
+        if not verify_login(password):
+            register_failed_login(client_key)
+            return _templates.TemplateResponse(
+                request,
+                "settings.html",
+                {"groups": _settings_groups_context(), "error": "Неверный пароль."},
+                status_code=401,
+            )
+        clear_failed_logins(client_key)
+        audit.record_audit("secret_reveal", target=key)
+        plaintext = getattr(get_settings(), key, "")
+        return _templates.TemplateResponse(
+            request,
+            "settings.html",
+            {"groups": _settings_groups_context(revealed={key: plaintext}), "error": None},
+        )
 
     @router.get("/components", response_class=HTMLResponse)
     async def components_page(request: Request) -> Response:

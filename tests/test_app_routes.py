@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.webui import app as app_module
-from tg_repost.webui import auth, setup_token
+from tg_repost.webui import audit, auth, setup_token
 from tg_repost.webui.app import create_app
 from tg_repost.webui.settings_store import SETTINGS_GROUPS
 
@@ -245,17 +245,91 @@ def test_secrets_clear_route_removes_saved_secret_via_http():
     client = _client()
     _bootstrap(client)
     client.post("/secrets/telethon_proxy_url", data={"value": "socks5://1.2.3.4:1080"})
-    r = client.get("/secrets")
+    r = client.get("/settings")
     assert "1.2.3.4:1080" not in r.text  # write-only, введённое значение не отдаётся обратно
-    section = r.text.split("Telethon SOCKS5")[1][:600]
+    # "Telethon SOCKS5 ..." встречается на странице трижды (в описании группы,
+    # в <strong>-заголовке строки секрета и ещё раз внутри confirm() у кнопки
+    # «Очистить») — якорем берём именно <strong>-тег, он однозначен.
+    anchor = "<strong>Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)</strong>"
+    section = r.text.split(anchor)[1][:600]
     assert "не задан" not in section  # секрет сохранён — статус "ok"
 
     r = client.post("/secrets/telethon_proxy_url/clear", follow_redirects=False)
     assert r.status_code == 303
 
-    r = client.get("/secrets")
-    section = r.text.split("Telethon SOCKS5")[1][:600]
+    r = client.get("/settings")
+    section = r.text.split(anchor)[1][:600]
     assert "не задан" in section
+
+
+def test_secrets_get_redirects_to_settings():
+    """Старая ссылка /secrets (закладка, внешняя ссылка) не должна 404 —
+    секреты и настройки объединены на одной странице /settings."""
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/secrets", follow_redirects=False)
+    assert r.status_code == 308
+    assert r.headers["location"] == "/settings"
+
+
+def test_secrets_reveal_with_correct_password_shows_plaintext():
+    client = _client()
+    _bootstrap(client, password="reveal-test-password-1")
+    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
+
+    r = client.post(
+        "/secrets/telethon_proxy_url/reveal",
+        data={"password": "reveal-test-password-1"},
+    )
+    assert r.status_code == 200
+    assert "socks5://9.9.9.9:1080" in r.text
+
+
+def test_secrets_reveal_with_wrong_password_does_not_show_plaintext():
+    client = _client()
+    _bootstrap(client, password="reveal-test-password-2")
+    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
+
+    r = client.post(
+        "/secrets/telethon_proxy_url/reveal",
+        data={"password": "totally-wrong-password"},
+    )
+    assert r.status_code == 401
+    assert "socks5://9.9.9.9:1080" not in r.text
+    assert "Неверный пароль" in r.text
+
+
+def test_secrets_reveal_records_audit_entry():
+    client = _client()
+    _bootstrap(client, password="reveal-test-password-3")
+    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
+    _clear_audit_before = len(audit.list_audit_log())
+    client.post(
+        "/secrets/telethon_proxy_url/reveal",
+        data={"password": "reveal-test-password-3"},
+    )
+    entries = audit.list_audit_log()
+    assert len(entries) > _clear_audit_before
+    assert entries[0].action == "secret_reveal"
+    assert entries[0].target == "telethon_proxy_url"
+    assert entries[0].detail is None  # НИКОГДА не хранить само значение в аудит-логе
+
+
+def test_secrets_reveal_locks_out_after_repeated_wrong_passwords():
+    client = _client()
+    _bootstrap(client, password="reveal-test-password-4")
+    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
+    for _ in range(auth._MAX_FAILED_ATTEMPTS):
+        client.post(
+            "/secrets/telethon_proxy_url/reveal",
+            data={"password": "wrong"},
+        )
+    r = client.post(
+        "/secrets/telethon_proxy_url/reveal",
+        data={"password": "reveal-test-password-4"},  # даже верный пароль заблокирован
+    )
+    assert r.status_code == 429
+    assert "socks5://9.9.9.9:1080" not in r.text
 
 
 def test_sources_create_and_list_round_trip():

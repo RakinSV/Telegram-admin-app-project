@@ -52,6 +52,13 @@ class SettingsGroup:
     title: str
     fields: tuple[SettingField, ...]
     description: str = ""
+    # Секреты, тематически относящиеся к этой группе — рендерятся в том же
+    # блоке `/settings`, а не на отдельной странице `/secrets` (раньше
+    # настройки и секреты были разнесены по двум страницам, что пользователь
+    # называл путаницей: "в одной указан один, в другой другой"). Каждый ключ
+    # из SECRET_FIELD_NAMES должен входить РОВНО в одну группу — см.
+    # регресс-тест test_every_secret_field_belongs_to_exactly_one_group.
+    secret_keys: tuple[str, ...] = ()
 
 
 SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
@@ -64,24 +71,27 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "Данные Telethon-приложения (my.telegram.org) — НЕ токен бота, "
         "другой тип credentials. Owner user ID — твой личный Telegram id "
         "(узнать у @userinfobot), кому бот шлёт посты на модерацию.",
+        secret_keys=("tg_api_hash", "tg_bot_token", "tg_session_string"),
     ),
     SettingsGroup(
-        "proxy", "Прокси — MTProto для Telethon (альтернатива, host/port; секрет см. /secrets)",
+        "proxy", "Прокси — MTProto для Telethon (альтернатива, host/port; секрет ниже в этой группе)",
         (
             # host/port сами по себе не секрет (бесполезны без mtproto_proxy_secret
-            # с /secrets) — тот же класс полей, что "телеграм-идентичность" выше:
-            # применяются к НОВОМУ клиенту, для уже запущенного listener'а нужен
-            # ручной рестарт на /components (не needs_resync — тот флаг только про
-            # состав джобов планировщика, не про пересборку Telethon-клиента).
+            # ниже в этой же группе) — тот же класс полей, что "телеграм-
+            # идентичность" выше: применяются к НОВОМУ клиенту, для уже
+            # запущенного listener'а нужен ручной рестарт на /components (не
+            # needs_resync — тот флаг только про состав джобов планировщика,
+            # не про пересборку Telethon-клиента).
             SettingField("mtproto_proxy_host", "MTProto proxy host (для Telethon)", "str"),
             SettingField("mtproto_proxy_port", "MTProto proxy port", "int"),
         ),
         "Если Telegram зарезан у провайдера/на сервере — сначала попробуй "
-        "«Telethon SOCKS5 Proxy URL» на /secrets, это ПРОЩЕ и БЕЗ ограничения "
+        "секрет «Telethon SOCKS5 Proxy URL» ниже, это ПРОЩЕ и БЕЗ ограничения "
         "fake-TLS (см. подсказку там). Эта пара host/port — для альтернативного "
-        "MTProto-пути (секрет — отдельно на /secrets), не работает с секретами "
-        "формата ee. Bot API ботов проксируется отдельно, своим SOCKS5 на "
-        "/secrets — другой протокол, не путать.",
+        "MTProto-пути (секрет — тоже ниже), не работает с секретами "
+        "формата ee. Bot API ботов проксируется отдельно, своим SOCKS5 "
+        "ниже — другой протокол, не путать.",
+        secret_keys=("mtproto_proxy_secret", "telethon_proxy_url", "bot_api_proxy_url"),
     ),
     SettingsGroup(
         "rewrite", "Рерайт — F06",
@@ -91,6 +101,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         ),
         "Куда идут запросы на переписывание постов. Любой OpenAI-совместимый "
         "провайдер — не обязательно сам OpenAI (локальная Ollama, прокси и т.д.).",
+        secret_keys=("openai_api_key",),
     ),
     SettingsGroup(
         "filtering", "Фильтрация по словам — F03",
@@ -189,7 +200,8 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         ),
         "Ищет через Brave Search доп. ссылки по теме поста, добавляет блок "
         "«📚 Источники» — рост доверия к посту. Нужен ключ Brave Search API "
-        "на /secrets, иначе блок просто не добавляется.",
+        "ниже, иначе блок просто не добавляется.",
+        secret_keys=("brave_api_key",),
     ),
     SettingsGroup(
         "covers", "Авто-обложки — F18",
@@ -209,6 +221,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "ключевым словам (быстро, бесплатно, не уникально); comfyui — "
         "AI-генерация через твою локальную установку (нужны workflow JSON "
         "в API-формате и ID узла промпта — специфично для конкретной установки).",
+        secret_keys=("unsplash_access_key",),
     ),
     SettingsGroup(
         "smart_schedule", "Умное расписание — F19",
@@ -275,7 +288,7 @@ SECRET_LABELS: dict[str, str] = {
 # что TG_API_ID/HASH и TG_BOT_TOKEN — это два РАЗНЫХ места получения).
 SECRET_HINTS: dict[str, str] = {
     "tg_api_hash": (
-        "Пара с API ID (см. группу «Telegram (идентичность)» в /settings). "
+        "Пара с полем «API ID» выше, в этой же группе. "
         "Получить: my.telegram.org → API development tools → создать приложение."
     ),
     "tg_session_string": (
@@ -295,7 +308,7 @@ SECRET_HINTS: dict[str, str] = {
     "unsplash_access_key": "Для авто-обложек (F18), если выбрана стратегия unsplash в /settings. Без ключа обложка не генерируется, пост публикуется без неё.",
     "mtproto_proxy_secret": (
         "Секрет-часть MTProto-прокси для Telethon (не для ботов — Bot API "
-        "прокси ниже, отдельно). Host/port — в /settings, группа «Прокси». "
+        "прокси ниже, отдельно). Host/port — в полях выше, в этой же группе. "
         "Внимание: секреты с префиксом ee (fake-TLS) Telethon НЕ поддерживает "
         "— используй SOCKS5-прокси ниже вместо этого."
     ),
