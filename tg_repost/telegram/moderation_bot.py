@@ -335,14 +335,21 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
             return
         current = post.active_cover_variant_index or 0
     new_index = (current + direction) % len(cover_variants)
-    if not post_variants_repo.select_cover_variant(post_id, new_index):
-        return
 
+    # Файл читаем ДО записи в БД (не после) — иначе при битом/пропавшем
+    # файле select_cover_variant() уже закоммитил бы Post.media_path на
+    # несуществующий путь: publish_post/publisher.py делает
+    # Path(media_path).read_bytes() без запасного варианта на текст, так что
+    # такой "битый" пост при одобрении падал бы целиком, а не только без
+    # обложки (найдено на code-ревью).
     new_path = cover_variants[new_index].media_path
     try:
         photo_bytes = await asyncio.to_thread(Path(new_path).read_bytes)
     except OSError as exc:
         logger.warning("Не удалось прочитать файл варианта обложки %s: %s", new_path, exc)
+        return
+
+    if not post_variants_repo.select_cover_variant(post_id, new_index):
         return
 
     with session_scope() as session:
@@ -358,17 +365,23 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
         )
         preview = _format_preview(post, for_caption=True)
 
-    media = InputMediaPhoto(media=BytesIO(photo_bytes), caption=preview)
     # edit_message_media перезаливает файл целиком (в отличие от
     # edit_message_text/caption) — заметно чаще ловит TimedOut на медленном
     # соединении/через BOT_API_PROXY_URL (найдено на реальном деплое: выбор
     # варианта в БД уже применился, а сама картинка в сообщении — нет, юзер
     # видел старое фото). retry_async — тот же helper, что и в publisher.py.
+    #
+    # ВАЖНО: InputMediaPhoto/BytesIO пересобираются НА КАЖДУЮ попытку внутри
+    # лямбды, а не один раз снаружи — если первая попытка успела прочитать
+    # часть/весь BytesIO до TimedOut, повторное использование ТОГО ЖЕ объекта
+    # отправило бы retry с обрезанным или пустым файлом (курсор потока не
+    # сбрасывается сам).
+    async def _edit_media() -> None:
+        media = InputMediaPhoto(media=BytesIO(photo_bytes), caption=preview)
+        await query.edit_message_media(media=media, reply_markup=keyboard)
+
     try:
-        await retry_async(
-            lambda: query.edit_message_media(media=media, reply_markup=keyboard),
-            attempts=3, description=f"переключение обложки поста {post_id}",
-        )
+        await retry_async(_edit_media, attempts=3, description=f"переключение обложки поста {post_id}")
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Не удалось обновить фото обложки в сообщении поста %s: %s",

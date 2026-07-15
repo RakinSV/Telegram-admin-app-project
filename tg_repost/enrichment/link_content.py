@@ -7,11 +7,15 @@ Telegram-пост часто содержит только короткий ти
 переписывал по ПОЛНОМУ материалу (см. `rewriter/client.py::rewrite`).
 
 SSRF-защита: пост — недоверенный внешний ввод, ссылка в нём может указывать
-куда угодно, включая внутреннюю сеть/localhost. Резолвим хост ДО запроса и
-отклоняем приватные/loopback/link-local/резервные адреса. Не полная защита
-от DNS rebinding (httpx резолвит заново в момент реального соединения), но
-соразмерно модели угроз проекта (один админ, сам сервис живёт за
-localhost/VPN — см. план Фазы 5) без отдельного pinned-транспорта.
+куда угодно, включая внутреннюю сеть/localhost. Резолвим хост ДО КАЖДОГО
+запроса (включая редиректы — httpx НЕ настроен следовать за ними
+автоматически, см. `_safe_get_stream`, иначе публичный URL мог бы 302-
+редиректнуть на приватный адрес уже ПОСЛЕ прохождения проверки — найдено
+security-ревью) и отклоняем приватные/loopback/link-local/резервные адреса.
+Не полная защита от DNS rebinding (httpx резолвит заново в момент реального
+соединения на каждом хопе), но соразмерно модели угроз проекта (один админ,
+сам сервис живёт за localhost/VPN — см. план Фазы 5) без отдельного
+pinned-транспорта.
 
 Любая ошибка/пустой результат → None — обогащение никогда не должно ломать
 основной рерайт поста.
@@ -40,6 +44,7 @@ _URL_RE = re.compile(r"https?://[^\s<>\"']+")
 _URL_TRAILING_PUNCT = ").,!?;:»\""
 
 _MAX_DOWNLOAD_BYTES = 3_000_000
+_MAX_REDIRECTS = 3
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -121,6 +126,39 @@ async def _is_safe_url_async(url: str) -> bool:
     return await asyncio.to_thread(_is_safe_url, url)
 
 
+async def _safe_get_stream(
+    client: httpx.AsyncClient, url: str,
+) -> httpx.Response | None:
+    """GET с РУЧНЫМ ограниченным следованием за редиректами, заново
+    проверяя SSRF-безопасность ПЕРЕД КАЖДЫМ подключением — включая
+    `Location` из ответа 3xx, не только исходный URL. Клиент собирается
+    БЕЗ `follow_redirects=True` — иначе httpx сам сходил бы по `Location`
+    без этой проверки (найдено security-ревью: сервер, отвечающий на
+    внешне-публичный URL редиректом на `169.254.169.254`/`127.0.0.1`/
+    внутреннюю подсеть, полностью обходил бы проверку исходного адреса).
+
+    Возвращает ОТКРЫТЫЙ `Response` — вызывающий код обязан закрыть его
+    (`await response.aclose()`), либо `None` при любой проблеме/непройденной
+    проверке на любом хопе.
+    """
+    current_url = url
+    for _ in range(_MAX_REDIRECTS + 1):
+        if not await _is_safe_url_async(current_url):
+            logger.debug("Ссылка отклонена SSRF-проверкой: %s", current_url)
+            return None
+        request = client.build_request("GET", current_url)
+        response = await client.send(request, stream=True)
+        if response.is_redirect:
+            location = response.headers.get("location")
+            await response.aclose()
+            if not location:
+                return None
+            current_url = str(httpx.URL(current_url).join(location))
+            continue
+        return response
+    return None
+
+
 def _extract_main_text(soup: BeautifulSoup, max_chars: int) -> str:
     """Грубая эвристика извлечения тела статьи: <article>/<main>, иначе
     весь <body> с вырезанными служебными тегами; абзацы <p> длиннее шума."""
@@ -148,26 +186,24 @@ def _extract_image(soup: BeautifulSoup, base_url: str) -> str | None:
 
 async def fetch_link_content(url: str) -> LinkContent | None:
     """Скачать и разобрать HTML-страницу по ссылке. None при любой проблеме."""
-    if not await _is_safe_url_async(url):
-        logger.debug("Ссылка отклонена (не http(s) либо непубличный хост): %s", url)
-        return None
-
     settings = get_settings()
     headers = {"User-Agent": _USER_AGENT, "Accept": "text/html,application/xhtml+xml"}
     try:
         async with httpx.AsyncClient(
-            timeout=settings.link_fetch_timeout_seconds,
-            follow_redirects=True,
-            max_redirects=3,
-            headers=headers,
+            timeout=settings.link_fetch_timeout_seconds, headers=headers,
         ) as client:
-            async with client.stream("GET", url) as response:
+            response = await _safe_get_stream(client, url)
+            if response is None:
+                return None
+            try:
                 response.raise_for_status()
                 if "html" not in response.headers.get("content-type", ""):
                     return None
                 html_bytes = await _read_capped(response)
                 final_url = str(response.url)
                 encoding = response.encoding or "utf-8"
+            finally:
+                await response.aclose()
     except Exception as exc:  # noqa: BLE001
         logger.warning("Не удалось получить содержимое ссылки %s: %s", url, exc)
         return None
@@ -197,20 +233,22 @@ async def download_link_image(image_url: str) -> tuple[bytes, str] | None:
     размера. Расширение всегда из белого списка content-type (никогда из
     URL/имени файла, которое полностью контролируется автором исходной
     страницы — та же логика, что в `telegram/listener.py::_safe_media_extension`)."""
-    if not await _is_safe_url_async(image_url):
-        return None
     try:
         async with httpx.AsyncClient(
-            timeout=10.0, follow_redirects=True, max_redirects=3,
-            headers={"User-Agent": _USER_AGENT},
+            timeout=10.0, headers={"User-Agent": _USER_AGENT},
         ) as client:
-            async with client.stream("GET", image_url) as response:
+            response = await _safe_get_stream(client, image_url)
+            if response is None:
+                return None
+            try:
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").split(";")[0].strip()
                 ext = _IMAGE_CONTENT_TYPES.get(content_type)
                 if ext is None:
                     return None
                 data = await _read_capped(response)
+            finally:
+                await response.aclose()
     except Exception as exc:  # noqa: BLE001
         logger.warning("Не удалось скачать картинку статьи %s: %s", image_url, exc)
         return None

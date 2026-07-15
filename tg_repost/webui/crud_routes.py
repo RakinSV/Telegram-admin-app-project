@@ -395,7 +395,11 @@ def build_crud_router() -> APIRouter:
         path = Path(get_settings().media_dir) / filename
         if not path.is_file():
             raise HTTPException(status_code=404)
-        return FileResponse(path)
+        # nosniff — файлы в media_dir приходят из недоверенных источников
+        # (скачаны по ссылке из чужого поста, сгенерированы внешним AI-
+        # провайдером); без заголовка браузер может проигнорировать
+        # content-type и просниффить содержимое как HTML/JS.
+        return FileResponse(path, headers={"X-Content-Type-Options": "nosniff"})
 
     # --- Реклама (F21) ---
 

@@ -81,7 +81,12 @@ class ComfyUIClient:
             return None
 
         try:
-            base_workflow = self._load_workflow()
+            # asyncio.to_thread — тот же класс защиты, что и для socket.getaddrinfo
+            # в enrichment/link_content.py (найдено там же на code-ревью):
+            # прямой синхронный read_text() здесь блокировал бы ОБЩИЙ event
+            # loop (Telethon-listener, бот, планировщик — один процесс) на
+            # время чтения файла, а не только эту генерацию обложки.
+            base_workflow = await asyncio.to_thread(self._load_workflow)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Не удалось загрузить workflow ComfyUI: %s", exc)
             return None

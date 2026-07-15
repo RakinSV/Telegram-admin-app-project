@@ -170,6 +170,38 @@ def test_no_unresolved_translation_keys_across_pages(lang):
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])
+def test_no_unresolved_translation_keys_on_moderation_detail_with_variants(lang):
+    """`/moderation/{id}` не входит в общий смоук выше — ему нужен реальный
+    post_id в URL, а не просто путь без параметров. Отдельный тест: пост с
+    >1 вариантом текста и обложки (F06/F18-доп.) — рендерит секции
+    "Варианты текста"/"Варианты обложки", которые не проверялись бы иначе."""
+    from tg_repost.db.models import Post, PostCoverVariant, PostKind, PostRewriteVariant, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+    client.get(f"/lang/{lang}", follow_redirects=False)
+
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, original_text="orig", rewritten_text="v0",
+            status=PostStatus.PENDING_APPROVAL, active_rewrite_variant_index=0,
+            active_cover_variant_index=0,
+        )
+        session.add(post)
+        session.flush()
+        post_id = post.id
+        session.add(PostRewriteVariant(post_id=post_id, variant_index=0, text="v0", tokens=1))
+        session.add(PostRewriteVariant(post_id=post_id, variant_index=1, text="v1", tokens=1))
+        session.add(PostCoverVariant(post_id=post_id, variant_index=0, media_path="a.jpg"))
+        session.add(PostCoverVariant(post_id=post_id, variant_index=1, media_path="b.jpg"))
+
+    r = client.get(f"/moderation/{post_id}")
+    assert r.status_code == 200
+    found = _MISSING_KEY_RE.findall(r.text)
+    assert not found, f"/moderation/{post_id} ({lang}) has unresolved translation keys: {found}"
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
 def test_no_unresolved_translation_keys_on_public_pages(lang):
     client = _client()
     client.get(f"/lang/{lang}", follow_redirects=False)

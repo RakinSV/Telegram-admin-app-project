@@ -20,16 +20,29 @@ from tg_repost.logging_conf import get_logger
 
 logger = get_logger(__name__)
 
+# Защита от переполнения памяти/диска, если провайдер (или MITM при случайно
+# незашифрованном openai_base_url) вернёт аномально большой b64_json —
+# найдено на security-ревью: раньше декодирование и запись были не ограничены
+# по размеру (в отличие от enrichment/link_content.py::_MAX_DOWNLOAD_BYTES).
+_MAX_IMAGE_BYTES = 10_000_000
+
 
 def _decode_image(b64_json: str | None) -> bytes | None:
     """Декодировать base64-картинку из ответа images.generate(). None при
-    отсутствии данных или битой base64-строке."""
+    отсутствии данных, битой base64-строке или превышении лимита размера."""
     if not b64_json:
         return None
+    # Грубая проверка ДО декодирования (base64 раздувает исходный размер
+    # на ~33% — с запасом), точная проверка декодированной длины — ниже.
+    if len(b64_json) > _MAX_IMAGE_BYTES * 2:
+        return None
     try:
-        return base64.b64decode(b64_json)
+        data = base64.b64decode(b64_json)
     except (binascii.Error, ValueError):
         return None
+    if len(data) > _MAX_IMAGE_BYTES:
+        return None
+    return data
 
 
 class OpenAICompatibleImageClient:
@@ -50,6 +63,7 @@ class OpenAICompatibleImageClient:
         try:
             response = await self._client.images.generate(
                 model=self._model, prompt=prompt, size="1024x1024", n=1,
+                response_format="b64_json",
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
