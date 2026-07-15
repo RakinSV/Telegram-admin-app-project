@@ -1,33 +1,42 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ current_lang() }}">
 <head>
   <meta charset="utf-8">
   <title>{% block title %}tg_repost admin{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  {% macro navlink(href, label, prefix=False) %}
+  {%- set is_active = (request.url.path == href) or (prefix and request.url.path.startswith(href + '/')) -%}
+  <a href="{{ href }}"{{ ' class="active"' if is_active else '' }}>{{ label }}</a>
+  {%- endmacro %}
   <div class="layout">
     <nav class="sidebar">
-      <div class="brand">tg_repost</div>
-      <a href="/">Дашборд</a>
-      <a href="/sources">Источники</a>
-      <a href="/targets">Цели</a>
-      <a href="/moderation">Модерация</a>
-      <a href="/ads">Реклама</a>
-      <a href="/telethon-sessions">Telethon-сессии</a>
-      <a href="/stats">Статистика</a>
-      <a href="/components">Компоненты</a>
-      <a href="/settings">Настройки и секреты</a>
-      <a href="/audit">Журнал изменений</a>
-      <a href="/logs">Логи</a>
-      <div class="brand" style="margin-top: 20px;">Guardian</div>
-      <a href="/guardian">Дашборд</a>
-      <a href="/guardian/settings">Настройки</a>
-      <a href="/guardian/stopwords">Стоп-слова</a>
-      <a href="/guardian/domains">Whitelist доменов</a>
-      <a href="/guardian/trusted">Исключения</a>
-      <form method="post" action="/logout" style="margin-top: 20px;">
-        <button type="submit" class="secondary">Выйти</button>
+      <div class="brand">{{ t('app.brand') }}</div>
+      {{ navlink('/', t('nav.dashboard')) }}
+      {{ navlink('/sources', t('nav.sources'), prefix=True) }}
+      {{ navlink('/targets', t('nav.targets')) }}
+      {{ navlink('/moderation', t('nav.moderation'), prefix=True) }}
+      {{ navlink('/ads', t('nav.ads')) }}
+      {{ navlink('/telethon-sessions', t('nav.telethon_sessions')) }}
+      {{ navlink('/stats', t('nav.stats'), prefix=True) }}
+      {{ navlink('/components', t('nav.components')) }}
+      {{ navlink('/settings', t('nav.settings')) }}
+      {{ navlink('/audit', t('nav.audit')) }}
+      {{ navlink('/logs', t('nav.logs')) }}
+      <div class="brand" style="margin-top: 20px;">{{ t('app.brand.guardian') }}</div>
+      {{ navlink('/guardian', t('nav.guardian_dashboard')) }}
+      {{ navlink('/guardian/settings', t('nav.guardian_settings')) }}
+      {{ navlink('/guardian/stopwords', t('nav.guardian_stopwords')) }}
+      {{ navlink('/guardian/domains', t('nav.guardian_domains')) }}
+      {{ navlink('/guardian/trusted', t('nav.guardian_trusted')) }}
+      <div class="lang-switch">
+        {% for code in SUPPORTED_LANGS %}
+        <a href="/lang/{{ code }}?next={{ request.url.path }}"{{ ' class="active"' if current_lang() == code else '' }}>{{ code|upper }}</a>
+        {% endfor %}
+      </div>
+      <form method="post" action="/logout" style="margin-top: 12px;">
+        <button type="submit" class="secondary">{{ t('nav.logout') }}</button>
       </form>
     </nav>
     <main>

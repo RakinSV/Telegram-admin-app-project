@@ -1,42 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Статистика — tg_repost admin{% endblock %}
+{% block title %}{{ t('stats.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Статистика</h1>
-<p class="muted">
-  Просмотры опубликованных постов за последние {{ summary.window_days }} дн.
-  (окно настраивается в «Настройках» → «Статистика»). Собирается периодически
-  планировщиком, если включён сбор статистики.
-</p>
+<h1>{{ t('stats.title') }}</h1>
+<p class="muted">{{ t('stats.desc', days=summary.window_days) }}</p>
+
+<div class="section-nav">
+  <a href="/stats" class="active">{{ t('stats.tab_overview') }}</a>
+  <a href="/stats/best-times">{{ t('stats.tab_best_times') }}</a>
+  <a href="/stats/growth">{{ t('stats.tab_growth') }}</a>
+</div>
 
 <div class="grid">
   <div class="card stat">
     <div class="num">{{ summary.published }}</div>
-    <div class="label">опубликовано</div>
+    <div class="label">{{ t('stats.published') }}</div>
   </div>
   <div class="card stat">
     <div class="num">{{ summary.counted }}</div>
-    <div class="label">учтено в статистике</div>
+    <div class="label">{{ t('stats.tracked') }}</div>
   </div>
   <div class="card stat">
     <div class="num">{{ summary.total_views }}</div>
-    <div class="label">суммарно просмотров</div>
+    <div class="label">{{ t('stats.views_total') }}</div>
   </div>
   <div class="card stat">
     <div class="num">{{ "%.1f"|format(summary.avg_views) }}</div>
-    <div class="label">среднее просмотров/пост</div>
+    <div class="label">{{ t('stats.views_avg') }}</div>
   </div>
 </div>
 
 <div class="card">
   {% if summary.top_post_id %}
-  <p>🏆 Топ пост: <a href="/moderation/{{ summary.top_post_id }}">#{{ summary.top_post_id }}</a> — {{ summary.top_post_views }} просмотров</p>
+  <p>{{ t('stats.top_post_prefix') }} <a href="/moderation/{{ summary.top_post_id }}">#{{ summary.top_post_id }}</a> — {{ summary.top_post_views }} {{ t('stats.views_suffix') }}</p>
   {% else %}
-  <p class="muted">Нет данных по топ-посту.</p>
+  <p class="muted">{{ t('stats.top_post_empty') }}</p>
   {% endif %}
 </div>
-
-<p>
-  <a href="/stats/best-times">Лучшее время публикации &rarr;</a> &nbsp;·&nbsp;
-  <a href="/stats/growth">Отчёт о росте &rarr;</a>
-</p>
 {% endblock %}

@@ -1,51 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Реклама — tg_repost admin{% endblock %}
+{% import "_macros.html" as m %}
+{% block title %}{{ t('ads.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Брифы нативной рекламы</h1>
-<p class="muted">
-  Бриф — краткое описание рекламируемого продукта/услуги, которое ИИ органично
-  вписывает в текст обычного поста (каждый N-й, см. настройку
-  «ad_every_nth_post» в «Настройках» → «Реклама»). «Лимит показов» ограничивает,
-  сколько раз конкретный бриф будет использован, прежде чем отключится сам.
-</p>
-{% if truncated %}<p class="muted">Показаны первые 500 записей.</p>{% endif %}
-
+<h1>{{ t('ads.title') }}</h1>
+<p class="muted">{{ t('ads.desc') }}</p>
+{% if truncated %}<p class="muted">{{ t('common.list_truncated', limit=500) }}</p>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <div class="card">
-  <form method="post" action="/ads">
-    <div class="field-row">
-      <label for="brief_text">Текст брифа</label>
-      <input type="text" id="brief_text" name="brief_text" required>
-    </div>
-    <div class="field-row">
-      <label for="max_uses">Лимит показов (пусто — без лимита)</label>
-      <input type="text" id="max_uses" name="max_uses" placeholder="∞">
-    </div>
-    <button type="submit">Добавить</button>
+  <form method="post" action="/ads" class="inline-form">
+    <input type="text" name="brief_text" placeholder="{{ t('ads.add_placeholder') }}" required>
+    <input type="text" name="max_uses" placeholder="{{ t('ads.max_uses_placeholder') }}">
+    <button type="submit">{{ t('common.add') }}</button>
   </form>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Активен</th><th>Использован</th><th>Лимит</th><th>Текст</th><th></th></tr>
+    <tr>
+      <th>ID</th><th>{{ t('ads.col_active') }}</th><th>{{ t('ads.col_used') }}</th>
+      <th>{{ t('ads.col_limit') }}</th><th>{{ t('ads.col_text') }}</th><th></th>
+    </tr>
     {% for b in briefs %}
     <tr>
       <td>{{ b.id }}</td>
-      <td><span class="badge {{ 'ok' if b.is_active else 'muted' }}">{{ 'да' if b.is_active else 'нет' }}</span></td>
+      <td><span class="badge {{ 'ok' if b.is_active else 'muted' }}">{{ t('common.yes') if b.is_active else t('common.no') }}</span></td>
       <td>{{ b.times_used }}</td>
-      <td>{{ b.max_uses if b.max_uses is not none else '∞' }}</td>
+      <td>{{ b.max_uses if b.max_uses is not none else t('common.unlimited') }}</td>
       <td>{{ b.brief_text[:80] }}{{ '…' if b.brief_text|length > 80 else '' }}</td>
-      <td>
-        {% if b.is_active %}
-        <form method="post" action="/ads/{{ b.id }}/disable" style="display:inline;">
-          <button type="submit" class="secondary">Деактивировать</button>
-        </form>
-        {% endif %}
-      </td>
+      <td>{% if b.is_active %}{{ m.confirm_form('/ads/%d/disable'|format(b.id), t('common.deactivate')) }}{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">Брифов нет.</td></tr>
+    <tr><td colspan="6" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

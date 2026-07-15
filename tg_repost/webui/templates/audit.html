@@ -1,35 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Журнал изменений — tg_repost admin{% endblock %}
+{% block title %}{{ t('audit.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Журнал изменений</h1>
-<p class="muted">
-  Кто и когда менял настройки/секреты, одобрял/отклонял посты, перезапускал
-  компоненты — для отслеживания подотчётности (отдельно от «Логов», это
-  журнал именно мутирующих действий из админки, не общий вывод процесса).
-</p>
-<p class="muted">Всего записей: {{ total }} · страница {{ page }} из {{ pages }}</p>
+<h1>{{ t('audit.title') }}</h1>
+<p class="muted">{{ t('audit.desc') }}</p>
+<p class="muted">{{ t('audit.footer', total=total, page=page, pages=pages) }}</p>
 
 <div class="card">
   <table>
-    <tr><th>Время</th><th>Действие</th><th>Объект</th><th>Детали</th></tr>
+    <tr><th>{{ t('audit.col_time') }}</th><th>{{ t('audit.col_action') }}</th><th>{{ t('audit.col_target') }}</th><th>{{ t('audit.col_detail') }}</th></tr>
     {% for e in entries %}
     <tr>
       <td class="muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') if e.created_at else '' }}</td>
-      <td>{{ e.action }}</td>
+      <td>{{ humanize_action(e.action) }}</td>
       <td>{{ e.target or '' }}</td>
       <td>{{ e.detail or '' }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="muted">Записей нет.</td></tr>
+    <tr><td colspan="4" class="muted">{{ t('audit.empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>
 
 {% if pages > 1 %}
 <p>
-  {% if page > 1 %}<a href="/audit?page={{ page - 1 }}">&larr; Новее</a>{% endif %}
+  {% if page > 1 %}<a href="/audit?page={{ page - 1 }}">{{ t('audit.newer') }}</a>{% endif %}
   {% if page > 1 and page < pages %} · {% endif %}
-  {% if page < pages %}<a href="/audit?page={{ page + 1 }}">Старее &rarr;</a>{% endif %}
+  {% if page < pages %}<a href="/audit?page={{ page + 1 }}">{{ t('audit.older') }}</a>{% endif %}
 </p>
 {% endif %}
 {% endblock %}

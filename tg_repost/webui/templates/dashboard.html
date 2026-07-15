@@ -1,30 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Дашборд — tg_repost admin{% endblock %}
+{% block title %}{{ t('dashboard.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Дашборд</h1>
-<p class="muted">
-  Общая сводка системы: какие компоненты работают, сколько постов на каком
-  этапе (воронка), расход токенов рерайта за сегодня и последние посты.
-</p>
+<h1>{{ t('dashboard.title') }}</h1>
+<p class="muted">{{ t('dashboard.desc') }}</p>
 
 {% if not is_minimally_configured %}
 <div class="card" style="border-color: var(--warn);">
-  ⚠️ Система не сконфигурирована полностью — Telethon-listener, бот и
-  планировщик не запущены. Заполни обязательные секреты на странице
-  <a href="/secrets">«Секреты»</a> и перезапусти процесс.
+  {{ t('dashboard.not_configured_warning') | safe }}
 </div>
 {% endif %}
 
-<h2>Компоненты</h2>
+<h2>{{ t('dashboard.components_title') }}</h2>
 <div class="card grid">
   {% for name, running in components.items() %}
   <div class="stat">
-    <span class="badge {{ 'ok' if running else 'muted' }}">{{ name }}: {{ 'работает' if running else 'остановлен' }}</span>
+    <span class="badge {{ 'ok' if running else 'muted' }}">{{ name }}: {{ t('components.status_running') if running else t('components.status_stopped') }}</span>
   </div>
   {% endfor %}
 </div>
 
-<h2>Воронка постов</h2>
+<h2>{{ t('dashboard.funnel_title') }}</h2>
 <div class="card grid">
   {% for status, count in funnel.items() %}
   <div class="stat">
@@ -32,26 +27,32 @@
     <div class="label">{{ status }}</div>
   </div>
   {% else %}
-  <div class="muted">Постов ещё нет.</div>
+  <div class="muted">{{ t('dashboard.funnel_empty') }}</div>
   {% endfor %}
 </div>
 
-<h2>Метрики</h2>
+<h2>{{ t('dashboard.metrics_title') }}</h2>
 <div class="card grid">
   <div class="stat">
     <div class="num">{{ tokens_today }}</div>
-    <div class="label">Токенов рерайта сегодня</div>
+    <div class="label">{{ t('dashboard.tokens_today') }}</div>
   </div>
   <div class="stat">
     <div class="num">{{ "%.1f"|format(error_rate * 100) }}%</div>
-    <div class="label">Доля FAILED за 24ч</div>
+    <div class="label">{{ t('dashboard.error_rate') }}</div>
   </div>
 </div>
 
-<h2>Последние посты</h2>
+<h2>{{ t('dashboard.recent_posts_title') }}</h2>
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Вид</th><th>Статус</th><th>Создан</th><th>Текст</th></tr>
+    <tr>
+      <th>{{ t('dashboard.col_id') }}</th>
+      <th>{{ t('dashboard.col_kind') }}</th>
+      <th>{{ t('dashboard.col_status') }}</th>
+      <th>{{ t('dashboard.col_created') }}</th>
+      <th>{{ t('dashboard.col_text') }}</th>
+    </tr>
     {% for post in recent %}
     <tr>
       <td>{{ post.id }}</td>
@@ -61,7 +62,7 @@
       <td>{{ (post.rewritten_text or post.original_text or "")[:80] }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Постов ещё нет.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('dashboard.funnel_empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

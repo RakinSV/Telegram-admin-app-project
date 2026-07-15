@@ -1,0 +1,18 @@
+{# Общие Jinja-макросы для однотипных CRUD-списков (sources/targets/ads/
+   telethon-sessions/guardian stopwords-domains-trusted) — раньше каждый
+   шаблон реализовывал одну и ту же кнопку-с-подтверждением с нуля, без
+   единого паттерна (аудит UI: только "Очистить" секрет имел confirm(),
+   остальные деструктивные действия срабатывали мгновенно). #}
+
+{% macro confirm_form(action, label, confirm_key='common.confirm_deactivate', css_class='secondary') %}
+<form method="post" action="{{ action }}" style="display:inline;" onsubmit="return confirm('{{ t(confirm_key) }}');">
+  <button type="submit" class="{{ css_class }}">{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% macro hidden_confirm_form(action, hidden_name, hidden_value, label, confirm_key='common.confirm_delete', css_class='secondary') %}
+<form method="post" action="{{ action }}" style="display:inline;" onsubmit="return confirm('{{ t(confirm_key) }}');">
+  <input type="hidden" name="{{ hidden_name }}" value="{{ hidden_value }}">
+  <button type="submit" class="{{ css_class }}">{{ label }}</button>
+</form>
+{% endmacro %}

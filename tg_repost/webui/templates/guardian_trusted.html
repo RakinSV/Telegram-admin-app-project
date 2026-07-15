@@ -1,56 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Исключения Guardian — tg_repost admin{% endblock %}
+{% import "_macros.html" as m %}
+{% block title %}{{ t('guardian_trusted.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Доверенные пользователи (исключения)</h1>
-<p class="muted">
-  Доверенный пользователь полностью обходит спам-/линк-/антифлуд-фильтры —
-  варны не выдаются. Репост-бот (<code>REPOST_BOT_ID</code>) уже здесь
-  автоматически — без этого его посты со ссылками удалялись бы фильтром.
-  Добавляй сюда только реально доверенных людей: привилегия полная.
-</p>
+<h1>{{ t('guardian_trusted.title') }}</h1>
+<p class="muted">{{ t('guardian_trusted.desc') }}</p>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if chat_id_missing %}
 <div class="card" style="border-color: var(--warn);">
-  ⚠️ GUARDIAN_GROUP_ID не задан — добавлять доверенных пока некуда (не с чем
-  связать запись). Настрой Guardian в <code>.env</code> сначала.
+  {{ t('guardian_trusted.no_group_missing_warning') | safe }}
 </div>
 {% endif %}
 
 <div class="card">
   <form method="post" action="/guardian/trusted">
     <div class="field-row">
-      <label for="user_id">user_id</label>
-      <input type="text" id="user_id" name="user_id" placeholder="123456789" required>
+      <label for="user_id">{{ t('guardian_trusted.col_user_id') }}</label>
+      <input type="text" id="user_id" name="user_id" placeholder="{{ t('guardian_trusted.user_id_placeholder') }}" required>
+      <div class="hint">{{ t('guardian_trusted.user_id_hint') }}</div>
     </div>
-    <p class="muted" style="font-size:12px; margin: -6px 0 10px 288px;">
-      Числовой Telegram id, не @username — узнать можно переслав любое
-      сообщение этого человека боту @userinfobot.
-    </p>
     <div class="field-row">
-      <label for="reason">Причина (необязательно)</label>
-      <input type="text" id="reason" name="reason">
+      <label for="reason">{{ t('guardian_trusted.col_reason') }}</label>
+      <input type="text" id="reason" name="reason" placeholder="{{ t('guardian_trusted.reason_placeholder') }}">
     </div>
-    <button type="submit">Добавить</button>
+    <button type="submit">{{ t('common.add') }}</button>
   </form>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>user_id</th><th>Добавлен</th><th>Кем</th><th>Причина</th><th></th></tr>
-    {% for t in trusted %}
     <tr>
-      <td>{{ t.user_id }}</td>
-      <td>{{ t.added_at.strftime("%Y-%m-%d %H:%M") if t.added_at else "" }}</td>
-      <td>{{ t.added_by }}</td>
-      <td>{{ t.reason or "" }}</td>
-      <td>
-        <form method="post" action="/guardian/trusted/{{ t.user_id }}/delete" style="display:inline;">
-          <button type="submit" class="secondary">Убрать</button>
-        </form>
-      </td>
+      <th>{{ t('guardian_trusted.col_user_id') }}</th><th>{{ t('guardian_trusted.col_added_at') }}</th>
+      <th>{{ t('guardian_trusted.col_added_by') }}</th><th>{{ t('guardian_trusted.col_reason') }}</th><th></th>
+    </tr>
+    {% for tr in trusted %}
+    <tr>
+      <td>{{ tr.user_id }}</td>
+      <td>{{ tr.added_at.strftime("%Y-%m-%d %H:%M") if tr.added_at else "" }}</td>
+      <td>{{ tr.added_by }}</td>
+      <td>{{ tr.reason or "" }}</td>
+      <td>{{ m.confirm_form('/guardian/trusted/%d/delete'|format(tr.user_id), t('common.delete'), confirm_key='common.confirm_delete') }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Доверенных пользователей нет.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

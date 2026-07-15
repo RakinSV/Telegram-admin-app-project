@@ -1,16 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Модерация — tg_repost admin{% endblock %}
+{% block title %}{{ t('moderation.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Очередь модерации</h1>
-<p class="muted">
-  Посты, ожидающие ручного решения (те же, что приходят в Telegram-бот
-  владельцу с кнопками ✅/❌/✏️) — открой пост, чтобы одобрить, отклонить
-  или отредактировать текст перед публикацией.
-</p>
+<h1>{{ t('moderation.title') }}</h1>
+<p class="muted">{{ t('moderation.desc') }}</p>
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Тип</th><th>Статус</th><th>Текст</th><th>Создан</th><th></th></tr>
+    <tr>
+      <th>ID</th><th>{{ t('moderation.col_kind') }}</th><th>{{ t('common.status') }}</th>
+      <th>{{ t('moderation.col_text') }}</th><th>{{ t('moderation.col_created') }}</th><th></th>
+    </tr>
     {% for p in posts %}
     <tr>
       <td>{{ p.id }}</td>
@@ -18,10 +17,10 @@
       <td><span class="badge warn">{{ p.status.value }}</span></td>
       <td>{{ (p.rewritten_text or p.original_text or '')[:80] }}{{ '…' if (p.rewritten_text or p.original_text or '')|length > 80 else '' }}</td>
       <td class="muted">{{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else '' }}</td>
-      <td><a href="/moderation/{{ p.id }}">Открыть</a></td>
+      <td><a href="/moderation/{{ p.id }}">{{ t('common.open') }}</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">Очередь пуста.</td></tr>
+    <tr><td colspan="6" class="muted">{{ t('moderation.empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

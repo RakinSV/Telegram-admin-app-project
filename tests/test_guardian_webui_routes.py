@@ -238,4 +238,7 @@ def test_guardian_mutations_write_audit_log():
         "/guardian/stopwords", data={"word": "спамслово"}, follow_redirects=False
     )
     r = client.get("/audit")
-    assert "guardian_stopword_add" in r.text
+    # Сырой action-ключ гуманизируется в UI (аудит: "guardian_stopword_add"
+    # нечитаем для не-разработчика) — см. i18n.humanize_action / audit.html.
+    assert "Добавлено стоп-слово" in r.text
+    assert "спамслово" in r.text

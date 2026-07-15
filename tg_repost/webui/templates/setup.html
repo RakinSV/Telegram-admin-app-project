@@ -1,51 +1,45 @@
 {% extends "auth_base.html" %}
-{% block title %}Первый запуск — tg_repost admin{% endblock %}
+{% block title %}{{ t('setup.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<div class="auth-page" style="max-width: 460px;">
-  <h1>Первый запуск</h1>
-  <p class="muted">
-    Создай пароль администратора и (опционально) сразу укажи минимум секретов,
-    чтобы запустить чтение каналов и публикацию. Всё, что оставишь пустым,
-    можно будет заполнить позже на странице «Секреты».
-  </p>
+<div class="auth-page" style="max-width: 480px;">
+  <h1>{{ t('setup.title') }}</h1>
+  <p class="muted">{{ t('setup.intro') | safe }}</p>
 
   {% if telethon_connected %}
   <div class="card" style="border-color: var(--ok);">
-    ✅ Telegram-сессия уже получена и сохранена.
+    {{ t('setup.telethon_connected') }}
   </div>
   {% else %}
   <div class="card">
-    Telethon-аккаунт ещё не подключён.
-    <a href="/setup/telethon">Войти через Telegram →</a>
+    {{ t('setup.telethon_not_connected') }}
+    <a href="/setup/telethon">{{ t('setup.telethon_connect_cta') }}</a>
   </div>
   {% endif %}
 
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="post" action="/setup">
-    <h2 style="margin-top:0">Пароль администратора</h2>
-    <input type="password" name="password" placeholder="Пароль (мин. 8 символов)" required minlength="8">
-    <input type="password" name="password_confirm" placeholder="Повтори пароль" required minlength="8">
+    <div class="card">
+      <h2 style="margin-top:0">{{ t('setup.password_section_title') }}</h2>
+      <input type="password" name="password" placeholder="{{ t('setup.password_placeholder') }}" required minlength="8">
+      <input type="password" name="password_confirm" placeholder="{{ t('setup.password_confirm_placeholder') }}" required minlength="8">
+    </div>
 
-    <h2>Telegram (опционально сейчас)</h2>
-    <p class="muted" style="margin-top:0">
-      TG_API_ID и TG_API_HASH — с <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a>
-      (API development tools → создать приложение; Short name — только латиница/цифры,
-      без пробелов). TG_BOT_TOKEN — от @BotFather в самом Telegram (команда /newbot).
-      TG_OWNER_USER_ID — твой числовой Telegram ID (узнать у @userinfobot).
-    </p>
-    <input type="text" name="tg_api_id" placeholder="TG_API_ID">
-    <input type="text" name="tg_api_hash" placeholder="TG_API_HASH">
-    <input type="text" name="tg_bot_token" placeholder="TG_BOT_TOKEN">
-    <input type="text" name="tg_owner_user_id" placeholder="TG_OWNER_USER_ID">
+    <div class="card">
+      <h2 style="margin-top:0">{{ t('setup.telegram_section_title') }}</h2>
+      <p class="muted" style="margin-top:0">{{ t('setup.telegram_section_desc') | safe }}</p>
+      <input type="text" name="tg_api_id" placeholder="TG_API_ID">
+      <input type="text" name="tg_api_hash" placeholder="TG_API_HASH">
+      <input type="text" name="tg_bot_token" placeholder="TG_BOT_TOKEN">
+      <input type="text" name="tg_owner_user_id" placeholder="TG_OWNER_USER_ID">
+    </div>
 
-    <h2>Рерайт (опционально сейчас)</h2>
-    <p class="muted" style="margin-top:0">
-      Ключ OpenAI-совместимого API (сам OpenAI, либо прокси/локальная модель —
-      см. OPENAI_BASE_URL в «Настройках» после создания администратора).
-    </p>
-    <input type="text" name="openai_api_key" placeholder="OPENAI_API_KEY">
+    <div class="card">
+      <h2 style="margin-top:0">{{ t('setup.rewrite_section_title') }}</h2>
+      <p class="muted" style="margin-top:0">{{ t('setup.rewrite_section_desc') }}</p>
+      <input type="text" name="openai_api_key" placeholder="OPENAI_API_KEY">
+    </div>
 
-    <input type="submit" value="Создать администратора и продолжить" style="margin-top: 12px;">
+    <input type="submit" value="{{ t('setup.submit') }}" style="margin-top: 4px;">
   </form>
 </div>
 {% endblock %}

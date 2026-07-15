@@ -29,7 +29,7 @@ from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
-from tg_repost.webui import audit, log_broadcast
+from tg_repost.webui import audit, i18n, log_broadcast
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs
 
@@ -44,6 +44,13 @@ logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).parent
 _templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+# Отдельный экземпляр Jinja2Templates/Environment от `app.py` (тот же каталог
+# шаблонов на диске, но другой объект в памяти) — глобалы `t`/`current_lang`
+# нужно регистрировать в КАЖДОМ, иначе `{{ t(...) }}` в шаблонах, отданных
+# через ЭТОТ роутер, упадёт с UndefinedError.
+_templates.env.globals["t"] = i18n.t
+_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates.env.globals["humanize_action"] = i18n.humanize_action
 
 
 def build_crud_router() -> APIRouter:
@@ -117,7 +124,7 @@ def build_crud_router() -> APIRouter:
         if enrich_mode not in ("on", "off", "default"):
             return _templates.TemplateResponse(
                 request, "source_detail.html",
-                _source_detail_context(source, "Недопустимый режим добора источников."),
+                _source_detail_context(source, i18n.t("source_detail.error_invalid_enrich_mode")),
                 status_code=400,
             )
         sources_repo.set_source_enrich(source_id, enrich_mode)
@@ -132,7 +139,7 @@ def build_crud_router() -> APIRouter:
                 request, "source_detail.html",
                 _source_detail_context(
                     sources_repo.get_source(source_id),
-                    "Цели должны быть числами (chat_id).",
+                    i18n.t("source_detail.error_invalid_targets"),
                 ),
                 status_code=400,
             )
@@ -168,7 +175,7 @@ def build_crud_router() -> APIRouter:
         except ValueError:
             return _templates.TemplateResponse(request, "targets.html", {
                 "targets": targets_repo.list_targets(),
-                "error": "chat_id должен быть целым числом.",
+                "error": i18n.t("targets.error_invalid_chat_id"),
             }, status_code=400)
         targets_repo.add_target(chat_id_int, title.strip() or None)
         audit.record_audit("target_add", target=str(chat_id_int))
@@ -234,8 +241,7 @@ def build_crud_router() -> APIRouter:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 {"post": moderation_repo.get_post(post_id),
-                 "error": "Бот модерации не запущен — публикация невозможна. "
-                          "Запусти компоненты на странице «Компоненты»."},
+                 "error": i18n.t("moderation_detail.error_bot_not_running")},
                 status_code=400,
             )
         try:
@@ -293,7 +299,7 @@ def build_crud_router() -> APIRouter:
         else:
             return _templates.TemplateResponse(request, "ads.html", {
                 "briefs": ads_repo.list_briefs(),
-                "error": "Лимит показов должен быть целым неотрицательным числом или пустым.",
+                "error": i18n.t("ads.error_invalid_max_uses"),
             }, status_code=400)
         brief = ads_repo.add_brief(brief_text.strip(), max_uses_int)
         audit.record_audit("ad_brief_add", target=f"#{brief.id}", detail=brief.brief_text[:80])

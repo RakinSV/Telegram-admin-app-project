@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tg_repost import crypto
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
@@ -21,6 +22,7 @@ from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
     audit,
     dashboard,
+    i18n,
     runtime_state,
     settings_store,
     setup_token,
@@ -53,6 +55,32 @@ logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).parent
 _templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+_templates.env.globals["t"] = i18n.t
+_templates.env.globals["SUPPORTED_LANGS"] = i18n.SUPPORTED_LANGS
+_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates.env.globals["humanize_action"] = i18n.humanize_action
+
+
+class LanguageMiddleware:
+    """Выставляет `ContextVar` текущего языка (см. `webui/i18n.py`) из
+    сессии ДО обработки запроса. Обычный ASGI-мидлварь, а не Starlette
+    `BaseHTTPMiddleware` — тот ломает потоковые ответы (используется SSE в
+    `/logs/stream`, см. `webui/log_broadcast.py`).
+
+    ВАЖНО: должен быть добавлен ДО `SessionMiddleware` в `create_app()` —
+    `add_middleware()` оборачивает по принципу "последний добавленный —
+    самый внешний", а этому мидлварю нужен уже распарсенный `scope["session"]`,
+    который заполняет `SessionMiddleware`.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            session = scope.get("session", {})
+            i18n.set_current_lang(session.get("lang", i18n.DEFAULT_LANG))
+        await self.app(scope, receive, send)
 
 
 def _ensure_session_secret() -> str:
@@ -117,12 +145,12 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
     return [
         {
             "key": group.key,
-            "title": group.title,
-            "description": group.description,
+            "title": i18n.t(f"settings.group.{group.key}.title"),
+            "description": i18n.t(f"settings.group.{group.key}.desc"),
             "fields": [
                 {
                     "name": f.name,
-                    "label": f.label,
+                    "label": i18n.t(f"settings.field.{f.name}.label"),
                     "value_type": f.value_type,
                     "needs_resync": f.needs_resync,
                     "choices": f.choices,
@@ -133,8 +161,8 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
             "secrets": [
                 {
                     "key": s.key,
-                    "label": s.label,
-                    "description": s.description,
+                    "label": i18n.t(f"secrets.field.{s.key}.label"),
+                    "description": i18n.t(f"secrets.field.{s.key}.hint"),
                     "is_set": s.is_set,
                     "masked_hint": s.masked_hint,
                     "source": s.source,
@@ -199,7 +227,7 @@ def _telethon_wizard_routes(
             return _templates.TemplateResponse(
                 request,
                 "telethon_login.html",
-                _ctx("phone", error="Укажи TG_API_ID и TG_API_HASH."),
+                _ctx("phone", error=i18n.t("telethon.step_phone.missing_creds")),
                 status_code=400,
             )
 
@@ -291,6 +319,17 @@ def _telethon_wizard_routes(
 def _public_router() -> APIRouter:
     """Роуты без авторизации: бутстрап-визард и логин."""
     router = APIRouter()
+
+    @router.get("/lang/{code}")
+    async def set_language(request: Request, code: str, next: str = "/") -> Response:
+        """Переключить язык интерфейса — доступно без логина (нужен и на
+        /login и /setup). `next` вместо `Referer`-заголовка для редиректа
+        обратно: `Referer` может быть чужим origin (открытый редирект),
+        `next` валидируется как локальный путь."""
+        request.session["lang"] = i18n.normalize_lang(code)
+        target = next if next.startswith("/") and not next.startswith("//") else "/"
+        return RedirectResponse(url=target, status_code=303)
+
     _telethon_wizard_routes(
         router,
         "/setup/telethon",
@@ -339,7 +378,7 @@ def _public_router() -> APIRouter:
                 request,
                 "setup.html",
                 {
-                    "error": "Пароли не совпадают или короче 8 символов",
+                    "error": i18n.t("setup.error_password_mismatch"),
                     "telethon_connected": telethon_connected,
                 },
                 status_code=400,
@@ -409,9 +448,7 @@ def _public_router() -> APIRouter:
             return _templates.TemplateResponse(
                 request,
                 "login.html",
-                {
-                    "error": "Слишком много неудачных попыток — подожди немного и попробуй снова."
-                },
+                {"error": i18n.t("login.error_locked")},
                 status_code=429,
             )
         if not verify_login(password):
@@ -419,7 +456,7 @@ def _public_router() -> APIRouter:
             return _templates.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Неверный пароль"},
+                {"error": i18n.t("login.error_wrong_password")},
                 status_code=401,
             )
         clear_failed_logins(client_key)
@@ -492,8 +529,10 @@ def _protected_router() -> APIRouter:
                     "settings.html",
                     {
                         "groups": _settings_groups_context(),
-                        "error": f"Некорректное значение в группе «{group.title}» — "
-                        f"числовое поле должно содержать число.",
+                        "error": i18n.t(
+                            "settings.error_invalid_number",
+                            group=i18n.t(f"settings.group.{group.key}.title"),
+                        ),
                     },
                     status_code=400,
                 )
@@ -504,8 +543,11 @@ def _protected_router() -> APIRouter:
                         "settings.html",
                         {
                             "groups": _settings_groups_context(),
-                            "error": f"«{field.label}» должно быть одним из: "
-                            f"{', '.join(field.choices)}.",
+                            "error": i18n.t(
+                                "settings.error_invalid_choice",
+                                field=i18n.t(f"settings.field.{field.name}.label"),
+                                choices=", ".join(field.choices),
+                            ),
                         },
                         status_code=400,
                     )
@@ -591,7 +633,7 @@ def _protected_router() -> APIRouter:
                 "settings.html",
                 {
                     "groups": _settings_groups_context(),
-                    "error": "Слишком много неудачных попыток — подожди немного и попробуй снова.",
+                    "error": i18n.t("login.error_locked"),
                 },
                 status_code=429,
             )
@@ -600,7 +642,7 @@ def _protected_router() -> APIRouter:
             return _templates.TemplateResponse(
                 request,
                 "settings.html",
-                {"groups": _settings_groups_context(), "error": "Неверный пароль."},
+                {"groups": _settings_groups_context(), "error": i18n.t("login.error_wrong_password")},
                 status_code=401,
             )
         clear_failed_logins(client_key)
@@ -663,6 +705,12 @@ def _protected_router() -> APIRouter:
 def create_app() -> FastAPI:
     """Собрать FastAPI-приложение веб-админки."""
     app = FastAPI(title="tg_repost admin", docs_url=None, redoc_url=None)
+    # Порядок важен: add_middleware() оборачивает "последний добавленный —
+    # самый внешний", а LanguageMiddleware нужен уже распарсенный
+    # scope["session"] от SessionMiddleware — поэтому Language добавляется
+    # ПЕРВЫМ (окажется внутренним), Session — ПОСЛЕДНИМ (внешний, успевает
+    # отработать раньше).
+    app.add_middleware(LanguageMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=_ensure_session_secret(),

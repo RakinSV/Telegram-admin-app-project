@@ -1,12 +1,12 @@
 {% extends "auth_base.html" %}
-{% block title %}Вход — tg_repost admin{% endblock %}
+{% block title %}{{ t('login.title') }} — tg_repost admin{% endblock %}
 {% block content %}
 <div class="auth-page">
-  <h1>Вход</h1>
+  <h1>{{ t('login.title') }}</h1>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
   <form method="post" action="/login">
-    <input type="password" name="password" placeholder="Пароль" required autofocus>
-    <input type="submit" value="Войти">
+    <input type="password" name="password" placeholder="{{ t('login.password_placeholder') }}" required autofocus>
+    <input type="submit" value="{{ t('login.submit') }}">
   </form>
 </div>
 {% endblock %}

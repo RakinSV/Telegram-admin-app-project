@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Источник @{{ source.channel_username }} — tg_repost admin{% endblock %}
+{% block title %}@{{ source.channel_username }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Источник @{{ source.channel_username }}</h1>
+<h1>@{{ source.channel_username }}</h1>
 <p class="muted">{{ source.channel_title or '' }}</p>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
@@ -9,7 +9,7 @@
 <div class="card">
   <form method="post" action="/sources/{{ source.id }}">
     <div class="field-row">
-      <label for="style_profile">Стиль рерайта</label>
+      <label for="style_profile">{{ t('source_detail.style_label') }}</label>
       <select id="style_profile" name="style_profile">
         <option value="" {{ 'selected' if not source.style_profile else '' }}>default</option>
         {% for st in known_styles %}
@@ -18,50 +18,44 @@
       </select>
     </div>
     <div class="field-row">
-      <label for="enrich_mode">Добор источников (F16)</label>
+      <label for="enrich_mode">{{ t('source_detail.enrich_label') }}</label>
       <select id="enrich_mode" name="enrich_mode">
-        <option value="default" {{ 'selected' if source.enrich_sources is none else '' }}>по глобальной настройке</option>
-        <option value="on" {{ 'selected' if source.enrich_sources == True else '' }}>включён</option>
-        <option value="off" {{ 'selected' if source.enrich_sources == False else '' }}>выключен</option>
+        <option value="default" {{ 'selected' if source.enrich_sources is none else '' }}>{{ t('source_detail.enrich_default') }}</option>
+        <option value="on" {{ 'selected' if source.enrich_sources == True else '' }}>{{ t('source_detail.enrich_on') }}</option>
+        <option value="off" {{ 'selected' if source.enrich_sources == False else '' }}>{{ t('source_detail.enrich_off') }}</option>
       </select>
     </div>
     <div class="field-row" style="align-items: flex-start;">
-      <label>Куда публиковать</label>
+      <label>{{ t('source_detail.targets_label') }}</label>
       <div style="flex:1;">
         {% if targets or orphan_ids %}
-        <p class="muted" style="margin:0 0 8px;">
-          Отметь целевые группы, куда идут посты именно из этого источника.
-          Ничего не отмечено — публикуется во <strong>все активные</strong> цели.
-        </p>
+        <p class="muted" style="margin:0 0 8px;">{{ t('source_detail.targets_hint') }}</p>
         <div class="check-list">
-          {% for t in targets %}
+          {% for tg in targets %}
           <label class="check-item">
-            <input type="checkbox" name="target_chat_ids" value="{{ t.chat_id }}"
-                   {{ 'checked' if t.chat_id in selected_chat_ids else '' }}>
-            <span>{{ t.title or t.chat_id }}
-              {% if not t.title %}{% else %}<span class="muted">· {{ t.chat_id }}</span>{% endif %}
-              {% if not t.is_active %}<span class="badge muted">неактивна</span>{% endif %}
+            <input type="checkbox" name="target_chat_ids" value="{{ tg.chat_id }}"
+                   {{ 'checked' if tg.chat_id in selected_chat_ids else '' }}>
+            <span>{{ tg.title or tg.chat_id }}
+              {% if tg.title %}<span class="muted">· {{ tg.chat_id }}</span>{% endif %}
+              {% if not tg.is_active %}<span class="badge muted">{{ t('source_detail.inactive_badge') }}</span>{% endif %}
             </span>
           </label>
           {% endfor %}
           {% for cid in orphan_ids %}
           <label class="check-item">
             <input type="checkbox" name="target_chat_ids" value="{{ cid }}" checked>
-            <span>{{ cid }} <span class="badge warn">нет в списке целей</span></span>
+            <span>{{ cid }} <span class="badge warn">{{ t('source_detail.orphan_badge') }}</span></span>
           </label>
           {% endfor %}
         </div>
         {% else %}
-        <p class="muted" style="margin:0;">
-          Целевых групп пока нет — <a href="/targets">добавь хотя бы одну</a>,
-          чтобы выбрать, куда публиковать. Сейчас посты идут во все активные цели.
-        </p>
+        <p class="muted" style="margin:0;">{{ t('source_detail.targets_empty_hint') | safe }}</p>
         {% endif %}
       </div>
     </div>
-    <button type="submit">Сохранить</button>
+    <button type="submit">{{ t('common.save') }}</button>
   </form>
 </div>
 
-<p><a href="/sources">&larr; К списку источников</a></p>
+<p><a href="/sources">{{ t('source_detail.back_link') }}</a></p>
 {% endblock %}

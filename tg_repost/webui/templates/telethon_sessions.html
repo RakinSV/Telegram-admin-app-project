@@ -1,57 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Доп. Telethon-сессии — tg_repost admin{% endblock %}
+{% import "_macros.html" as m %}
+{% block title %}{{ t('telethon_sessions.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Дополнительные Telethon-сессии (F26)</h1>
-<p class="muted">
-  Источники распределяются между основной сессией (<code>TG_SESSION_STRING</code>)
-  и активными сессиями ниже — снижает риск ограничений на один аккаунт при
-  большом числе источников. После добавления/отключения сессии перезапусти
-  listener на странице «Компоненты», чтобы изменение применилось.
-</p>
+<h1>{{ t('telethon_sessions.title') }}</h1>
+<p class="muted">{{ t('telethon_sessions.desc', cmd='<code>python -m tg_repost.tools.gen_session</code>') | safe }}</p>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <div class="card">
   <form method="post" action="/telethon-sessions">
     <div class="field-row">
-      <label for="label">Метка</label>
-      <input type="text" id="label" name="label" placeholder="account-2" required>
+      <label for="label">{{ t('telethon_sessions.col_label') }}</label>
+      <input type="text" id="label" name="label" placeholder="{{ t('telethon_sessions.label_placeholder') }}" required>
     </div>
     <div class="field-row">
-      <label for="session_string">Session string</label>
-      <input type="password" id="session_string" name="session_string" required
-             placeholder="уже сгенерированная python -m tg_repost.tools.gen_session">
+      <label for="session_string">{{ t('telethon_sessions.session_placeholder') }}</label>
+      <input type="password" id="session_string" name="session_string" required>
     </div>
-    <button type="submit">Добавить</button>
+    <button type="submit">{{ t('common.add') }}</button>
   </form>
   <p class="muted" style="margin-top:8px;">
-    Session string даёт полный доступ к Telegram-аккаунту — вводи только уже
-    сгенерированную через <code>python -m tg_repost.tools.gen_session</code>
-    (полноценный визард телефон/код для доп. аккаунтов пока не реализован,
-    как и для основной сессии в Фазе 5.1). Значение никогда не отображается
-    повторно — только маска.
+    {{ t('telethon_sessions.session_hint', cmd='<code>python -m tg_repost.tools.gen_session</code>') | safe }}
   </p>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Активна</th><th>Метка</th><th>Маска</th><th></th></tr>
+    <tr>
+      <th>ID</th><th>{{ t('telethon_sessions.col_active') }}</th>
+      <th>{{ t('telethon_sessions.col_label') }}</th><th>{{ t('telethon_sessions.col_mask') }}</th><th></th>
+    </tr>
     {% for s in sessions %}
     <tr>
       <td>{{ s.id }}</td>
-      <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ 'да' if s.is_active else 'нет' }}</span></td>
+      <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ t('common.yes') if s.is_active else t('common.no') }}</span></td>
       <td>{{ s.label }}</td>
       <td>{{ s.masked_hint }}</td>
-      <td>
-        {% if s.is_active %}
-        <form method="post" action="/telethon-sessions/{{ s.id }}/disable" style="display:inline;">
-          <button type="submit" class="secondary">Деактивировать</button>
-        </form>
-        {% endif %}
-      </td>
+      <td>{% if s.is_active %}{{ m.confirm_form('/telethon-sessions/%d/disable'|format(s.id), t('common.deactivate')) }}{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Дополнительных сессий нет — используется только основная.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('telethon_sessions.empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

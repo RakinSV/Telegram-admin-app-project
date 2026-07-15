@@ -1,23 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Настройки и секреты — tg_repost admin{% endblock %}
+{% block title %}{{ t('settings.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Настройки и секреты</h1>
+<h1>{{ t('settings.title') }}</h1>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
-<p class="muted">
-  Все значения применяются сразу после сохранения группы — отдельно
-  перезапускать ничего не нужно. Поля с пометкой
-  <span class="badge warn">resync</span> дополнительно синхронизируют состав/
-  расписание задач планировщика (автоматически, если компоненты уже
-  запущены — см. статус на «Компоненты»). Настройки идентичности
-  (Telegram/Прокси) применяются к следующему пересозданному клиенту — для
-  уже запущенного нужен ручной рестарт на «Компоненты». Секреты — write-only:
-  введённое значение шифруется и сохраняется, но не отображается обратно —
-  только маска последних символов, если только не нажать «Показать» и не
-  ввести пароль администратора повторно.
-</p>
+<p class="muted">{{ t('settings.intro', resync='<span class="badge warn">' ~ t('common.resync_badge') ~ '</span>') | safe }}</p>
+
+<div class="section-nav">
+  <span class="muted" style="font-size:11px; align-self:center; padding: 0 4px;">{{ t('settings.jump_to') }}:</span>
+  {% for group in groups %}
+  <a href="#{{ group.key }}">{{ group.title }}</a>
+  {% endfor %}
+</div>
 
 {% for group in groups %}
-<div class="settings-group">
+<div class="settings-group" id="{{ group.key }}">
   <h2>{{ group.title }}</h2>
   {% if group.description %}<p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ group.description }}</p>{% endif %}
   <div class="card">
@@ -26,7 +22,7 @@
       <div class="field-row">
         <label for="{{ field.name }}">
           {{ field.label }}
-          {% if field.needs_resync %}<span class="badge warn">resync</span>{% endif %}
+          {% if field.needs_resync %}<span class="badge warn">{{ t('common.resync_badge') }}</span>{% endif %}
         </label>
         {% if field.choices %}
           <select id="{{ field.name }}" name="{{ field.name }}">
@@ -45,60 +41,60 @@
         {% endif %}
       </div>
       {% endfor %}
-      <button type="submit">Сохранить группу</button>
+      <button type="submit">{{ t('common.save_group') }}</button>
     </form>
   </div>
 
   {% if group.secrets %}
   <div class="card">
-    <h2 style="margin-top:0;">Секреты группы</h2>
+    <h2 style="margin-top:0;">{{ t('settings.secrets_subtitle') }}</h2>
     {% for s in group.secrets %}
-    <div style="padding: 10px 0; border-top: 1px solid var(--border);">
+    <div class="secret-row">
       <div>
         <strong>{{ s.label }}</strong>
-        {% if s.is_set %}<span class="badge ok">{{ s.masked_hint }}</span>{% else %}<span class="badge err">не задан</span>{% endif %}
-        <span class="muted" style="font-size:11px;">{{ {"db": "веб-админка", "env": ".env", "unset": "—"}[s.source] }}</span>
+        {% if s.is_set %}<span class="badge ok">{{ s.masked_hint }}</span>{% else %}<span class="badge err">{{ t('common.not_set') }}</span>{% endif %}
+        <span class="muted" style="font-size:11px;">{{ t('common.source.' ~ s.source) }}</span>
       </div>
       {% if s.description %}<div class="muted" style="font-size:12px; margin: 4px 0; max-width:520px;">{{ s.description }}</div>{% endif %}
       {% if s.source == "env" %}
-      <div class="muted" style="font-size:11px;">задан в .env — очистка тут его не уберёт, редактируй файл на сервере</div>
+      <div class="muted" style="font-size:11px;">{{ t('settings.env_source_note') }}</div>
       {% endif %}
 
       {% if s.revealed_value %}
-      <div class="card" style="background:#11131a; margin: 8px 0 0;">
-        <div class="muted" style="font-size:11px; margin-bottom:4px;">Показано один раз — обнови страницу, чтобы скрыть:</div>
-        <code style="word-break: break-all;">{{ s.revealed_value }}</code>
+      <div class="card revealed">
+        <div class="muted" style="font-size:11px; margin-bottom:4px;">{{ t('settings.revealed_once_note') }}</div>
+        <code>{{ s.revealed_value }}</code>
       </div>
       {% endif %}
 
-      <div style="display:flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; align-items:center;">
+      <div class="actions">
         {% if s.key == "tg_session_string" %}
-        <a href="/components/telethon"><button type="button">Войти через Telegram →</button></a>
+        <a href="/components/telethon"><button type="button">{{ t('settings.telethon_login_cta') }}</button></a>
         <details>
-          <summary class="muted" style="cursor:pointer; font-size:12px;">…или вставить готовую session string вручную</summary>
+          <summary class="muted" style="cursor:pointer; font-size:12px;">{{ t('settings.telethon_manual_toggle') }}</summary>
           <form method="post" action="/secrets/{{ s.key }}" class="inline-form" style="margin-top:6px;">
-            <input type="password" name="value" placeholder="новое значение">
-            <button type="submit">Сохранить</button>
+            <input type="password" name="value" placeholder="{{ t('common.new_value') }}">
+            <button type="submit">{{ t('common.save') }}</button>
           </form>
         </details>
         {% else %}
         <form method="post" action="/secrets/{{ s.key }}" class="inline-form">
-          <input type="password" name="value" placeholder="новое значение">
-          <button type="submit">Сохранить</button>
+          <input type="password" name="value" placeholder="{{ t('common.new_value') }}">
+          <button type="submit">{{ t('common.save') }}</button>
         </form>
         {% endif %}
 
         {% if s.is_set %}
         <form method="post" action="/secrets/{{ s.key }}/reveal" class="inline-form">
-          <input type="password" name="password" placeholder="пароль администратора" required>
-          <button type="submit" class="secondary small">Показать</button>
+          <input type="password" name="password" placeholder="{{ t('settings.password_placeholder') }}" required>
+          <button type="submit" class="secondary small">{{ t('common.show') }}</button>
         </form>
         {% endif %}
 
         {% if s.is_set and s.source == "db" %}
         <form method="post" action="/secrets/{{ s.key }}/clear"
-              onsubmit="return confirm('Очистить «{{ s.label }}»? Значение нельзя будет восстановить, потребуется ввести заново.');">
-          <button type="submit" class="danger small">Очистить</button>
+              onsubmit="return confirm('{{ t('common.confirm_clear_secret') }}');">
+          <button type="submit" class="danger small">{{ t('common.clear') }}</button>
         </form>
         {% endif %}
       </div>

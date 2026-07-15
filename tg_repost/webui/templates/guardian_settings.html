@@ -1,20 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Настройки Guardian — tg_repost admin{% endblock %}
+{% block title %}{{ t('guardian_settings.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Настройки Guardian</h1>
+<h1>{{ t('guardian_settings.title') }}</h1>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
-<p class="muted">
-  Применяются без перезапуска Guardian: мгновенно, если бот уже читает
-  настройку заново на каждое сообщение/команду, и в течение минуты для
-  стоп-слов/whitelist доменов/порогов антифлуда — их держат отдельные
-  синглтоны в процессе Guardian, синхронизируются периодической джобой
-  (см. <code>guardian/bot.py::_reload_filters</code>). Идентичность бота
-  (токен, БД) и OpenAI-ключ сюда не входят — правятся в <code>.env</code>
-  (последний — на странице <a href="/secrets">«Секреты»</a> репост-бота, ключ общий).
-</p>
+<p class="muted">{{ t('guardian_settings.intro', link='<a href="/settings">' ~ t('nav.settings') ~ '</a>') | safe }}</p>
+
+<div class="section-nav">
+  <span class="muted" style="font-size:11px; align-self:center; padding: 0 4px;">{{ t('settings.jump_to') }}:</span>
+  {% for group in groups %}
+  <a href="#{{ group.key }}">{{ group.title }}</a>
+  {% endfor %}
+</div>
 
 {% for group in groups %}
-<div class="settings-group">
+<div class="settings-group" id="{{ group.key }}">
   <h2>{{ group.title }}</h2>
   {% if group.description %}<p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ group.description }}</p>{% endif %}
   <div class="card">
@@ -37,7 +36,7 @@
         {% endif %}
       </div>
       {% endfor %}
-      <button type="submit">Сохранить группу</button>
+      <button type="submit">{{ t('common.save_group') }}</button>
     </form>
   </div>
 </div>

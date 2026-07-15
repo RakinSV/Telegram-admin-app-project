@@ -1,13 +1,8 @@
 {% extends "auth_base.html" %}
-{% block title %}Нужен токен настройки — tg_repost admin{% endblock %}
+{% block title %}{{ t('setup_locked.title') }} — tg_repost admin{% endblock %}
 {% block content %}
 <div class="auth-page">
-  <h1>Нужен токен настройки</h1>
-  <p class="muted">
-    Первичная настройка (`/setup`) требует одноразовый токен — он напечатан
-    в логе процесса при первом запуске, вместе со ссылкой вида
-    <code>/setup?token=...</code>. Открой её из окружения, где виден лог
-    сервера (консоль/файл <code>logs/tg_repost.log</code>).
-  </p>
+  <h1>{{ t('setup_locked.title') }}</h1>
+  <p class="muted">{{ t('setup_locked.body') | safe }}</p>
 </div>
 {% endblock %}

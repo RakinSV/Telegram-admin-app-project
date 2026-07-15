@@ -1,46 +1,43 @@
 {% extends base_template %}
-{% block title %}Подключение Telegram — tg_repost admin{% endblock %}
+{% block title %}{{ t('telethon_login.page_title') }} — tg_repost admin{% endblock %}
 {% block content %}
 <div class="auth-page" style="max-width: 420px;">
-  <h1>Подключение Telegram-аккаунта</h1>
+  <h1>{{ t('telethon_login.page_title') }}</h1>
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
   {% if step == "phone" %}
-  <p class="muted">
-    Нужны TG_API_ID/TG_API_HASH с <a href="https://my.telegram.org" target="_blank" rel="noopener">my.telegram.org</a>
-    (если ещё не заданы) и номер телефона аккаунта, который будет читать каналы.
-  </p>
+  <p class="muted">{{ t('telethon.step_phone.desc') | safe }}</p>
   <form method="post" action="{{ base_path }}">
-    <input type="text" name="api_id" placeholder="TG_API_ID (если ещё не задан)">
-    <input type="text" name="api_hash" placeholder="TG_API_HASH (если ещё не задан)">
-    <input type="text" name="phone" placeholder="+79991234567" required autofocus>
-    <input type="submit" value="Получить код">
+    <input type="text" name="api_id" placeholder="{{ t('telethon.step_phone.api_id_placeholder') }}">
+    <input type="text" name="api_hash" placeholder="{{ t('telethon.step_phone.api_hash_placeholder') }}">
+    <input type="text" name="phone" placeholder="{{ t('telethon.step_phone.placeholder') }}" required autofocus>
+    <input type="submit" value="{{ t('telethon.step_phone.submit') }}">
   </form>
 
   {% elif step == "code" %}
-  <p class="muted">Код отправлен в Telegram — введи его ниже.</p>
+  <p class="muted">{{ t('telethon.step_code.desc') }}</p>
   <form method="post" action="{{ base_path }}/code">
-    <input type="text" name="code" placeholder="Код из Telegram" required autofocus inputmode="numeric">
-    <input type="submit" value="Подтвердить код">
+    <input type="text" name="code" placeholder="{{ t('telethon.step_code.placeholder') }}" required autofocus inputmode="numeric">
+    <input type="submit" value="{{ t('telethon.step_code.submit') }}">
   </form>
 
   {% elif step == "password" %}
-  <p class="muted">Аккаунт защищён облачным паролем (2FA) — введи его.</p>
+  <p class="muted">{{ t('telethon.step_password.desc') }}</p>
   <form method="post" action="{{ base_path }}/password">
-    <input type="password" name="password" placeholder="Пароль 2FA" required autofocus>
-    <input type="submit" value="Войти">
+    <input type="password" name="password" placeholder="{{ t('telethon.step_password.placeholder') }}" required autofocus>
+    <input type="submit" value="{{ t('telethon.step_password.submit') }}">
   </form>
 
   {% elif step == "done" %}
   <div class="card" style="border-color: var(--ok);">
-    ✅ Telegram-сессия получена и сохранена (зашифрована, как обычный секрет).
+    {{ t('telethon.step_done.body') }}
   </div>
-  <p><a href="{{ success_redirect }}">Продолжить →</a></p>
+  <p><a href="{{ success_redirect }}">{{ t('telethon.step_done.continue') }}</a></p>
   {% endif %}
 
   {% if step != "done" %}
   <form method="post" action="{{ base_path }}/cancel" style="margin-top: 16px;">
-    <button type="submit" class="secondary">← Отменить и назад</button>
+    <button type="submit" class="secondary">{{ t('telethon.cancel') }}</button>
   </form>
   {% endif %}
 </div>

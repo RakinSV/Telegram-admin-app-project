@@ -1,58 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Компоненты — tg_repost admin{% endblock %}
+{% block title %}{{ t('components.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Компоненты</h1>
-<p class="muted">
-  Рестарт каждого компонента живой — без перезапуска процесса. Делай это
-  после смены TG_SESSION_STRING/TG_BOT_TOKEN на странице «Секреты», или
-  после правки настроек, помеченных <span class="badge warn">resync</span>
-  (хотя «Настройки» теперь применяют их автоматически при сохранении).
-</p>
+<h1>{{ t('components.title') }}</h1>
+<p class="muted">{{ t('components.desc', resync='<span class="badge warn">' ~ t('common.resync_badge') ~ '</span>') | safe }}</p>
 
 {% if not is_running %}
 <div class="card" style="border-color: var(--warn);">
-  ⚠️ Компоненты не запущены.
+  {{ t('components.not_running_warning') }}
   {% if is_minimally_configured %}
   <form method="post" action="/components/start" style="display:inline;">
-    <button type="submit">Запустить сейчас</button>
+    <button type="submit">{{ t('components.start_now') }}</button>
   </form>
   {% else %}
-  Не хватает обязательных секретов — заполни их на <a href="/secrets">«Секретах»</a>.
+  {{ t('components.not_configured_note') | safe }}
   {% endif %}
 </div>
 {% endif %}
 
 <div class="card grid">
   <div class="stat">
-    <div class="label">Listener</div>
+    <div class="label">{{ t('components.listener_title') }}</div>
     <span class="badge {{ 'ok' if status.listener else 'muted' }}">
-      {{ 'работает' if status.listener else 'остановлен' }}
+      {{ t('components.status_running') if status.listener else t('components.status_stopped') }}
     </span>
     <form method="post" action="/components/listener/restart" style="margin-top:8px;">
-      <button type="submit" class="secondary">Перезапустить listener</button>
+      <button type="submit" class="secondary">{{ t('components.restart_listener') }}</button>
     </form>
     <p class="muted" style="margin-top:6px;">
-      <a href="/components/telethon">Сменить Telegram-аккаунт →</a>
+      <a href="/components/telethon">{{ t('components.switch_account') }}</a>
     </p>
   </div>
 
   <div class="stat">
-    <div class="label">Бот модерации</div>
+    <div class="label">{{ t('components.bot_title') }}</div>
     <span class="badge {{ 'ok' if status.bot else 'muted' }}">
-      {{ 'работает' if status.bot else 'остановлен' }}
+      {{ t('components.status_running') if status.bot else t('components.status_stopped') }}
     </span>
     <form method="post" action="/components/bot/restart" style="margin-top:8px;">
-      <button type="submit" class="secondary">Перезапустить бота</button>
+      <button type="submit" class="secondary">{{ t('components.restart_bot') }}</button>
     </form>
   </div>
 
   <div class="stat">
-    <div class="label">Планировщик</div>
+    <div class="label">{{ t('components.scheduler_title') }}</div>
     <span class="badge {{ 'ok' if status.scheduler else 'muted' }}">
-      {{ 'работает' if status.scheduler else 'остановлен' }}
+      {{ t('components.status_running') if status.scheduler else t('components.status_stopped') }}
     </span>
     <form method="post" action="/components/scheduler/resync" style="margin-top:8px;">
-      <button type="submit" class="secondary">Применить настройки джобов</button>
+      <button type="submit" class="secondary">{{ t('components.resync_scheduler') }}</button>
     </form>
   </div>
 </div>

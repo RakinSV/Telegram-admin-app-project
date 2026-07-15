@@ -1,41 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Источники — tg_repost admin{% endblock %}
+{% import "_macros.html" as m %}
+{% block title %}{{ t('sources.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Источники</h1>
-<p class="muted">
-  Каналы, которые Telethon-listener читает и берёт посты для рерайта.
-  Укажи @username или ссылку t.me/канал — источник добавится неактивным
-  пока listener не подтвердит доступ к нему. Клик по строке открывает
-  настройки конкретного источника (стиль рерайта, добор источников, цели).
-</p>
-{% if truncated %}<p class="muted">Показаны первые 500 записей — деактивируй неиспользуемые источники, если список продолжает расти.</p>{% endif %}
+<h1>{{ t('sources.title') }}</h1>
+<p class="muted">{{ t('sources.desc') }} {{ t('sources.add_hint') }}</p>
+{% if truncated %}<p class="muted">{{ t('common.list_truncated', limit=500) }}</p>{% endif %}
 
 <div class="card">
   <form method="post" action="/sources" class="inline-form">
-    <input type="text" name="channel" placeholder="@username или t.me/channel" required>
-    <button type="submit">Добавить</button>
+    <input type="text" name="channel" placeholder="{{ t('sources.add_placeholder') }}" required>
+    <button type="submit">{{ t('common.add') }}</button>
   </form>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Активен</th><th>Username</th><th>Стиль</th><th>Добор</th><th>Цели</th><th></th></tr>
+    <tr>
+      <th>ID</th><th>{{ t('sources.col_active') }}</th><th>{{ t('sources.col_username') }}</th>
+      <th>{{ t('sources.col_style') }}</th><th>{{ t('sources.col_enrich') }}</th>
+      <th>{{ t('sources.col_targets') }}</th><th></th>
+    </tr>
     {% for s in sources %}
     <tr>
       <td>{{ s.id }}</td>
-      <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ 'да' if s.is_active else 'нет' }}</span></td>
+      <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ t('common.yes') if s.is_active else t('common.no') }}</span></td>
       <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a></td>
       <td>{{ s.style_profile or 'default' }}</td>
-      <td>{{ {True: 'on', False: 'off', None: 'глоб.'}[s.enrich_sources] }}</td>
-      <td>{% if s.target_chat_ids %}{{ s.target_chat_ids.split(',')|length }} груп.{% else %}<span class="muted">все</span>{% endif %}</td>
-      <td>
-        <form method="post" action="/sources/{{ s.id }}/delete" style="display:inline;">
-          <button type="submit" class="secondary">Деактивировать</button>
-        </form>
-      </td>
+      <td>{{ {True: 'on', False: 'off', None: t('common.enrich_global')}[s.enrich_sources] }}</td>
+      <td>{% if s.target_chat_ids %}{{ t('sources.targets_count', n=s.target_chat_ids.split(',')|length) }}{% else %}<span class="muted">{{ t('common.all') }}</span>{% endif %}</td>
+      <td>{{ m.confirm_form('/sources/%d/delete'|format(s.id), t('common.deactivate')) }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">Источников нет.</td></tr>
+    <tr><td colspan="7" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

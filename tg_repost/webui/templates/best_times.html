@@ -1,37 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Лучшее время публикации — tg_repost admin{% endblock %}
+{% block title %}{{ t('best_times.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Лучшее время публикации</h1>
-<p class="muted">
-  Анализирует, в какие часы прошлые посты собирали больше просмотров, и
-  предлагает слоты автопубликации под пик активности аудитории (F19).
-</p>
+<h1>{{ t('best_times.title') }}</h1>
+<p class="muted">{{ t('best_times.desc') }}</p>
 
-{% if just_applied %}<div class="card" style="border-color: var(--ok);">✅ Слоты публикации обновлены.</div>{% endif %}
+<div class="section-nav">
+  <a href="/stats">{{ t('stats.tab_overview') }}</a>
+  <a href="/stats/best-times" class="active">{{ t('stats.tab_best_times') }}</a>
+  <a href="/stats/growth">{{ t('stats.tab_growth') }}</a>
+</div>
+
+{% if just_applied %}<div class="card" style="border-color: var(--ok);">{{ t('best_times.applied') }}</div>{% endif %}
 
 {% if not rec.enough_data %}
 <div class="card">
-  <p class="muted">📈 Недостаточно данных: проанализировано {{ rec.posts_analyzed }} постов,
-  нужно минимум {{ rec.min_required }}.</p>
+  <p class="muted">📈 {{ t('best_times.not_enough_data', analyzed=rec.posts_analyzed, need=rec.min_required) }}</p>
 </div>
 {% else %}
 <div class="card">
-  <p>Проанализировано постов: {{ rec.posts_analyzed }}</p>
-  <p>Рекомендуемые часы публикации (UTC):</p>
+  <p>{{ t('best_times.analyzed', n=rec.posts_analyzed) }}</p>
+  <p>{{ t('best_times.recommended_hours') }}:</p>
   <p>
     {% for slot in rec.recommended_slots %}
     <span class="badge ok">{{ slot }}</span>
     {% endfor %}
   </p>
   <form method="post" action="/stats/best-times/apply">
-    <button type="submit">Применить сейчас</button>
+    <button type="submit">{{ t('common.apply_now') }}</button>
   </form>
-  <p class="muted" style="margin-top:8px;">
-    Можно также включить автоприменение раз в сутки в настройках
-    (группа «Умное расписание — F19»).
-  </p>
+  <p class="muted" style="margin-top:8px;">{{ t('best_times.auto_apply_hint') }}</p>
 </div>
 {% endif %}
 
-<p><a href="/stats">&larr; К статистике</a></p>
+<p><a href="/stats">{{ t('best_times.back_link') }}</a></p>
 {% endblock %}

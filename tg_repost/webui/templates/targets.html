@@ -1,42 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Целевые группы — tg_repost admin{% endblock %}
+{% block title %}{{ t('targets.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Целевые группы</h1>
-<p class="muted">
-  Группы/каналы, куда бот модерации публикует одобренные посты (F08).
-  Активных целей должно быть минимум одна — иначе публикация невозможна.
-  chat_id для группы обычно отрицательный (напр. -1001234567890); узнать
-  его можно переслав любое сообщение из группы боту @userinfobot.
-</p>
-{% if truncated %}<p class="muted">Показаны первые 500 записей.</p>{% endif %}
-
+<h1>{{ t('targets.title') }}</h1>
+<p class="muted">{{ t('targets.desc') }} {{ t('targets.add_hint') }}</p>
+{% if truncated %}<p class="muted">{{ t('common.list_truncated', limit=500) }}</p>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <div class="card">
   <form method="post" action="/targets" class="inline-form">
-    <input type="text" name="chat_id" placeholder="chat_id (напр. -1001234567890)" required>
-    <input type="text" name="title" placeholder="название (опц.)">
-    <button type="submit">Добавить</button>
+    <input type="text" name="chat_id" placeholder="{{ t('targets.chat_id_placeholder') }}" required>
+    <input type="text" name="title" placeholder="{{ t('targets.title_placeholder') }}">
+    <button type="submit">{{ t('common.add') }}</button>
   </form>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>Активна</th><th>chat_id</th><th>Title</th><th></th></tr>
-    {% for t in targets %}
+    <tr><th>ID</th><th>{{ t('targets.col_active') }}</th><th>{{ t('targets.col_chat_id') }}</th><th>{{ t('targets.col_title') }}</th><th></th></tr>
+    {% for tg in targets %}
     <tr>
-      <td>{{ t.id }}</td>
-      <td><span class="badge {{ 'ok' if t.is_active else 'muted' }}">{{ 'да' if t.is_active else 'нет' }}</span></td>
-      <td>{{ t.chat_id }}</td>
-      <td>{{ t.title or '' }}</td>
+      <td>{{ tg.id }}</td>
+      <td><span class="badge {{ 'ok' if tg.is_active else 'muted' }}">{{ t('common.yes') if tg.is_active else t('common.no') }}</span></td>
+      <td>{{ tg.chat_id }}</td>
+      <td>{{ tg.title or '' }}</td>
       <td>
-        <form method="post" action="/targets/{{ t.id }}/toggle" style="display:inline;">
-          <button type="submit" class="secondary">{{ 'Деактивировать' if t.is_active else 'Активировать' }}</button>
+        <form method="post" action="/targets/{{ tg.id }}/toggle" style="display:inline;">
+          <button type="submit" class="secondary">{{ t('common.deactivate') if tg.is_active else t('common.activate') }}</button>
         </form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Целевых групп нет.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

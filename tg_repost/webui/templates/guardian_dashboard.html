@@ -1,76 +1,73 @@
 {% extends "base.html" %}
-{% block title %}Guardian — tg_repost admin{% endblock %}
+{% block title %}{{ t('guardian_dashboard.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Guardian</h1>
-<p class="muted">
-  Отдельный бот-модератор группового чата (не публикует контент, в отличие
-  от репост-бота) — работает своим процессом, читает и пишет свою БД. Эта
-  страница читает/пишет её напрямую из веб-админки tg_repost.
-</p>
+<h1>{{ t('guardian_dashboard.title') }}</h1>
+<p class="muted">{{ t('guardian_dashboard.desc') }}</p>
 
 {% if not is_configured %}
 <div class="card" style="border-color: var(--warn);">
-  ⚠️ Guardian не сконфигурирован — GUARDIAN_BOT_TOKEN/GUARDIAN_GROUP_ID
-  не заданы в <code>.env</code>. Процесс Guardian не запустится, пока это
-  не исправлено (правится вручную в <code>.env</code>, не отсюда — это
-  секрет/идентичность, не "живая" настройка).
+  {{ t('guardian_dashboard.not_configured_warning') | safe }}
 </div>
 {% endif %}
 
-<h2>Текущая конфигурация</h2>
+<h2>{{ t('guardian_dashboard.config_title') }}</h2>
 <div class="card grid">
   <div class="stat">
     <div class="num">{{ spam_mode }}</div>
-    <div class="label">Режим спам-фильтра</div>
+    <div class="label">{{ t('guardian_dashboard.spam_mode') }}</div>
   </div>
   <div class="stat">
     <div class="num">{{ captcha_type }}</div>
-    <div class="label">Тип капчи</div>
+    <div class="label">{{ t('guardian_dashboard.captcha_type') }}</div>
   </div>
   <div class="stat">
     <div class="num">{{ warn_thresholds[0] }} / {{ warn_thresholds[1] }} / {{ warn_thresholds[2] }}</div>
-    <div class="label">Варнов до мута / кика / бана</div>
+    <div class="label">{{ t('guardian_dashboard.warn_thresholds') }}</div>
   </div>
 </div>
 
-<h2>Счётчики</h2>
+<h2>{{ t('guardian_dashboard.counters_title') }}</h2>
 <div class="card grid">
   <div class="stat">
     <div class="num">{{ counts.stopwords }}</div>
-    <div class="label"><a href="/guardian/stopwords">Стоп-слов</a></div>
+    <div class="label"><a href="/guardian/stopwords">{{ t('guardian_dashboard.stopwords_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.domains }}</div>
-    <div class="label"><a href="/guardian/domains">Доменов в whitelist</a></div>
+    <div class="label"><a href="/guardian/domains">{{ t('guardian_dashboard.domains_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.trusted }}</div>
-    <div class="label"><a href="/guardian/trusted">Доверенных пользователей</a></div>
+    <div class="label"><a href="/guardian/trusted">{{ t('guardian_dashboard.trusted_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.members }}</div>
-    <div class="label">Участников в базе</div>
+    <div class="label">{{ t('guardian_dashboard.members_count') }}</div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.banned }}</div>
-    <div class="label">Забанено</div>
+    <div class="label">{{ t('guardian_dashboard.banned_count') }}</div>
   </div>
 </div>
 
-<h2>Последние действия модерации</h2>
+<h2>{{ t('guardian_dashboard.recent_actions_title') }}</h2>
 <div class="card">
   <table>
-    <tr><th>Когда</th><th>Действие</th><th>Пользователь</th><th>Причина</th><th>Кто</th></tr>
+    <tr>
+      <th>{{ t('guardian_dashboard.col_when') }}</th><th>{{ t('guardian_dashboard.col_action') }}</th>
+      <th>{{ t('guardian_dashboard.col_user') }}</th><th>{{ t('guardian_dashboard.col_reason') }}</th>
+      <th>{{ t('guardian_dashboard.col_by') }}</th>
+    </tr>
     {% for entry in recent_log %}
     <tr>
       <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") if entry.created_at else "" }}</td>
-      <td>{{ entry.action }}</td>
+      <td>{{ humanize_action(entry.action, namespace='guardian_dashboard.action') }}</td>
       <td>id{{ entry.user_id }}</td>
       <td>{{ entry.reason or "" }}</td>
       <td>{{ entry.actor }}</td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Действий ещё не было.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('guardian_dashboard.recent_actions_empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

@@ -1,11 +1,16 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ current_lang() }}">
 <head>
   <meta charset="utf-8">
   <title>{% block title %}tg_repost admin{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <div class="lang-switch" style="max-width: 120px; margin: 24px auto 0;">
+    {% for code in SUPPORTED_LANGS %}
+    <a href="/lang/{{ code }}?next={{ request.url.path }}"{{ ' class="active"' if current_lang() == code else '' }}>{{ code|upper }}</a>
+    {% endfor %}
+  </div>
   {% block content %}{% endblock %}
 </body>
 </html>

@@ -1,35 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Рост — tg_repost admin{% endblock %}
+{% block title %}{{ t('growth.title') }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Отчёт о росте</h1>
-<p class="muted">За последние {{ window_days }} дн.</p>
+<h1>{{ t('growth.title') }}</h1>
+<p class="muted">{{ t('growth.window_desc', days=window_days) }}</p>
+
+<div class="section-nav">
+  <a href="/stats">{{ t('stats.tab_overview') }}</a>
+  <a href="/stats/best-times">{{ t('stats.tab_best_times') }}</a>
+  <a href="/stats/growth" class="active">{{ t('stats.tab_growth') }}</a>
+</div>
 
 {% if not report.enough_data %}
 <div class="card">
-  <p class="muted">📊 Недостаточно данных: {{ report.snapshots_count }} снимков, нужно минимум {{ report.min_required }}.
-  Включи отслеживание роста в настройках и подожди накопления.</p>
+  <p class="muted">📊 {{ t('growth.not_enough_data', have=report.snapshots_count, need=report.min_required) }}
+  {{ t('growth.auto_track_hint') }}</p>
 </div>
 {% else %}
 <div class="grid">
   <div class="card stat">
     <div class="num">{{ report.first_count }}</div>
-    <div class="label">подписчиков было</div>
+    <div class="label">{{ t('growth.before') }}</div>
   </div>
   <div class="card stat">
     <div class="num">{{ report.last_count }}</div>
-    <div class="label">подписчиков стало</div>
+    <div class="label">{{ t('growth.after') }}</div>
   </div>
   <div class="card stat">
-    <div class="num">{{ "%+d"|format(report.delta) if report.delta is not none else 'н/д' }}</div>
-    <div class="label">изменение</div>
+    <div class="num">{{ "%+d"|format(report.delta) if report.delta is not none else t('growth.na') }}</div>
+    <div class="label">{{ t('growth.delta') }}</div>
   </div>
 </div>
 
 {% if report.posts_by_style %}
 <div class="card">
-  <h2>Постов по стилям за период</h2>
+  <h2>{{ t('growth.by_style_title') }}</h2>
   <table>
-    <tr><th>Стиль</th><th>Постов</th></tr>
+    <tr><th>{{ t('growth.col_style') }}</th><th>{{ t('growth.col_posts') }}</th></tr>
     {% for style, count in report.posts_by_style.items()|sort %}
     <tr><td>{{ style }}</td><td>{{ count }}</td></tr>
     {% endfor %}
@@ -37,8 +43,8 @@
 </div>
 {% endif %}
 
-<p class="muted">⚠️ Это счётчики, не статистическая корреляция — для выводов о причинности нужно намного больше данных.</p>
+<p class="muted">⚠️ {{ t('growth.footnote') }}</p>
 {% endif %}
 
-<p><a href="/stats">&larr; К статистике</a></p>
+<p><a href="/stats">{{ t('growth.back_link') }}</a></p>
 {% endblock %}

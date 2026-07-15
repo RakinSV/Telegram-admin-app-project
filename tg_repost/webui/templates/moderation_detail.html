@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Пост #{{ post.id }} — tg_repost admin{% endblock %}
+{% block title %}{{ t('moderation_detail.title') }} #{{ post.id }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>Пост #{{ post.id }}</h1>
+<h1>{{ t('moderation_detail.title') }} #{{ post.id }}</h1>
 <p class="muted">{{ post.kind.value }} · <span class="badge warn">{{ post.status.value }}</span></p>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
@@ -10,24 +10,24 @@
   <form method="post" action="/moderation/{{ post.id }}/edit">
     <textarea name="rewritten_text" rows="14">{{ post.rewritten_text or post.original_text or '' }}</textarea>
     <div style="margin-top:10px;">
-      <button type="submit">Сохранить текст</button>
+      <button type="submit">{{ t('moderation_detail.save_text') }}</button>
     </div>
   </form>
 </div>
 
 {% if post.source_link %}
-<p class="muted">🔗 <a href="{{ post.source_link }}" target="_blank" rel="noopener noreferrer">Источник</a></p>
+<p class="muted">🔗 <a href="{{ post.source_link }}" target="_blank" rel="noopener noreferrer">{{ t('moderation_detail.source_link') }}</a></p>
 {% endif %}
-{% if post.media_path %}<p class="muted">🖼 Есть медиа</p>{% endif %}
+{% if post.media_path %}<p class="muted">{{ t('moderation_detail.has_media') }}</p>{% endif %}
 
 <div class="card" style="display:flex; gap:10px;">
   <form method="post" action="/moderation/{{ post.id }}/approve">
-    <button type="submit">✅ Одобрить</button>
+    <button type="submit">{{ t('moderation_detail.approve') }}</button>
   </form>
-  <form method="post" action="/moderation/{{ post.id }}/reject">
-    <button type="submit" class="secondary">❌ Отклонить</button>
+  <form method="post" action="/moderation/{{ post.id }}/reject" onsubmit="return confirm('{{ t('moderation_detail.confirm_reject') }}');">
+    <button type="submit" class="secondary">{{ t('moderation_detail.reject') }}</button>
   </form>
 </div>
 
-<p><a href="/moderation">&larr; К очереди модерации</a></p>
+<p><a href="/moderation">{{ t('moderation_detail.back_link') }}</a></p>
 {% endblock %}

@@ -42,6 +42,16 @@ nav.sidebar a {
 }
 
 nav.sidebar a:hover, nav.sidebar a.active { background: #20242e; color: var(--text); }
+nav.sidebar a.active { color: var(--accent); font-weight: 600; }
+
+.lang-switch { display: flex; gap: 4px; margin-top: 16px; }
+.lang-switch a {
+  flex: 1; text-align: center; padding: 4px 6px; border-radius: 6px;
+  color: var(--muted); text-decoration: none; font-size: 12px;
+  border: 1px solid var(--border);
+}
+.lang-switch a.active { color: var(--accent); border-color: var(--accent); }
+.auth-page .lang-switch { max-width: 120px; margin: 0 auto 16px; }
 
 main { flex: 1; padding: 24px 32px; max-width: 980px; }
 
@@ -81,11 +91,14 @@ th { color: var(--muted); font-weight: 500; }
 }
 .card textarea { width: 100%; }
 
-.field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.field-row label { width: 200px; color: var(--muted); flex-shrink: 0; }
+.field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.field-row label {
+  flex: 0 0 auto; min-width: 160px; max-width: 280px; color: var(--muted);
+}
+.field-row .hint { flex-basis: 100%; margin: -4px 0 0; font-size: 11px; color: var(--muted); }
 .field-row input[type=text], .field-row input[type=number],
-.field-row input[type=password], .field-row select { flex: 1; }
-.field-row input[type=checkbox] { width: 18px; height: 18px; }
+.field-row input[type=password], .field-row select { flex: 1 1 200px; }
+.field-row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
 
 /* Список выбора целей публикации (source_detail) и подобные. */
 .check-list {
@@ -112,9 +125,30 @@ button.danger { background: transparent; color: var(--err); border: 1px solid va
 button.danger:hover { background: rgba(224,82,79,.12); opacity: 1; }
 button.small { padding: 4px 10px; font-size: 12px; }
 
-.settings-group { margin-bottom: 22px; }
+.settings-group { margin-bottom: 22px; scroll-margin-top: 12px; }
 .error { color: var(--err); margin-bottom: 12px; }
 .muted { color: var(--muted); }
+
+/* Якорь-навигация по группам на /settings и /guardian/settings — раньше
+   единственным способом добраться до нижних групп был долгий скролл мимо
+   всех остальных (аудит UI). */
+.section-nav {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  padding: 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.section-nav a {
+  font-size: 12px; padding: 4px 9px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+}
+.section-nav a:hover { color: var(--text); border-color: var(--accent); }
+
+/* Строка секрета внутри группы настроек. */
+.secret-row { padding: 10px 0; border-top: 1px solid var(--border); }
+.secret-row .actions { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+.secret-row .revealed { background: #11131a; margin: 8px 0 0; }
+.secret-row .revealed code { word-break: break-all; }
 
 .auth-page {
   max-width: 360px; margin: 80px auto; display: flex; flex-direction: column; gap: 12px;

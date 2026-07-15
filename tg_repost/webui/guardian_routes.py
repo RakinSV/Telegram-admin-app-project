@@ -27,24 +27,29 @@ from fastapi.templating import Jinja2Templates
 
 from guardian import domains_repo, settings_store, stopwords_repo, trusted_repo
 from guardian.config import get_guardian_settings
-from tg_repost.webui import audit, guardian_dashboard
+from tg_repost.webui import audit, guardian_dashboard, i18n
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.form_utils import coerce_form_value
 
 _BASE_DIR = Path(__file__).parent
 _templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
+# См. аналогичный комментарий в crud_routes.py — отдельный Environment,
+# глобалы регистрируются в каждом модуле, что строит Jinja2Templates.
+_templates.env.globals["t"] = i18n.t
+_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates.env.globals["humanize_action"] = i18n.humanize_action
 
 
 def _settings_groups_context() -> list[dict]:
     return [
         {
             "key": group.key,
-            "title": group.title,
-            "description": group.description,
+            "title": i18n.t(f"guardian.settings.group.{group.key}.title"),
+            "description": i18n.t(f"guardian.settings.group.{group.key}.desc"),
             "fields": [
                 {
                     "name": f.name,
-                    "label": f.label,
+                    "label": i18n.t(f"guardian.settings.field.{f.name}.label"),
                     "value_type": f.value_type,
                     "choices": f.choices,
                     "value": settings_store.effective_value(f),
@@ -108,8 +113,10 @@ def build_guardian_router() -> APIRouter:
                     "guardian_settings.html",
                     {
                         "groups": _settings_groups_context(),
-                        "error": f"Некорректное значение в группе «{group.title}» — "
-                        f"числовое поле должно содержать число.",
+                        "error": i18n.t(
+                            "settings.error_invalid_number",
+                            group=i18n.t(f"guardian.settings.group.{group.key}.title"),
+                        ),
                     },
                     status_code=400,
                 )
@@ -123,8 +130,11 @@ def build_guardian_router() -> APIRouter:
                         "guardian_settings.html",
                         {
                             "groups": _settings_groups_context(),
-                            "error": f"«{field.label}» должно быть одним из: "
-                            f"{', '.join(field.choices)}.",
+                            "error": i18n.t(
+                                "settings.error_invalid_choice",
+                                field=i18n.t(f"guardian.settings.field.{field.name}.label"),
+                                choices=", ".join(field.choices),
+                            ),
                         },
                         status_code=400,
                     )
@@ -223,7 +233,7 @@ def build_guardian_router() -> APIRouter:
                 {
                     "trusted": [],
                     "chat_id_missing": True,
-                    "error": "GUARDIAN_GROUP_ID не задан — сначала настрой Guardian в .env.",
+                    "error": i18n.t("guardian_trusted.error_no_group"),
                 },
                 status_code=400,
             )
@@ -234,7 +244,7 @@ def build_guardian_router() -> APIRouter:
                 {
                     "trusted": trusted_repo.list_trusted(chat_id),
                     "chat_id_missing": False,
-                    "error": "user_id должен быть целым числом.",
+                    "error": i18n.t("guardian_trusted.error_invalid_user_id"),
                 },
                 status_code=400,
             )
