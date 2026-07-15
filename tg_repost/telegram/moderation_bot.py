@@ -33,6 +33,7 @@ from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostSta
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.moderation import approve_post, edit_post_text, reject_post
+from tg_repost.retry import retry_async
 
 logger = get_logger(__name__)
 
@@ -358,7 +359,21 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
         preview = _format_preview(post, for_caption=True)
 
     media = InputMediaPhoto(media=BytesIO(photo_bytes), caption=preview)
-    await query.edit_message_media(media=media, reply_markup=keyboard)
+    # edit_message_media перезаливает файл целиком (в отличие от
+    # edit_message_text/caption) — заметно чаще ловит TimedOut на медленном
+    # соединении/через BOT_API_PROXY_URL (найдено на реальном деплое: выбор
+    # варианта в БД уже применился, а сама картинка в сообщении — нет, юзер
+    # видел старое фото). retry_async — тот же helper, что и в publisher.py.
+    try:
+        await retry_async(
+            lambda: query.edit_message_media(media=media, reply_markup=keyboard),
+            attempts=3, description=f"переключение обложки поста {post_id}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Не удалось обновить фото обложки в сообщении поста %s: %s",
+            post_id, sanitize_proxy_error(str(exc)),
+        )
 
 
 async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
