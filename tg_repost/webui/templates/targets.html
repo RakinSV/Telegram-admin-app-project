@@ -23,7 +23,12 @@
     {% for d in discovered %}
     <tr>
       <td>{{ d.chat_id }}</td>
-      <td>{{ d.title or '' }} <span class="muted">({{ d.chat_type }})</span></td>
+      <td>
+        {{ d.title or '' }} <span class="muted">({{ d.chat_type }})</span>
+        {% if d.can_post == false %}
+        <br><span class="error" style="font-size:12px;">⚠️ {{ t('targets.discovered_cannot_post') }}</span>
+        {% endif %}
+      </td>
       <td>
         <form method="post" action="/targets" style="display:inline;">
           <input type="hidden" name="chat_id" value="{{ d.chat_id }}">
@@ -45,7 +50,12 @@
       <td>{{ tg.id }}</td>
       <td><span class="badge {{ 'ok' if tg.is_active else 'muted' }}">{{ t('common.yes') if tg.is_active else t('common.no') }}</span></td>
       <td>{{ tg.chat_id }}</td>
-      <td>{{ tg.title or '' }}</td>
+      <td>
+        {{ tg.title or '' }}
+        {% if tg.can_post == false %}
+        <br><span class="error" style="font-size:12px;">⚠️ {{ t('targets.discovered_cannot_post') }}</span>
+        {% endif %}
+      </td>
       <td>
         <form method="post" action="/targets/{{ tg.id }}/toggle" style="display:inline;">
           <button type="submit" class="secondary">{{ t('common.deactivate') if tg.is_active else t('common.activate') }}</button>

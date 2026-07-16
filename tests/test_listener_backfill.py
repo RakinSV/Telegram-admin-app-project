@@ -21,9 +21,10 @@ from tg_repost.telegram import listener
 
 
 class _FakeChat:
-    def __init__(self, chat_id: int, username: str) -> None:
+    def __init__(self, chat_id: int, username: str, title: str | None = None) -> None:
         self.id = chat_id
         self.username = username
+        self.title = title
 
 
 class _FakeMessage:
@@ -135,3 +136,59 @@ async def test_backfill_source_unknown_source_username_still_calls_get_entity():
     await listener.backfill_source(client, source, limit=5)
 
     client.get_entity.assert_awaited_once_with("brandnew")
+
+
+@pytest.mark.asyncio
+async def test_backfill_source_populates_channel_title():
+    """Регресс-тест на находку аудита ведения групп: `Source.channel_title`
+    было объявлено в модели и показывалось в CLI, но нигде не заполнялось —
+    `/sources` показывал только голый @username."""
+    source, _ = sources_repo.add_source("@titledchan")
+    assert source.channel_title is None
+    chat = _FakeChat(chat_id=222, username="titledchan", title="Заголовок канала")
+    messages = [_FakeMessage(1, "hello")]
+    client = _fake_client(chat, messages)
+
+    await listener.backfill_source(client, source, limit=5)
+
+    with session_scope() as session:
+        updated = session.get(Source, source.id)
+        assert updated.channel_title == "Заголовок канала"
+
+
+@pytest.mark.asyncio
+async def test_backfill_source_sanitizes_channel_title():
+    """Регресс-тест (security-ревью): channel_title приходит от Telegram
+    напрямую из канала-источника — не должен доносить zero-width/
+    bidi-override символы до /sources."""
+    source, _ = sources_repo.add_source("@sanitizechan")
+    zwsp = chr(0x200B)
+    chat = _FakeChat(chat_id=444, username="sanitizechan", title=f"Evil{zwsp}Title")
+    messages = [_FakeMessage(1, "hello")]
+    client = _fake_client(chat, messages)
+
+    await listener.backfill_source(client, source, limit=5)
+
+    with session_scope() as session:
+        updated = session.get(Source, source.id)
+        assert updated.channel_title == "EvilTitle"
+
+
+@pytest.mark.asyncio
+async def test_backfill_source_does_not_overwrite_existing_channel_title():
+    """Раз выставленный вручную/резолвом title не должен затираться пустым
+    значением с последующих сообщений (например, канал временно не отдал
+    title в конкретном апдейте)."""
+    source, _ = sources_repo.add_source("@keeptitle")
+    with session_scope() as session:
+        db_source = session.get(Source, source.id)
+        db_source.channel_title = "Ручное название"
+    chat = _FakeChat(chat_id=333, username="keeptitle", title="Другое название")
+    messages = [_FakeMessage(1, "hello")]
+    client = _fake_client(chat, messages)
+
+    await listener.backfill_source(client, source, limit=5)
+
+    with session_scope() as session:
+        updated = session.get(Source, source.id)
+        assert updated.channel_title == "Ручное название"

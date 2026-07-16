@@ -41,6 +41,7 @@ from tg_repost.dedup.semantic import find_similar_post, pack_embedding
 from tg_repost.filtering import check_keywords
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import get_rewriter
+from tg_repost.text_sanitize import strip_bidi_control_chars
 
 logger = get_logger(__name__)
 
@@ -206,8 +207,15 @@ def partition_sources(usernames: list[str], partition_count: int) -> list[list[s
     return partitions
 
 
-def _find_source_id(channel_id: int, channel_username: str | None) -> int | None:
-    """Найти id источника в БД по channel_id или username; обновить channel_id."""
+def _find_source_id(
+    channel_id: int, channel_username: str | None, channel_title: str | None = None,
+) -> int | None:
+    """Найти id источника в БД по channel_id или username; обновить channel_id.
+
+    Заодно заполняет `channel_title` (если ещё пусто) — раньше это поле
+    объявлено в модели и показывается в CLI, но никогда не заполнялось нигде
+    в коде (найдено на аудите ведения групп): `/sources` показывал только
+    голый @username без человекочитаемого названия канала."""
     with session_scope() as session:
         query = session.query(Source).filter(Source.is_active.is_(True))
         source = query.filter(Source.channel_id == channel_id).one_or_none()
@@ -217,6 +225,12 @@ def _find_source_id(channel_id: int, channel_username: str | None) -> int | None
             ).one_or_none()
             if source is not None and source.channel_id is None:
                 source.channel_id = channel_id
+        if source is not None and channel_title and not source.channel_title:
+            # channel_title — из канала-источника, полностью подконтролен
+            # его владельцу; санитизируем от zero-width/bidi-трюков перед
+            # сохранением (найдено на security-ревью), как и для DiscoveredChat/
+            # TargetGroup.title.
+            source.channel_title = strip_bidi_control_chars(channel_title)
         return source.id if source else None
 
 
@@ -236,10 +250,11 @@ async def _process_message(client: TelegramClient, chat: Any, message: Any) -> N
 
     username = getattr(chat, "username", None)
     channel_id = getattr(chat, "id", None)
+    channel_title = getattr(chat, "title", None)
     if channel_id is None:
         return
 
-    source_id = _find_source_id(channel_id, username)
+    source_id = _find_source_id(channel_id, username, channel_title)
     if source_id is None:
         # Сообщение из канала, которого нет среди активных источников.
         return

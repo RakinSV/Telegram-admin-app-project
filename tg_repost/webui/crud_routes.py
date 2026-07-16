@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
@@ -29,9 +30,10 @@ from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
+from tg_repost.telegram.publisher import resolve_target_labels_for_post
 from tg_repost.webui import audit, i18n, log_broadcast
 from tg_repost.webui.auth import require_login
-from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs
+from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs, restart_telethon_listener
 
 _SSE_HEARTBEAT_SECONDS = 15.0
 # Совпадает с дефолтным `limit` в sources_repo.list_sources/targets_repo.
@@ -57,11 +59,26 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
     """Контекст для `moderation_detail.html` — переиспользуется GET
     `/moderation/{id}` и обработчиками ошибок approve/reject (F06/F18-доп.:
     без вариантов в контексте шаблон падал бы с UndefinedError на `{% for %}`)."""
+    post = moderation_repo.get_post(post_id)
+    # Роутинг целей показываем ТОЛЬКО пока публикация ещё предстоит —
+    # `/moderation/{id}` доступен по прямой ссылке для ЛЮБОГО поста (напр.
+    # /stats линкует туда "топ-пост" по просмотрам, у которого status=posted),
+    # а `resolve_target_labels_for_post` считает по ТЕКУЩИМ настройкам целей —
+    # для уже опубликованного поста это в лучшем случае не в тему ("Опубли-
+    # куется в" про то, что уже случилось), в худшем — вводит в заблуждение,
+    # если цели с тех пор поменялись (найдено при повторном аудите).
+    # `None` (не список) — сигнал шаблону "не показывать блок вообще",
+    # отличный от пустого списка ("показать, что публиковать некуда").
+    target_labels = (
+        resolve_target_labels_for_post(post_id)
+        if post is not None and not post.status.is_terminal else None
+    )
     return {
-        "post": moderation_repo.get_post(post_id),
+        "post": post,
         "error": error,
         "rewrite_variants": post_variants_repo.list_rewrite_variants(post_id),
         "cover_variants": post_variants_repo.list_cover_variants(post_id),
+        "target_labels": target_labels,
     }
 
 
@@ -78,13 +95,63 @@ def build_crud_router() -> APIRouter:
             "sources": sources, "truncated": len(sources) >= _LIST_LIMIT,
         })
 
+    _MAX_BULK_SOURCES = 100
+
     @router.post("/sources")
     async def sources_create(request: Request, channel: str = Form(...)) -> Response:
-        del request
-        source, created = sources_repo.add_source(channel)
-        audit.record_audit(
-            "source_add" if created else "source_reactivate", target=f"@{source.channel_username}",
-        )
+        # Массовое добавление (жалоба пользователя: "по одному через форму
+        # медленно") — textarea, а не одиночный input; разделители: запятая
+        # и/или перенос строки, можно вперемешку.
+        raw_items = [c.strip() for c in re.split(r"[\n,]+", channel) if c.strip()]
+        if not raw_items:
+            return RedirectResponse(url="/sources", status_code=303)
+        if len(raw_items) > _MAX_BULK_SOURCES:
+            return _templates.TemplateResponse(
+                request, "sources.html",
+                {
+                    "sources": sources_repo.list_sources(),
+                    "truncated": False,
+                    "error": i18n.t("sources.error_too_many", max=_MAX_BULK_SOURCES),
+                },
+                status_code=400,
+            )
+
+        # Реальное изменение состава АКТИВНЫХ источников — рестарт listener'а
+        # нужен только если он есть хотя бы у одного из вставленных каналов
+        # (не на КАЖДЫЙ, если часть уже была активна — см. комментарий ниже
+        # и находку повторного ревью про double-submit).
+        any_active_change = False
+        for raw in raw_items:
+            existing = sources_repo.find_source_by_username(raw)
+            was_already_active = existing is not None and existing.is_active
+
+            source, created = sources_repo.add_source(raw)
+            audit.record_audit(
+                "source_add" if created else "source_reactivate",
+                target=f"@{source.channel_username}",
+            )
+            if not was_already_active:
+                any_active_change = True
+
+        if any_active_change:
+            # Telethon подписывается на ФИКСИРОВАННЫЙ список каналов при
+            # старте (см. listener.py::start_listeners) — без перезапуска
+            # новый/реактивированный источник молча не слушался бы вообще,
+            # пока кто-то вручную не нажмёт "Restart" на /components
+            # (найдено на аудите ведения групп). Безопасно вызывать даже
+            # если компоненты ещё не запущены (no-op с логом внутри).
+            #
+            # try/except: источники уже закоммичены в БД к этому моменту —
+            # сбой перезапуска listener'а (Telegram недоступен и т.п.) не
+            # должен превращать УЖЕ успешное добавление в 500-ошибку на
+            # экране (найдено на повторном ревью).
+            try:
+                await restart_telethon_listener()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Источники добавлены, но перезапуск listener'а не удался: %s. "
+                    "Перезапусти вручную на /components.", exc,
+                )
         return RedirectResponse(url="/sources", status_code=303)
 
     def _source_detail_context(

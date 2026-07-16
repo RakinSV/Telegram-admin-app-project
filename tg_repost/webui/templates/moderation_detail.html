@@ -68,6 +68,14 @@
 <p class="muted">🔗 <a href="{{ post.source_link }}" target="_blank" rel="noopener noreferrer">{{ t('moderation_detail.source_link') }}</a></p>
 {% endif %}
 
+{% if target_labels is not none %}
+  {% if target_labels %}
+  <p class="muted">📤 {{ t('moderation_detail.will_post_to') }}: {{ target_labels|join(', ') }}</p>
+  {% else %}
+  <p class="error">⚠️ {{ t('moderation_detail.no_targets_warning') }}</p>
+  {% endif %}
+{% endif %}
+
 <div class="card" style="display:flex; gap:10px;">
   <form method="post" action="/moderation/{{ post.id }}/approve">
     <button type="submit">{{ t('moderation_detail.approve') }}</button>

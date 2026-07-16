@@ -27,13 +27,14 @@ from telegram.ext import (
     filters,
 )
 
-from tg_repost import discovered_chats_repo, post_variants_repo
+from tg_repost import discovered_chats_repo, post_variants_repo, targets_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.moderation import approve_post, edit_post_text, reject_post
 from tg_repost.retry import retry_async
+from tg_repost.telegram.publisher import resolve_target_labels_for_post
 
 logger = get_logger(__name__)
 
@@ -94,20 +95,34 @@ _KIND_LABELS = {
 }
 
 
-def _format_preview(post: Post, *, for_caption: bool = False) -> str:
+def _format_preview(
+    post: Post, *, for_caption: bool = False, target_labels: list[str] | None = None,
+) -> str:
     """Текст превью. `for_caption=True` — сообщение отправляется как подпись
     к фото обложки (лимит Telegram короче, чем у обычного текста, см.
     `_CAPTION_LEN`); фото уже само по себе показывает, что медиа есть —
-    отдельная строка-индикатор не нужна (в отличие от старого текст-only режима)."""
+    отдельная строка-индикатор не нужна (в отличие от старого текст-only режима).
+
+    `target_labels` — куда пост уйдёт при одобрении (F12-роутинг), см.
+    `publisher.resolve_target_labels_for_post`. `None` — не считали (не
+    ломает старые вызовы); пустой список — реальное предупреждение
+    "публиковать некуда" (найдено на аудите ведения групп: раньше это было
+    не видно нигде до самой публикации)."""
     text = post.rewritten_text or post.original_text or "(пусто)"
     limit = _CAPTION_LEN if for_caption else _PREVIEW_LEN
     src = f"\n\n🔗 Источник: {post.source_link}" if post.source_link else ""
     kind_label = _KIND_LABELS.get(post.kind)
     kind_line = f"\n{kind_label}" if kind_label else ""
+    if target_labels:
+        targets_line = f"\n📤 Опубликуется в: {', '.join(target_labels)}"
+    elif target_labels is not None:
+        targets_line = "\n⚠️ Публиковать некуда — нет активных целевых групп"
+    else:
+        targets_line = ""
     body = text[:limit]
     if len(text) > limit:
         body += "…"
-    return f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n{body}{src}"
+    return f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n{body}{src}{targets_line}"
 
 
 async def send_pending_for_approval(application: Application) -> None:
@@ -133,6 +148,10 @@ async def send_pending_for_approval(application: Application) -> None:
         ]
 
     for post_id in post_ids:
+        # ВНЕ session_scope ниже: сама функция открывает свою сессию, а
+        # вложенный session_scope внутри уже открытого — риск лишний раз не
+        # проверенного поведения SQLite-блокировок (см. аудит ведения групп).
+        target_labels = resolve_target_labels_for_post(post_id)
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post is None:
@@ -159,7 +178,7 @@ async def send_pending_for_approval(application: Application) -> None:
                         "Не удалось прочитать файл обложки поста %s (%s): %s",
                         post_id, media_path, exc,
                     )
-            preview = _format_preview(post, for_caption=bool(photo_bytes))
+            preview = _format_preview(post, for_caption=bool(photo_bytes), target_labels=target_labels)
 
         try:
             if photo_bytes:
@@ -303,6 +322,7 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
     if not post_variants_repo.select_rewrite_variant(post_id, new_index):
         return
 
+    target_labels = resolve_target_labels_for_post(post_id)
     with session_scope() as session:
         post = session.get(Post, post_id)
         if post is None:
@@ -313,7 +333,10 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
             rewrite_count=len(variants), rewrite_index=new_index,
             cover_count=len(cover_variants) or 1, cover_index=post.active_cover_variant_index or 0,
         )
-        preview = _format_preview(post, for_caption=bool(query.message and query.message.photo))
+        preview = _format_preview(
+            post, for_caption=bool(query.message and query.message.photo),
+            target_labels=target_labels,
+        )
 
     if query.message is not None and query.message.photo:
         await query.edit_message_caption(caption=preview, reply_markup=keyboard)
@@ -352,6 +375,7 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
     if not post_variants_repo.select_cover_variant(post_id, new_index):
         return
 
+    target_labels = resolve_target_labels_for_post(post_id)
     with session_scope() as session:
         post = session.get(Post, post_id)
         if post is None:
@@ -363,7 +387,7 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
             rewrite_index=post.active_rewrite_variant_index or 0,
             cover_count=len(cover_variants), cover_index=new_index,
         )
-        preview = _format_preview(post, for_caption=True)
+        preview = _format_preview(post, for_caption=True, target_labels=target_labels)
 
     # edit_message_media перезаливает файл целиком (в отличие от
     # edit_message_text/caption) — заметно чаще ловит TimedOut на медленном
@@ -431,6 +455,25 @@ async def _cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
 
+def _discovered_can_post(chat_type: str, member) -> bool | None:
+    """Может ли бот СЕЙЧАС слать сообщения в чат, судя по его статусу
+    из `my_chat_member` (F08-доп., аудит ведения групп).
+
+    Значимо только для каналов: Bot API отдаёт `can_post_messages` именно
+    для них — обычный `member` в канале никогда не может постить от своего
+    имени, только администратор с этим правом (или создатель). Для
+    групп/супергрупп участник обычно и так может писать без специальных
+    прав — возвращаем None ("не проверяем"), а не False, чтобы не рисовать
+    ложное предупреждение там, где всё в порядке."""
+    if chat_type != "channel":
+        return None
+    if member.status == "creator":
+        return True
+    if member.status == "administrator":
+        return bool(getattr(member, "can_post_messages", False))
+    return False
+
+
 async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """F08-доп.: авто-обнаружение чатов для целевых групп публикации.
 
@@ -445,15 +488,26 @@ async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if membership is None or membership.chat.type == "private":
         return
     chat = membership.chat
-    if membership.new_chat_member.status in _ACTIVE_MEMBER_STATUSES:
-        discovered_chats_repo.record_discovered_chat(chat.id, chat.title, chat.type)
+    member = membership.new_chat_member
+    if member.status in _ACTIVE_MEMBER_STATUSES:
+        can_post = _discovered_can_post(chat.type, member)
+        discovered_chats_repo.record_discovered_chat(chat.id, chat.title, chat.type, can_post)
         logger.info(
-            "Бот добавлен в чат '%s' (%s, id=%s) — доступен для добавления в /targets",
-            chat.title, chat.type, chat.id,
+            "Бот добавлен в чат '%s' (%s, id=%s, может постить=%s) — "
+            "доступен для добавления в /targets",
+            chat.title, chat.type, chat.id, can_post,
         )
     else:
         discovered_chats_repo.remove_discovered_chat(chat.id)
+        can_post = False  # бот больше не в чате — точно не может постить
         logger.info("Бот удалён из чата id=%s (%s)", chat.id, membership.new_chat_member.status)
+
+    # Если этот chat_id УЖЕ добавлен как цель публикации — актуализируем и
+    # там (аудит ведения групп, раунд 3): раньше отзыв прав бота на уже
+    # добавленную цель нигде не отражался, только тихий провал публикации
+    # позже. Синхронизация вне if/else выше — покрывает оба случая (права
+    # поменялись/бота выгнали) одним вызовом.
+    targets_repo.sync_can_post(chat.id, can_post)
 
 
 async def _cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -54,3 +54,27 @@ def test_toggle_target_flips_state():
 def test_toggle_target_missing_returns_none():
     _clear_targets()
     assert targets_repo.toggle_target(999999) is None
+
+
+def test_add_target_sanitizes_title_from_untrusted_chat():
+    """Регресс-тест (security-ревью): title часто приходит напрямую из
+    чужого чата (кнопка «Добавить как цель» из discovered_chats) — не
+    должен доносить zero-width/bidi-override символы до /targets."""
+    _clear_targets()
+    zwsp = chr(0x200B)
+    target, _ = targets_repo.add_target(-100666, f"Evil{zwsp}Title")
+    assert target.title == "EvilTitle"
+
+
+def test_sync_can_post_updates_existing_target():
+    _clear_targets()
+    target, _ = targets_repo.add_target(-100777, "Channel")
+    assert targets_repo.sync_can_post(-100777, False) is True
+    with session_scope() as session:
+        updated = session.get(TargetGroup, target.id)
+        assert updated.can_post is False
+
+
+def test_sync_can_post_missing_target_is_noop():
+    _clear_targets()
+    assert targets_repo.sync_can_post(-100888, False) is False

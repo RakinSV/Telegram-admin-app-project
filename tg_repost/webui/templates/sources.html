@@ -5,10 +5,12 @@
 <h1>{{ t('sources.title') }}</h1>
 <p class="muted">{{ t('sources.desc') }} {{ t('sources.add_hint') }}</p>
 {% if truncated %}<p class="muted">{{ t('common.list_truncated', limit=500) }}</p>{% endif %}
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 <div class="card">
-  <form method="post" action="/sources" class="inline-form">
-    <input type="text" name="channel" placeholder="{{ t('sources.add_placeholder') }}" required>
+  <form method="post" action="/sources">
+    <textarea name="channel" rows="3" style="width:100%; box-sizing:border-box;" placeholder="{{ t('sources.add_placeholder') }}" required></textarea>
+    <p class="muted" style="margin: 4px 0 10px; font-size: 13px;">{{ t('sources.add_bulk_hint') }}</p>
     <button type="submit">{{ t('common.add') }}</button>
   </form>
 </div>
@@ -24,7 +26,7 @@
     <tr>
       <td>{{ s.id }}</td>
       <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ t('common.yes') if s.is_active else t('common.no') }}</span></td>
-      <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a></td>
+      <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a>{% if s.channel_title %} <span class="muted">({{ s.channel_title }})</span>{% endif %}</td>
       <td>{{ s.style_profile or 'default' }}</td>
       <td>{{ {True: 'on', False: 'off', None: t('common.enrich_global')}[s.enrich_sources] }}</td>
       <td>{% if s.target_chat_ids %}{{ t('sources.targets_count', n=s.target_chat_ids.split(',')|length) }}{% else %}<span class="muted">{{ t('common.all') }}</span>{% endif %}</td>

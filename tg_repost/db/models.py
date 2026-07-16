@@ -151,6 +151,14 @@ class TargetGroup(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Может ли бот СЕЙЧАС слать сообщения сюда — как и DiscoveredChat.can_post,
+    # но актуализируется и ПОСЛЕ того, как чат уже стал целью (F08-доп.,
+    # раунд 3 аудита ведения групп): раньше можно было потерять права бота
+    # на уже добавленную цель, и предупреждение оставалось только в discovered
+    # (который эту цель уже не показывает — она добавлена). Синхронизируется
+    # из того же апдейта my_chat_member, что и DiscoveredChat (см.
+    # targets_repo.sync_can_post, telegram/moderation_bot.py::_on_my_chat_member).
+    can_post: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -168,6 +176,14 @@ class DiscoveredChat(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chat_type: Mapped[str] = mapped_column(String(32), default="")
+    # Может ли бот СЕЙЧАС слать сообщения в этот чат (F08-доп., аудит ведения
+    # групп) — значимо только для каналов: Bot API отдаёт `can_post_messages`
+    # именно для них, обычный участник канала никогда не может постить от
+    # своего имени. NULL — не применимо (группы/супергруппы, где участник
+    # обычно и так может писать) или не удалось определить. False — реальное
+    # предупреждение в /targets ПЕРЕД тем, как чат добавят как цель, а не
+    # постфактум через FAILED-статус первого же поста.
+    can_post: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

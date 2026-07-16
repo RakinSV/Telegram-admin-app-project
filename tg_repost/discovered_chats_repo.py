@@ -11,10 +11,19 @@ from __future__ import annotations
 
 from tg_repost.db.models import DiscoveredChat, TargetGroup
 from tg_repost.db.session import session_scope
+from tg_repost.text_sanitize import strip_bidi_control_chars
 
 
-def record_discovered_chat(chat_id: int, title: str | None, chat_type: str) -> None:
-    """Записать/обновить чат, где бот стал участником (upsert по chat_id)."""
+def record_discovered_chat(
+    chat_id: int, title: str | None, chat_type: str, can_post: bool | None = None,
+) -> None:
+    """Записать/обновить чат, где бот стал участником (upsert по chat_id).
+
+    `can_post` — см. `DiscoveredChat.can_post`: может ли бот сейчас слать
+    сообщения в этот чат (значимо для каналов). `title` — от Telegram, из
+    чужого чата, санитизируется от zero-width/bidi-трюков (найдено на
+    security-ревью: иначе можно визуально подделать название в /targets)."""
+    title = strip_bidi_control_chars(title)
     with session_scope() as session:
         existing = (
             session.query(DiscoveredChat).filter(DiscoveredChat.chat_id == chat_id).one_or_none()
@@ -22,8 +31,13 @@ def record_discovered_chat(chat_id: int, title: str | None, chat_type: str) -> N
         if existing:
             existing.title = title
             existing.chat_type = chat_type
+            existing.can_post = can_post
         else:
-            session.add(DiscoveredChat(chat_id=chat_id, title=title, chat_type=chat_type))
+            session.add(
+                DiscoveredChat(
+                    chat_id=chat_id, title=title, chat_type=chat_type, can_post=can_post,
+                )
+            )
 
 
 def remove_discovered_chat(chat_id: int) -> None:

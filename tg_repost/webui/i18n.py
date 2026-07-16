@@ -314,6 +314,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Channels that Telethon reads and parses for new posts.",
     },
     "sources.add_placeholder": {"ru": "@channel или ссылка", "en": "@channel or link"},
+    "sources.add_bulk_hint": {
+        "ru": "Можно вставить сразу несколько — через запятую и/или по одному "
+        "на строку. Подключение к Telegram после добавления может занять "
+        "пару секунд.",
+        "en": "You can paste several at once — comma-separated and/or one "
+        "per line. Connecting to Telegram after adding may take a couple "
+        "of seconds.",
+    },
+    "sources.error_too_many": {
+        "ru": "Слишком много каналов за раз (максимум {max}) — раздели на "
+        "несколько отправок.",
+        "en": "Too many channels at once (max {max}) — split into several "
+        "submissions.",
+    },
     "sources.col_active": {"ru": "Активен", "en": "Active"},
     "sources.col_username": {"ru": "Username", "en": "Username"},
     "sources.col_style": {"ru": "Стиль", "en": "Style"},
@@ -415,6 +429,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "want, and chat_id is picked up automatically.",
     },
     "targets.discovered_add": {"ru": "Добавить как цель", "en": "Add as target"},
+    "targets.discovered_cannot_post": {
+        "ru": "Бот без прав администратора с публикацией сообщений — "
+        "постить сюда не сможет, пока не выдашь права в настройках канала",
+        "en": "The bot isn't an admin with posting rights here — it won't "
+        "be able to post until you grant that in the channel's settings",
+    },
 
     # --- Модерация ---
     "moderation.title": {"ru": "Очередь модерации", "en": "Moderation queue"},
@@ -452,6 +472,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "компоненты на странице «Компоненты».",
         "en": "The moderation bot isn't running — publishing isn't "
         "possible. Start the components on the “Components” page.",
+    },
+    "moderation_detail.will_post_to": {"ru": "Опубликуется в", "en": "Will post to"},
+    "moderation_detail.no_targets_warning": {
+        "ru": "Публиковать некуда — нет активных целевых групп (или "
+        "персональные цели источника все неактивны). Одобрение сейчас "
+        "переведёт пост в статус «ошибка».",
+        "en": "Nowhere to publish — no active target groups (or the "
+        "source's personal targets are all inactive). Approving now "
+        "will send this post straight to “failed”.",
     },
 
     # --- Реклама ---

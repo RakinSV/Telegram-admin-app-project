@@ -361,6 +361,93 @@ def test_sources_create_and_list_round_trip():
     assert "integration_test_chan" in r.text
 
 
+def test_sources_create_bulk_comma_and_newline_separated():
+    """Фича (жалоба пользователя): вставка нескольких каналов за раз."""
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/sources",
+        data={"channel": "@bulk_a, @bulk_b\n@bulk_c"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = client.get("/sources")
+    for name in ("bulk_a", "bulk_b", "bulk_c"):
+        assert name in r.text
+
+
+def test_sources_create_bulk_calls_restart_once(monkeypatch):
+    """Массовая вставка нескольких НОВЫХ каналов — рестарт listener'а
+    должен произойти ровно один раз, а не по разу на каждый источник."""
+    from tg_repost.webui import crud_routes
+
+    client = _client()
+    _bootstrap(client)
+
+    calls = []
+
+    async def _fake_restart():
+        calls.append(1)
+
+    monkeypatch.setattr(crud_routes, "restart_telethon_listener", _fake_restart)
+    r = client.post(
+        "/sources",
+        data={"channel": "@restart_once_a, @restart_once_b, @restart_once_c"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert calls == [1]
+
+
+def test_sources_create_bulk_rejects_too_many():
+    client = _client()
+    _bootstrap(client)
+    many = ",".join(f"@toomany{i}" for i in range(101))
+    r = client.post("/sources", data={"channel": many}, follow_redirects=False)
+    assert r.status_code == 400
+
+
+def test_sources_create_no_restart_when_already_active(monkeypatch):
+    """Регресс-тест (аудит ведения групп, раунд 2): повторная отправка
+    формы для УЖЕ активного источника (double-submit) ничего не меняет в
+    составе слушаемых каналов — не должна дёргать restart_telethon_listener."""
+    from tg_repost.webui import crud_routes
+
+    client = _client()
+    _bootstrap(client)
+    client.post("/sources", data={"channel": "@already_active_chan"}, follow_redirects=False)
+
+    calls = []
+
+    async def _fake_restart():
+        calls.append(1)
+
+    monkeypatch.setattr(crud_routes, "restart_telethon_listener", _fake_restart)
+    r = client.post("/sources", data={"channel": "@already_active_chan"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert calls == []
+
+
+def test_sources_create_restart_failure_does_not_break_response(monkeypatch):
+    """Регресс-тест: источник уже закоммичен в БД к моменту вызова
+    restart_telethon_listener() — его сбой не должен превращать успешное
+    добавление источника в ошибку на экране."""
+    from tg_repost import sources_repo
+    from tg_repost.webui import crud_routes
+
+    async def _boom():
+        raise RuntimeError("Telegram недоступен")
+
+    monkeypatch.setattr(crud_routes, "restart_telethon_listener", _boom)
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/sources", data={"channel": "@restart_fails_chan"}, follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert sources_repo.find_source_by_username("restart_fails_chan") is not None
+
+
 def test_source_detail_shows_targets_as_checkboxes():
     """Новый роутинг (аудит UX): цели выбираются чекбоксами, а не вводом
     chat_id вручную — на странице источника должны быть чекбоксы целей."""
@@ -550,3 +637,44 @@ def test_telethon_sessions_rejects_empty_session_string():
     _bootstrap(client)
     r = client.post("/telethon-sessions", data={"label": "account-2", "session_string": "   "})
     assert r.status_code == 400
+
+
+def test_moderation_detail_hides_target_routing_for_already_posted_post():
+    """Регресс-тест (аудит ведения групп, раунд 2): `/moderation/{id}`
+    доступен по прямой ссылке для ЛЮБОГО поста, не только для ожидающих
+    модерации — например, /stats линкует на "топ-пост", у которого
+    status=posted. Блок "Опубликуется в" не должен показываться для уже
+    опубликованного (или отклонённого) поста — это относится только к
+    постам, публикация которых ещё предстоит. Явно создаём свою активную
+    цель (а не полагаемся на "в тестовой БД по умолчанию целей нет" — это
+    ломается под полным прогоном сьюта из-за общей БД между файлами)."""
+    from tg_repost import targets_repo
+    from tg_repost.db.models import PostKind, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+    targets_repo.add_target(-100987654, "Regression Test Target")
+
+    with session_scope() as session:
+        posted = Post(
+            kind=PostKind.SOURCE, original_text="orig", rewritten_text="v0",
+            status=PostStatus.POSTED,
+        )
+        session.add(posted)
+        pending = Post(
+            kind=PostKind.SOURCE, original_text="orig", rewritten_text="v0",
+            status=PostStatus.PENDING_APPROVAL,
+        )
+        session.add(pending)
+        session.flush()
+        posted_id, pending_id = posted.id, pending.id
+
+    r_posted = client.get(f"/moderation/{posted_id}")
+    assert r_posted.status_code == 200
+    assert "Опубликуется в" not in r_posted.text
+    assert "Публиковать некуда" not in r_posted.text
+
+    r_pending = client.get(f"/moderation/{pending_id}")
+    assert r_pending.status_code == 200
+    # Пост ещё не опубликован — активная цель есть, ожидаем "Опубликуется в".
+    assert "Опубликуется в" in r_pending.text
