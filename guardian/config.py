@@ -37,8 +37,23 @@ class GuardianSettings(BaseSettings):
 
     # --- Идентичность бота и чата ---
     guardian_bot_token: str = Field("", alias="GUARDIAN_BOT_TOKEN")
+    # F28 (аудит ведения групп, 2026-07-17): раньше Guardian защищал РОВНО
+    # одну группу через это поле. Теперь список чатов приходит из
+    # `protected_chat_ids` (galочка на TargetGroup в веб-админке tg_repost,
+    # см. `webui/crud_routes.py::targets_toggle_guardian` и
+    # `guardian/settings_store.py::sync_protected_chat_ids`). Поле оставлено
+    # в .env/классе ТОЛЬКО для одноразовой миграции данных при первом деплое
+    # этой фичи (см. `tg_repost/db/migrations/versions/
+    # 0013_target_group_use_guardian.py`) — хендлеры/антирейд/джобы больше
+    # его не читают напрямую.
     guardian_group_id: int = Field(0, alias="GUARDIAN_GROUP_ID")
     guardian_log_channel_id: int = Field(0, alias="GUARDIAN_LOG_CHANNEL_ID")
+    # Список chat_id защищаемых групп — единственный источник истины для
+    # join.py/messages.py/raid_detector.py/bot.py-джоб. Пустой список —
+    # штатное состояние (ни одна цель не отмечена галочкой), не ошибка.
+    # ТОЛЬКО оверлей из bot_config (см. _db_overrides) — нет смысла задавать
+    # через .env, синхронизируется исключительно из tg_repost.
+    protected_chat_ids: list[int] = Field(default_factory=list)
 
     # --- БД (отдельная от репост-бота — независимые alembic-цепочки) ---
     guardian_database_url: str = Field(
@@ -121,8 +136,14 @@ class GuardianSettings(BaseSettings):
 
     @property
     def is_configured(self) -> bool:
-        """Достаточно ли секретов, чтобы запускать Guardian."""
-        return bool(self.guardian_bot_token and self.guardian_group_id)
+        """Достаточно ли секретов, чтобы запускать Guardian.
+
+        F28: `guardian_group_id` больше НЕ обязателен — Guardian может
+        стартовать вообще без единой отмеченной галочкой цели (штатный
+        no-op, а не ошибка конфигурации) и получить первую защищаемую
+        группу позже через `/targets` без рестарта процесса. Токен бота —
+        единственное, что действительно нужно для подключения к Bot API."""
+        return bool(self.guardian_bot_token)
 
 
 @lru_cache

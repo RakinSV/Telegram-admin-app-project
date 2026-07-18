@@ -44,7 +44,10 @@
 
 <div class="card">
   <table>
-    <tr><th>ID</th><th>{{ t('targets.col_active') }}</th><th>{{ t('targets.col_chat_id') }}</th><th>{{ t('targets.col_title') }}</th><th></th></tr>
+    <tr>
+      <th>ID</th><th>{{ t('targets.col_active') }}</th><th>{{ t('targets.col_chat_id') }}</th>
+      <th>{{ t('targets.col_title') }}</th><th>{{ t('targets.col_guardian') }}</th><th></th>
+    </tr>
     {% for tg in targets %}
     <tr>
       <td>{{ tg.id }}</td>
@@ -57,13 +60,22 @@
         {% endif %}
       </td>
       <td>
+        <span class="badge {{ 'ok' if tg.use_guardian else 'muted' }}">{{ t('common.yes') if tg.use_guardian else t('common.no') }}</span>
+        {% if tg.use_guardian and tg.guardian_can_moderate == false %}
+        <br><span class="error" style="font-size:12px;">⚠️ {{ t('targets.guardian_cannot_moderate') }}</span>
+        {% endif %}
+      </td>
+      <td>
         <form method="post" action="/targets/{{ tg.id }}/toggle" style="display:inline;">
           <button type="submit" class="secondary">{{ t('common.deactivate') if tg.is_active else t('common.activate') }}</button>
+        </form>
+        <form method="post" action="/targets/{{ tg.id }}/toggle-guardian" style="display:inline;">
+          <button type="submit" class="secondary">{{ t('targets.guardian_disable') if tg.use_guardian else t('targets.guardian_enable') }}</button>
         </form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
+    <tr><td colspan="6" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

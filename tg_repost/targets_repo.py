@@ -55,6 +55,61 @@ def toggle_target(target_id: int) -> bool | None:
         return target.is_active
 
 
+def toggle_guardian(target_id: int) -> bool | None:
+    """F28: переключить use_guardian. Возвращает новое значение, либо None,
+    если цель не найдена. Список защищаемых чатов в guardian.bot_config
+    синхронизируется ОТДЕЛЬНО вызывающим кодом (см.
+    `webui/crud_routes.py::targets_toggle_guardian`) — эта функция только
+    меняет tg_repost-сторону, ничего не знает про Guardian."""
+    with session_scope() as session:
+        target = session.get(TargetGroup, target_id)
+        if target is None:
+            return None
+        target.use_guardian = not target.use_guardian
+        return target.use_guardian
+
+
+def list_guardian_chat_ids() -> list[int]:
+    """F28: chat_id всех целей с use_guardian=True — источник истины для
+    guardian.bot_config.protected_chat_ids."""
+    with session_scope() as session:
+        rows = (
+            session.query(TargetGroup.chat_id)
+            .filter(TargetGroup.use_guardian.is_(True))
+            .all()
+        )
+        return [r[0] for r in rows]
+
+
+def list_guardian_targets() -> list[tuple[int, str]]:
+    """F28: (chat_id, отображаемое_имя) всех целей с use_guardian=True —
+    для селектора группы на страницах Guardian в веб-админке (стоп-слова/
+    домены/доверенные теперь раздельны по каждой группе)."""
+    with session_scope() as session:
+        rows = (
+            session.query(TargetGroup.chat_id, TargetGroup.title)
+            .filter(TargetGroup.use_guardian.is_(True))
+            .order_by(TargetGroup.id)
+            .all()
+        )
+        return [(chat_id, title or f"id{chat_id}") for chat_id, title in rows]
+
+
+def sync_guardian_can_moderate(chat_id: int, can_moderate: bool | None) -> bool:
+    """F28.10: актуализировать `TargetGroup.guardian_can_moderate` — вызывается
+    ИЗ ОТДЕЛЬНОГО процесса Guardian (см. `guardian/handlers/chat_member.py`),
+    кросс-пакетный импорт `tg_repost.targets_repo`, симметрично тому, как
+    `webui/guardian_routes.py` читает/пишет БД Guardian в обратную сторону.
+    No-op (False), если чат ещё не цель — Guardian мог получить админку в
+    чате, который репост-бот никуда не публикует."""
+    with session_scope() as session:
+        target = session.query(TargetGroup).filter(TargetGroup.chat_id == chat_id).one_or_none()
+        if target is None:
+            return False
+        target.guardian_can_moderate = can_moderate
+        return True
+
+
 def sync_can_post(chat_id: int, can_post: bool | None) -> bool:
     """Актуализировать `TargetGroup.can_post` для уже добавленной цели
     (F08-доп., аудит ведения групп раунд 3) — вызывается из того же

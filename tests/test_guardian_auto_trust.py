@@ -25,6 +25,7 @@ def _isolated():
         session.query(TrustedUser).delete()
         session.query(BotConfig).delete()
     invalidate_settings_cache()
+    settings_store.sync_protected_chat_ids([CHAT_ID])  # F28: список, не одна группа
     yield
     with session_scope() as session:
         session.query(Member).delete()
@@ -120,3 +121,34 @@ def test_disabled_when_threshold_zero():
 
     with session_scope() as session:
         assert session.query(TrustedUser).count() == 0
+
+
+def test_no_protected_chats_is_noop():
+    """F28: пустой protected_chat_ids (ни одна цель не отмечена галочкой) —
+    штатный no-op, не ошибка."""
+    settings_store.save_setting("auto_trust_after_days", 30, "int")
+    settings_store.sync_protected_chat_ids([])
+    _make_member(1, days_ago=31)
+
+    _auto_trust_eligible_members()  # не должно упасть
+
+    with session_scope() as session:
+        assert session.query(TrustedUser).count() == 0
+
+
+def test_processes_each_protected_chat_independently():
+    """F28: eligible-участник учитывается на КАЖДУЮ защищаемую группу
+    отдельно (Member — на пару user_id+chat_id, не глобально на юзера)."""
+    other_chat_id = -100456
+    settings_store.save_setting("auto_trust_after_days", 30, "int")
+    settings_store.sync_protected_chat_ids([CHAT_ID, other_chat_id])
+    _make_member(1, days_ago=31)
+    _make_member(1, days_ago=31, chat_id=other_chat_id)
+
+    _auto_trust_eligible_members()
+
+    with session_scope() as session:
+        trusted_chat_ids = {
+            row.chat_id for row in session.query(TrustedUser).filter(TrustedUser.user_id == 1)
+        }
+        assert trusted_chat_ids == {CHAT_ID, other_chat_id}

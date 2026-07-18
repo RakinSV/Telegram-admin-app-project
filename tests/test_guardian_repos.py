@@ -7,15 +7,24 @@ from __future__ import annotations
 import pytest
 
 from guardian import domains_repo, stopwords_repo, trusted_repo
-from guardian.db.models import BotConfig, Member, ModerationLog, StopWord, TrustedUser
+from guardian.db.models import (
+    AllowedDomain,
+    Member,
+    ModerationLog,
+    StopWord,
+    TrustedUser,
+)
 from guardian.db.session import session_scope
+
+_CHAT_ID = -100
+_OTHER_CHAT_ID = -200
 
 
 @pytest.fixture(autouse=True)
 def _clear_tables():
     with session_scope() as session:
         session.query(StopWord).delete()
-        session.query(BotConfig).delete()
+        session.query(AllowedDomain).delete()
         session.query(TrustedUser).delete()
         session.query(Member).delete()
         session.query(ModerationLog).delete()
@@ -26,70 +35,93 @@ def _clear_tables():
 
 
 def test_add_stopword_normalizes_and_lists():
-    assert stopwords_repo.add_stopword("  КАЗИНО  ", added_by="test") is True
-    assert stopwords_repo.list_stopwords() == ["казино"]
+    assert stopwords_repo.add_stopword("  КАЗИНО  ", _CHAT_ID, added_by="test") is True
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == ["казино"]
 
 
 def test_add_stopword_duplicate_returns_false():
-    stopwords_repo.add_stopword("казино", added_by="test")
-    assert stopwords_repo.add_stopword("казино", added_by="test2") is False
-    assert stopwords_repo.list_stopwords() == ["казино"]
+    stopwords_repo.add_stopword("казино", _CHAT_ID, added_by="test")
+    assert stopwords_repo.add_stopword("казино", _CHAT_ID, added_by="test2") is False
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == ["казино"]
 
 
 def test_add_stopword_empty_is_noop():
-    assert stopwords_repo.add_stopword("   ", added_by="test") is False
-    assert stopwords_repo.list_stopwords() == []
+    assert stopwords_repo.add_stopword("   ", _CHAT_ID, added_by="test") is False
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == []
 
 
 def test_remove_stopword_existing():
-    stopwords_repo.add_stopword("казино", added_by="test")
-    assert stopwords_repo.remove_stopword("КАЗИНО") is True
-    assert stopwords_repo.list_stopwords() == []
+    stopwords_repo.add_stopword("казино", _CHAT_ID, added_by="test")
+    assert stopwords_repo.remove_stopword("КАЗИНО", _CHAT_ID) is True
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == []
 
 
 def test_remove_stopword_missing_returns_false():
-    assert stopwords_repo.remove_stopword("нет такого") is False
+    assert stopwords_repo.remove_stopword("нет такого", _CHAT_ID) is False
 
 
 def test_list_stopwords_sorted():
-    stopwords_repo.add_stopword("яблоко", added_by="test")
-    stopwords_repo.add_stopword("апельсин", added_by="test")
-    assert stopwords_repo.list_stopwords() == ["апельсин", "яблоко"]
+    stopwords_repo.add_stopword("яблоко", _CHAT_ID, added_by="test")
+    stopwords_repo.add_stopword("апельсин", _CHAT_ID, added_by="test")
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == ["апельсин", "яблоко"]
+
+
+def test_stopwords_scoped_to_chat():
+    """F28: одинаковое слово можно независимо добавить/удалить в двух
+    разных защищаемых группах."""
+    stopwords_repo.add_stopword("казино", _CHAT_ID, added_by="test")
+    stopwords_repo.add_stopword("казино", _OTHER_CHAT_ID, added_by="test")
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == ["казино"]
+    assert stopwords_repo.list_stopwords(_OTHER_CHAT_ID) == ["казино"]
+    assert stopwords_repo.remove_stopword("казино", _CHAT_ID) is True
+    assert stopwords_repo.list_stopwords(_CHAT_ID) == []
+    assert stopwords_repo.list_stopwords(_OTHER_CHAT_ID) == ["казино"]
 
 
 # --- domains_repo ---
 
 
 def test_add_domain_normalizes_strips_www():
-    domain = domains_repo.add_allowed_domain("WWW.Example.COM", updated_by="test")
+    domain = domains_repo.add_allowed_domain("WWW.Example.COM", _CHAT_ID, updated_by="test")
     assert domain == "example.com"
-    assert domains_repo.list_allowed_domains() == ["example.com"]
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == ["example.com"]
 
 
 def test_add_domain_dedups():
-    domains_repo.add_allowed_domain("example.com", updated_by="test")
-    domains_repo.add_allowed_domain("example.com", updated_by="test")
-    assert domains_repo.list_allowed_domains() == ["example.com"]
+    domains_repo.add_allowed_domain("example.com", _CHAT_ID, updated_by="test")
+    domains_repo.add_allowed_domain("example.com", _CHAT_ID, updated_by="test")
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == ["example.com"]
 
 
 def test_add_domain_empty_or_www_only_is_noop():
-    assert domains_repo.add_allowed_domain("   ", updated_by="test") == ""
-    assert domains_repo.add_allowed_domain("www.", updated_by="test") == ""
-    assert domains_repo.list_allowed_domains() == []
+    assert domains_repo.add_allowed_domain("   ", _CHAT_ID, updated_by="test") == ""
+    assert domains_repo.add_allowed_domain("www.", _CHAT_ID, updated_by="test") == ""
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == []
 
 
 def test_remove_domain_existing():
-    domains_repo.add_allowed_domain("example.com", updated_by="test")
-    assert domains_repo.remove_allowed_domain("example.com", updated_by="test") is True
-    assert domains_repo.list_allowed_domains() == []
+    domains_repo.add_allowed_domain("example.com", _CHAT_ID, updated_by="test")
+    assert domains_repo.remove_allowed_domain("example.com", _CHAT_ID, updated_by="test") is True
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == []
 
 
 def test_remove_domain_missing_returns_false():
-    assert domains_repo.remove_allowed_domain("nope.com", updated_by="test") is False
+    assert domains_repo.remove_allowed_domain("nope.com", _CHAT_ID, updated_by="test") is False
 
 
 def test_list_allowed_domains_empty_by_default():
-    assert domains_repo.list_allowed_domains() == []
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == []
+
+
+def test_domains_scoped_to_chat():
+    """F28: одинаковый домен можно независимо добавить/удалить в двух
+    разных защищаемых группах."""
+    domains_repo.add_allowed_domain("example.com", _CHAT_ID, updated_by="test")
+    domains_repo.add_allowed_domain("example.com", _OTHER_CHAT_ID, updated_by="test")
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == ["example.com"]
+    assert domains_repo.remove_allowed_domain("example.com", _CHAT_ID, updated_by="test") is True
+    assert domains_repo.list_allowed_domains(_CHAT_ID) == []
+    assert domains_repo.list_allowed_domains(_OTHER_CHAT_ID) == ["example.com"]
 
 
 # --- trusted_repo ---

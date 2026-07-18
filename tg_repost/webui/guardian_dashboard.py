@@ -33,9 +33,9 @@ def counts(chat_id: int) -> GuardianCounts:
             .count()
         )
     return GuardianCounts(
-        stopwords=len(stopwords_repo.list_stopwords()),
+        stopwords=len(stopwords_repo.list_stopwords(chat_id)),
         trusted=len(trusted_repo.list_trusted(chat_id)),
-        domains=len(domains_repo.list_allowed_domains()),
+        domains=len(domains_repo.list_allowed_domains(chat_id)),
         members=members,
         banned=banned,
     )

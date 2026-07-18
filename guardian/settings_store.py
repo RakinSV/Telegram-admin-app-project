@@ -168,6 +168,16 @@ def effective_value(field: SettingField) -> object:
     return getattr(get_guardian_settings(), field.name)
 
 
+def sync_protected_chat_ids(chat_ids: list[int]) -> None:
+    """F28: перезаписать полный список защищаемых Guardian чатов —
+    вызывается из tg_repost при КАЖДОМ изменении галочки `use_guardian` на
+    `/targets` (см. `webui/crud_routes.py::targets_toggle_guardian`), не
+    инкрементально. `join.py`/`messages.py`/`raid_detector.py`/джобы в
+    `bot.py` читают этот список на каждое событие через
+    `get_guardian_settings()` — без рестарта Guardian."""
+    save_setting("protected_chat_ids", sorted(set(chat_ids)), "list", updated_by="tg_repost")
+
+
 def save_setting(
     key: str, value: object, value_type: str, updated_by: str = "webui"
 ) -> None:

@@ -73,12 +73,42 @@ class Warning(Base):
 
 
 class StopWord(Base):
-    """Стоп-слово фильтра ключевых слов (G03)."""
+    """Стоп-слово фильтра ключевых слов (G03) — раздельно по каждой
+    защищаемой группе (F28: решено с пользователем 2026-07-17 — общий
+    список для разнотемных групп мог быть либо слишком строгим для одной,
+    либо слишком мягким для другой). Одно и то же слово МОЖЕТ повторяться
+    в разных группах независимо — уникальность по паре (word, chat_id),
+    не по одному word."""
 
     __tablename__ = "stop_words"
+    __table_args__ = (
+        UniqueConstraint("word", "chat_id", name="uq_stop_words_word_chat"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    word: Mapped[str] = mapped_column(String(255), unique=True)
+    word: Mapped[str] = mapped_column(String(255))
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    added_by: Mapped[str] = mapped_column(String(32), default="auto", nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class AllowedDomain(Base):
+    """Whitelist доменов для фильтра ссылок (G04) — раздельно по каждой
+    защищаемой группе, тот же принцип, что и StopWord (F28). Раньше
+    хранился ОДНИМ общим JSON-списком внутри BotConfig (ключ
+    allowed_domains) — вынесено в отдельную таблицу для консистентности
+    (StopWord уже была отдельной таблицей) и чтобы разделение по chat_id
+    было структурным, а не через магический ключ вида
+    "allowed_domains:{chat_id}"."""
+
+    __tablename__ = "allowed_domains"
+    __table_args__ = (
+        UniqueConstraint("domain", "chat_id", name="uq_allowed_domains_domain_chat"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    domain: Mapped[str] = mapped_column(String(255))
+    chat_id: Mapped[int] = mapped_column(BigInteger)
     added_by: Mapped[str] = mapped_column(String(32), default="auto", nullable=False)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

@@ -116,7 +116,9 @@ async def on_message(message: Message, bot: Bot) -> None:
     settings = get_guardian_settings()
     if message.from_user is None or message.from_user.is_bot:
         return
-    if message.chat.id != settings.guardian_group_id:
+    # F28: список защищаемых чатов, не одна группа — см. config.py про
+    # protected_chat_ids.
+    if message.chat.id not in settings.protected_chat_ids:
         return
 
     user_id = message.from_user.id
@@ -136,7 +138,7 @@ async def on_message(message: Message, bot: Bot) -> None:
         await _delete_and_warn(bot, message, user_id, "дублирующееся сообщение подряд")
         return
 
-    is_bad_link, domain = link_filter.check(message)
+    is_bad_link, domain = link_filter.check(message, message.chat.id)
     if is_bad_link:
         if settings.strict_mode:
             await _delete_and_warn(bot, message, user_id, f"ссылка на неразрешённый домен: {domain}")
@@ -157,7 +159,7 @@ async def on_message(message: Message, bot: Bot) -> None:
             )
 
     if settings.spam_mode in ("keywords", "hybrid") and text:
-        hit, word = keyword_filter.check(text)
+        hit, word = keyword_filter.check(text, message.chat.id)
         if hit:
             await _delete_and_warn(bot, message, user_id, f"стоп-слово: {word}")
             return

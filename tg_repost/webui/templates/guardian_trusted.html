@@ -6,13 +6,15 @@
 <p class="muted">{{ t('guardian_trusted.desc') }}</p>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if chat_id_missing %}
-<div class="card" style="border-color: var(--warn);">
-  {{ t('guardian_trusted.no_group_missing_warning') | safe }}
+{{ m.no_protected_chats_warning() }}
+{% else %}
+<div class="card">
+  {{ m.chat_selector(protected_targets, selected_chat_id, '/guardian/trusted') }}
 </div>
-{% endif %}
 
 <div class="card">
   <form method="post" action="/guardian/trusted">
+    <input type="hidden" name="chat_id" value="{{ selected_chat_id }}">
     <div class="field-row">
       <label for="user_id">{{ t('guardian_trusted.col_user_id') }}</label>
       <input type="text" id="user_id" name="user_id" placeholder="{{ t('guardian_trusted.user_id_placeholder') }}" required>
@@ -38,11 +40,12 @@
       <td>{{ tr.added_at.strftime("%Y-%m-%d %H:%M") if tr.added_at else "" }}</td>
       <td>{{ tr.added_by }}</td>
       <td>{{ tr.reason or "" }}</td>
-      <td>{{ m.confirm_form('/guardian/trusted/%d/delete'|format(tr.user_id), t('common.delete'), confirm_key='common.confirm_delete') }}</td>
+      <td>{{ m.confirm_form('/guardian/trusted/%d/delete?chat_id=%d'|format(tr.user_id, selected_chat_id), t('common.delete'), confirm_key='common.confirm_delete') }}</td>
     </tr>
     {% else %}
     <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>
+{% endif %}
 {% endblock %}

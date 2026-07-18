@@ -6,14 +6,13 @@
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from guardian.db.models import BotConfig
+from guardian.db.models import AllowedDomain
 
 _LINK_RE = re.compile(r"(?:https?://|t\.me/|www\.)\S+", re.IGNORECASE)
 
@@ -32,15 +31,15 @@ def _domain_from_url(url: str) -> str | None:
 
 class LinkFilter:
     def __init__(self) -> None:
-        self._allowed: set[str] = set()
+        # F28: раздельно по каждой защищаемой группе — раньше был один
+        # общий whitelist доменов на процесс.
+        self._allowed_by_chat: dict[int, set[str]] = {}
 
     def reload(self, session: Session) -> None:
-        row = (
-            session.query(BotConfig)
-            .filter(BotConfig.key == "allowed_domains")
-            .one_or_none()
-        )
-        self._allowed = set(json.loads(row.value)) if row is not None else set()
+        allowed_by_chat: dict[int, set[str]] = {}
+        for row in session.query(AllowedDomain).all():
+            allowed_by_chat.setdefault(row.chat_id, set()).add(row.domain)
+        self._allowed_by_chat = allowed_by_chat
 
     def _extract_domains(self, message: Any) -> list[str]:
         domains: list[str] = []
@@ -61,9 +60,11 @@ class LinkFilter:
                     domains.append(domain)
         return domains
 
-    def check(self, message: Any) -> tuple[bool, str | None]:
-        """Вернуть (найдена_ли_запрещённая_ссылка, домен)."""
+    def check(self, message: Any, chat_id: int) -> tuple[bool, str | None]:
+        """Вернуть (найдена_ли_запрещённая_ссылка, домен) для whitelist ИМЕННО
+        этой группы."""
+        allowed = self._allowed_by_chat.get(chat_id, set())
         for domain in self._extract_domains(message):
-            if domain not in self._allowed:
+            if domain not in allowed:
                 return True, domain
         return False, None

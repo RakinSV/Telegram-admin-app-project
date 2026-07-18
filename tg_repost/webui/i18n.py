@@ -435,6 +435,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The bot isn't an admin with posting rights here — it won't "
         "be able to post until you grant that in the channel's settings",
     },
+    "targets.col_guardian": {"ru": "Guardian", "en": "Guardian"},
+    "targets.guardian_enable": {"ru": "Включить Guardian", "en": "Enable Guardian"},
+    "targets.guardian_disable": {"ru": "Выключить Guardian", "en": "Disable Guardian"},
+    "targets.guardian_cannot_moderate": {
+        "ru": "Guardian включён, но не добавлен администратором в этот чат — "
+        "капча/антиспам/антирейд здесь не работают",
+        "en": "Guardian is enabled but not added as admin to this chat — "
+        "captcha/anti-spam/anti-raid don't work here",
+    },
 
     # --- Модерация ---
     "moderation.title": {"ru": "Очередь модерации", "en": "Moderation queue"},
@@ -530,6 +539,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "No additional sessions — only the primary one is used.",
     },
 
+    # --- Guardian: общий селектор группы (F28 — стоп-слова/домены/
+    # доверенные/дашборд раздельны по каждой защищаемой группе) ---
+    "guardian.select_chat_label": {"ru": "Группа", "en": "Group"},
+    "guardian.no_protected_chats_warning": {
+        "ru": "⚠️ Ни одна цель не отмечена галочкой «Guardian» — включи "
+        "защиту хотя бы для одной группы на странице <a href=\"/targets\">Целей</a>.",
+        "en": "⚠️ No target has the Guardian checkbox enabled — turn on "
+        "protection for at least one group on the <a href=\"/targets\">Targets</a> page.",
+    },
+
     # --- Guardian: стоп-слова / домены / доверенные ---
     "guardian_stopwords.title": {"ru": "Стоп-слова Guardian", "en": "Guardian stop words"},
     "guardian_stopwords.desc": {
@@ -558,10 +577,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Полностью обходят все фильтры Guardian.",
         "en": "Fully bypass all Guardian filters.",
     },
-    "guardian_trusted.no_group_warning": {
-        "ru": "⚠️ GUARDIAN_GROUP_ID не задан — прикреплять доверие не к чему.",
-        "en": "⚠️ GUARDIAN_GROUP_ID isn't set — nothing to attach trust records to.",
-    },
     "guardian_trusted.user_id_placeholder": {"ru": "user_id", "en": "user_id"},
     "guardian_trusted.user_id_hint": {
         "ru": "Числовой Telegram id, не @username — узнать можно переслав "
@@ -569,20 +584,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "A numeric Telegram id, not @username — find it by "
         "forwarding a message from this person to @userinfobot.",
     },
-    "guardian_trusted.no_group_missing_warning": {
-        "ru": "⚠️ GUARDIAN_GROUP_ID не задан — добавлять доверенных пока "
-        "некуда. Настрой Guardian в <code>.env</code> сначала.",
-        "en": "⚠️ GUARDIAN_GROUP_ID isn't set — nothing to attach trust "
-        "records to yet. Configure Guardian in <code>.env</code> first.",
-    },
     "guardian_trusted.reason_placeholder": {"ru": "Причина (опционально)", "en": "Reason (optional)"},
     "guardian_trusted.col_user_id": {"ru": "user_id", "en": "user_id"},
     "guardian_trusted.col_added_at": {"ru": "Добавлен", "en": "Added"},
     "guardian_trusted.col_added_by": {"ru": "Кем", "en": "By"},
     "guardian_trusted.col_reason": {"ru": "Причина", "en": "Reason"},
     "guardian_trusted.error_no_group": {
-        "ru": "GUARDIAN_GROUP_ID не задан — сначала настрой Guardian в .env.",
-        "en": "GUARDIAN_GROUP_ID isn't set — configure Guardian in .env first.",
+        "ru": "Выбранная группа больше не защищается Guardian — обнови страницу.",
+        "en": "The selected group is no longer protected by Guardian — refresh the page.",
     },
     "guardian_trusted.error_invalid_user_id": {
         "ru": "user_id должен быть целым числом.", "en": "user_id must be an integer.",

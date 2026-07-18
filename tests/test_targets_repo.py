@@ -78,3 +78,54 @@ def test_sync_can_post_updates_existing_target():
 def test_sync_can_post_missing_target_is_noop():
     _clear_targets()
     assert targets_repo.sync_can_post(-100888, False) is False
+
+
+def test_toggle_guardian_flips_state():
+    _clear_targets()
+    target, _ = targets_repo.add_target(-100999)
+    assert target.use_guardian is False
+    assert targets_repo.toggle_guardian(target.id) is True
+    assert targets_repo.toggle_guardian(target.id) is False
+
+
+def test_toggle_guardian_missing_returns_none():
+    _clear_targets()
+    assert targets_repo.toggle_guardian(999999) is None
+
+
+def test_list_guardian_chat_ids_only_flagged_targets():
+    _clear_targets()
+    a, _ = targets_repo.add_target(-100111)
+    targets_repo.add_target(-100222)  # без Guardian
+    c, _ = targets_repo.add_target(-100333)
+    targets_repo.toggle_guardian(a.id)
+    targets_repo.toggle_guardian(c.id)
+    assert sorted(targets_repo.list_guardian_chat_ids()) == [-100333, -100111]
+
+
+def test_list_guardian_targets_returns_chat_id_and_label():
+    _clear_targets()
+    a, _ = targets_repo.add_target(-100111, "Named Group")
+    targets_repo.add_target(-100222)  # без Guardian, не должен попасть
+    b, _ = targets_repo.add_target(-100333)  # без title
+    targets_repo.toggle_guardian(a.id)
+    targets_repo.toggle_guardian(b.id)
+    assert targets_repo.list_guardian_targets() == [
+        (-100111, "Named Group"),
+        (-100333, "id-100333"),
+    ]
+
+
+def test_sync_guardian_can_moderate_updates_existing_target():
+    _clear_targets()
+    target, _ = targets_repo.add_target(-100777)
+    assert target.guardian_can_moderate is None
+    assert targets_repo.sync_guardian_can_moderate(-100777, True) is True
+    with session_scope() as session:
+        updated = session.query(TargetGroup).filter(TargetGroup.chat_id == -100777).one()
+        assert updated.guardian_can_moderate is True
+
+
+def test_sync_guardian_can_moderate_missing_target_is_noop():
+    _clear_targets()
+    assert targets_repo.sync_guardian_can_moderate(-100888, True) is False

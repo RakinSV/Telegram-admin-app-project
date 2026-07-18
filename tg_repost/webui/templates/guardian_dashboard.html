@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}{{ t('guardian_dashboard.title') }} — tg_repost admin{% endblock %}
 {% block content %}
 <h1>{{ t('guardian_dashboard.title') }}</h1>
@@ -26,19 +27,26 @@
   </div>
 </div>
 
+{% if not protected_targets %}
+{{ m.no_protected_chats_warning() }}
+{% else %}
+<div class="card">
+  {{ m.chat_selector(protected_targets, selected_chat_id, '/guardian') }}
+</div>
+
 <h2>{{ t('guardian_dashboard.counters_title') }}</h2>
 <div class="card grid">
   <div class="stat">
     <div class="num">{{ counts.stopwords }}</div>
-    <div class="label"><a href="/guardian/stopwords">{{ t('guardian_dashboard.stopwords_count') }}</a></div>
+    <div class="label"><a href="/guardian/stopwords?chat_id={{ selected_chat_id }}">{{ t('guardian_dashboard.stopwords_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.domains }}</div>
-    <div class="label"><a href="/guardian/domains">{{ t('guardian_dashboard.domains_count') }}</a></div>
+    <div class="label"><a href="/guardian/domains?chat_id={{ selected_chat_id }}">{{ t('guardian_dashboard.domains_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.trusted }}</div>
-    <div class="label"><a href="/guardian/trusted">{{ t('guardian_dashboard.trusted_count') }}</a></div>
+    <div class="label"><a href="/guardian/trusted?chat_id={{ selected_chat_id }}">{{ t('guardian_dashboard.trusted_count') }}</a></div>
   </div>
   <div class="stat">
     <div class="num">{{ counts.members }}</div>
@@ -71,4 +79,5 @@
     {% endfor %}
   </table>
 </div>
+{% endif %}
 {% endblock %}

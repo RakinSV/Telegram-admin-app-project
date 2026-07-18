@@ -159,6 +159,23 @@ class TargetGroup(Base):
     # из того же апдейта my_chat_member, что и DiscoveredChat (см.
     # targets_repo.sync_can_post, telegram/moderation_bot.py::_on_my_chat_member).
     can_post: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # F28 (аудит ведения групп): защищать ли этот чат Guardian'ом (капча,
+    # антиспам, антирейд, варны) — раньше Guardian был жёстко привязан к
+    # ОДНОЙ группе через GUARDIAN_GROUP_ID в .env, независимо от того, что
+    # target_groups поддерживает несколько целей публикации. Список
+    # chat_id с use_guardian=True синхронизируется в guardian.bot_config
+    # (ключ protected_chat_ids) при каждом изменении — см.
+    # webui/crud_routes.py::targets_toggle_guardian.
+    use_guardian: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # F28.10: может ли Guardian СЕЙЧАС реально модерировать этот чат (админ +
+    # право ограничивать участников) — независимо от `use_guardian` (галочка
+    # "включить защиту" может стоять, а прав ещё/уже нет — например владелец
+    # забыл выдать админку боту Guardian). NULL, пока Guardian ни разу не
+    # видел статус в этом чате (отличать от "точно знаем, что прав нет").
+    # Синхронизируется из Guardian-процесса (`guardian/handlers/chat_member.py`)
+    # НАПРЯМУЮ в эту таблицу — тот же кросс-пакетный приём, что и
+    # `webui/guardian_routes.py` в другую сторону (см. его docstring).
+    guardian_can_moderate: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

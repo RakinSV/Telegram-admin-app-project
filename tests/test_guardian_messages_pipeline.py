@@ -26,7 +26,11 @@ def _isolated(monkeypatch):
         session.query(DailyStats).delete()
         session.query(BotConfig).delete()
     invalidate_settings_cache()
-    messages_handlers.keyword_filter._words = set()
+    from guardian import settings_store
+
+    settings_store.sync_protected_chat_ids([CHAT_ID])  # F28: список, не одна группа
+    messages_handlers.keyword_filter._words_by_chat = {}
+    messages_handlers.link_filter._allowed_by_chat = {}
     # flood_filter — тоже синглтон на процесс, копит состояние по user_id
     # между тестами (все тесты этого файла по умолчанию используют
     # user_id=555) — без сброса N-й по счёту тест в файле ложно попадал бы

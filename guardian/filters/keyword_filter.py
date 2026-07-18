@@ -54,18 +54,26 @@ def normalize(text: str) -> str:
 
 class KeywordFilter:
     def __init__(self) -> None:
-        self._words: set[str] = set()
+        # F28: раздельно по каждой защищаемой группе — раньше был один
+        # общий набор слов на процесс.
+        self._words_by_chat: dict[int, set[str]] = {}
 
     def reload(self, session: Session) -> None:
-        """Перечитать стоп-слова из БД в память (O(1)-проверка на сообщение)."""
-        self._words = {row.word.lower() for row in session.query(StopWord).all()}
+        """Перечитать стоп-слова из БД в память (O(1)-проверка на сообщение),
+        сгруппированные по chat_id."""
+        words_by_chat: dict[int, set[str]] = {}
+        for row in session.query(StopWord).all():
+            words_by_chat.setdefault(row.chat_id, set()).add(row.word.lower())
+        self._words_by_chat = words_by_chat
 
-    def check(self, text: str) -> tuple[bool, str | None]:
-        """Вернуть (найден_ли_стоп-слово, само_слово)."""
-        if not text or not self._words:
+    def check(self, text: str, chat_id: int) -> tuple[bool, str | None]:
+        """Вернуть (найден_ли_стоп-слово, само_слово) для стоп-слов ИМЕННО
+        этой группы."""
+        words = self._words_by_chat.get(chat_id)
+        if not text or not words:
             return False, None
         normalized = normalize(text)
-        for word in self._words:
+        for word in words:
             if word in normalized:
                 return True, word
         return False, None

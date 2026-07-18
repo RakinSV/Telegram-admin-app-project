@@ -20,6 +20,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from guardian import settings_store as guardian_settings_store
+
 from tg_repost import discovered_chats_repo, post_variants_repo, sources_repo, targets_repo, telethon_sessions_repo
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
@@ -338,6 +340,36 @@ def build_crud_router() -> APIRouter:
         new_state = targets_repo.toggle_target(target_id)
         if new_state is not None:
             audit.record_audit("target_toggle", target=f"#{target_id}", detail=f"active={new_state}")
+        return RedirectResponse(url="/targets", status_code=303)
+
+    @router.post("/targets/{target_id}/toggle-guardian")
+    async def targets_toggle_guardian(request: Request, target_id: int) -> Response:
+        """F28: галочка "использовать Guardian" на цели. Полный список
+        chat_id с use_guardian=True пересчитывается и перезаписывается в
+        БД Guardian ЦЕЛИКОМ (не инкрементально) при каждом переключении —
+        см. `guardian_settings_store.sync_protected_chat_ids`. Guardian
+        перечитывает bot_config на каждое событие (см.
+        `guardian.config.get_guardian_settings`), рестарт его процесса не
+        нужен."""
+        del request
+        new_state = targets_repo.toggle_guardian(target_id)
+        if new_state is None:
+            return RedirectResponse(url="/targets", status_code=303)
+        audit.record_audit(
+            "target_toggle_guardian", target=f"#{target_id}", detail=f"use_guardian={new_state}",
+        )
+        try:
+            guardian_settings_store.sync_protected_chat_ids(targets_repo.list_guardian_chat_ids())
+        except Exception as exc:  # noqa: BLE001
+            # tg_repost-сторона уже сохранена — сбой записи в БД Guardian
+            # (файл недоступен и т.п.) не должен маскировать это 500-кой,
+            # тот же приём, что и для restart_telethon_listener в
+            # sources_create (найдено на повторном ревью).
+            logger.warning(
+                "Галочка Guardian на цели #%s сохранена, но не удалось "
+                "синхронизировать protected_chat_ids в БД Guardian: %s",
+                target_id, exc,
+            )
         return RedirectResponse(url="/targets", status_code=303)
 
     # --- Доп. Telethon-сессии (F26) ---

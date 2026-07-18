@@ -88,7 +88,9 @@ async def on_new_member(
 ) -> None:
     settings = get_guardian_settings()
     chat_id, user_id = event.chat.id, event.new_chat_member.user.id
-    if chat_id != settings.guardian_group_id or event.new_chat_member.user.is_bot:
+    # F28: список защищаемых чатов, не одна группа — см. config.py про
+    # protected_chat_ids.
+    if chat_id not in settings.protected_chat_ids or event.new_chat_member.user.is_bot:
         return
 
     with session_scope() as session:

@@ -23,7 +23,7 @@ from guardian import settings_store, trusted_repo
 from guardian.config import get_guardian_settings
 from guardian.db.models import Member, StopWord, TrustedUser
 from guardian.db.session import session_scope
-from guardian.handlers import admin, join, messages, stats
+from guardian.handlers import admin, chat_member, join, messages, stats
 from guardian.logging_conf import get_logger, setup_logging
 from guardian.services import daily_stats_repo, raid_detector
 from guardian.services.warn_system import reset_expired_warns
@@ -82,30 +82,35 @@ def _auto_trust_eligible_members() -> None:
     существовало только в настройках, но нигде не читалось — найдено при
     ретроспективе). `auto_trust_after_days <= 0` — оператор явно выключил
     автодоверие (тот же sentinel-паттерн, что `negative_reaction_threshold=0`
-    в tg_repost — "0 = выкл.")."""
+    в tg_repost — "0 = выкл."). F28: цикл по ВСЕМ защищаемым группам, не
+    одна — пустой список chat_id — штатный no-op."""
     settings = get_guardian_settings()
-    if not settings.guardian_group_id or settings.auto_trust_after_days <= 0:
+    if settings.auto_trust_after_days <= 0:
         return
     cutoff = datetime.now(timezone.utc) - timedelta(days=settings.auto_trust_after_days)
-    with session_scope() as session:
-        candidates = (
-            session.query(Member)
-            .filter(
-                Member.chat_id == settings.guardian_group_id,
-                Member.join_date < cutoff,
-                Member.warn_count == 0,
-                Member.is_trusted.is_(False),
-                Member.is_banned.is_(False),
-                Member.is_verified.is_(True),
-            )
-            .all()
-        )
-        candidate_ids = [m.user_id for m in candidates]
-
     reason = f"автодоверие: {settings.auto_trust_after_days}+ дней без нарушений"
-    for user_id in candidate_ids:
-        if trusted_repo.add_trusted(user_id, settings.guardian_group_id, added_by="auto", reason=reason):
-            logger.info("G12: %s автоматически добавлен в доверенные (%s)", user_id, reason)
+    for chat_id in settings.protected_chat_ids:
+        with session_scope() as session:
+            candidates = (
+                session.query(Member)
+                .filter(
+                    Member.chat_id == chat_id,
+                    Member.join_date < cutoff,
+                    Member.warn_count == 0,
+                    Member.is_trusted.is_(False),
+                    Member.is_banned.is_(False),
+                    Member.is_verified.is_(True),
+                )
+                .all()
+            )
+            candidate_ids = [m.user_id for m in candidates]
+
+        for user_id in candidate_ids:
+            if trusted_repo.add_trusted(user_id, chat_id, added_by="auto", reason=reason):
+                logger.info(
+                    "G12: %s автоматически добавлен в доверенные в чате %s (%s)",
+                    user_id, chat_id, reason,
+                )
 
 
 def _finalize_yesterday_stats() -> None:
@@ -114,36 +119,42 @@ def _finalize_yesterday_stats() -> None:
     ни разу не вызывались за день (сегодняшняя запись и так пересчитывается
     "по требованию" при каждом вызове — см. `daily_stats_repo.sum_range`,
     но БЕЗ этой джобы день, за который никто не спросил статистику,
-    останется без записи вообще)."""
+    останется без записи вообще). F28: по каждой защищаемой группе отдельно."""
     settings = get_guardian_settings()
-    if not settings.guardian_group_id:
-        return
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
-    daily_stats_repo.compute_and_store_daily_stats(settings.guardian_group_id, day=yesterday)
+    for chat_id in settings.protected_chat_ids:
+        daily_stats_repo.compute_and_store_daily_stats(chat_id, day=yesterday)
 
 
 def _seed_stopwords_if_empty() -> None:
-    """G03: начальный список стоп-слов загружается один раз, только если
-    таблица пуста — дальше редактируется исключительно /addword /delword,
-    не этим файлом (повторный запуск не затирает ручные правки)."""
-    with session_scope() as session:
-        if session.query(StopWord).count() > 0:
-            return
-        try:
-            with open(_STOPWORDS_SEED_PATH, encoding="utf-8") as f:
-                words = [
-                    line.strip()
-                    for line in f
-                    if line.strip() and not line.startswith("#")
-                ]
-        except FileNotFoundError:
-            logger.warning(
-                "Файл стартовых стоп-слов не найден: %s", _STOPWORDS_SEED_PATH
-            )
-            return
-        for word in words:
-            session.add(StopWord(word=word.lower(), added_by="seed"))
-    logger.info("Загружено %d стоп-слов по умолчанию", len(words))
+    """G03: начальный список стоп-слов загружается один раз НА КАЖДУЮ
+    защищаемую группу, только если список ИМЕННО ЭТОЙ группы пуст — дальше
+    редактируется исключительно /addword /delword, не этим файлом (повторный
+    запуск не затирает ручные правки). F28: раздельно по chat_id, а не одна
+    общая проверка на всю таблицу — иначе вновь добавленная группа осталась
+    бы без стартового набора, если у любой другой группы слова уже есть."""
+    settings = get_guardian_settings()
+    if not settings.protected_chat_ids:
+        return
+    try:
+        with open(_STOPWORDS_SEED_PATH, encoding="utf-8") as f:
+            words = [
+                line.strip()
+                for line in f
+                if line.strip() and not line.startswith("#")
+            ]
+    except FileNotFoundError:
+        logger.warning(
+            "Файл стартовых стоп-слов не найден: %s", _STOPWORDS_SEED_PATH
+        )
+        return
+    for chat_id in settings.protected_chat_ids:
+        with session_scope() as session:
+            if session.query(StopWord).filter(StopWord.chat_id == chat_id).count() > 0:
+                continue
+            for word in words:
+                session.add(StopWord(word=word.lower(), chat_id=chat_id, added_by="seed"))
+        logger.info("Загружено %d стоп-слов по умолчанию в чат %s", len(words), chat_id)
 
 
 async def _auto_trust_repost_bot(bot: Bot) -> None:
@@ -158,7 +169,9 @@ async def _auto_trust_repost_bot(bot: Bot) -> None:
     INFO, который обычно не читают в стабильной работе) и с попыткой
     подтвердить личность через `bot.get_chat` — чтобы оператор увидел это в
     логах контейнера при старте и мог сверить, что id верный (найдено при
-    security-аудите)."""
+    security-аудите). F28: репост-бот добавляется в доверенные ВО ВСЕХ
+    защищаемых группах — иначе его посты фильтровались бы как спам в
+    любой группе, кроме первой добавленной."""
     settings = get_guardian_settings()
     if not settings.repost_bot_id:
         return
@@ -170,25 +183,29 @@ async def _auto_trust_repost_bot(bot: Bot) -> None:
         )
         return
     user_id = int(identifier)
-    with session_scope() as session:
-        exists = (
-            session.query(TrustedUser)
-            .filter(
-                TrustedUser.user_id == user_id,
-                TrustedUser.chat_id == settings.guardian_group_id,
+
+    added_to: list[int] = []
+    for chat_id in settings.protected_chat_ids:
+        with session_scope() as session:
+            exists = (
+                session.query(TrustedUser)
+                .filter(TrustedUser.user_id == user_id, TrustedUser.chat_id == chat_id)
+                .one_or_none()
             )
-            .one_or_none()
-        )
-        if exists is not None:
-            return
-        session.add(
-            TrustedUser(
-                user_id=user_id,
-                chat_id=settings.guardian_group_id,
-                added_by="auto",
-                reason="репост-бот (REPOST_BOT_ID)",
+            if exists is not None:
+                continue
+            session.add(
+                TrustedUser(
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    added_by="auto",
+                    reason="репост-бот (REPOST_BOT_ID)",
+                )
             )
-        )
+        added_to.append(chat_id)
+
+    if not added_to:
+        return
 
     identity = f"id{user_id}"
     try:
@@ -201,9 +218,9 @@ async def _auto_trust_repost_bot(bot: Bot) -> None:
     except TelegramBadRequest:
         pass  # бот ещё не "видел" этот id — не критично, сама привилегия всё равно выдана
     logger.warning(
-        "REPOST_BOT_ID: %s добавлен в trusted (полный обход спам-фильтров) — "
+        "REPOST_BOT_ID: %s добавлен в trusted в чатах %s (полный обход спам-фильтров) — "
         "проверь, что это действительно репост-бот",
-        identity,
+        identity, added_to,
     )
 
 
@@ -214,10 +231,15 @@ async def main() -> None:
 
     if not settings.is_configured:
         logger.error(
-            "GUARDIAN_BOT_TOKEN/GUARDIAN_GROUP_ID не заданы в .env — Guardian не "
-            "может стартовать (см. .env.example, секция Guardian)."
+            "GUARDIAN_BOT_TOKEN не задан в .env — Guardian не может "
+            "стартовать (см. .env.example, секция Guardian)."
         )
         return
+    if not settings.protected_chat_ids:
+        logger.warning(
+            "Guardian запускается без единой защищаемой группы — отметь "
+            "галочкой хотя бы одну цель в /targets веб-админки."
+        )
 
     _seed_stopwords_if_empty()
     _reload_filters()
@@ -248,6 +270,7 @@ async def main() -> None:
     # Порядок важен: admin/stats (команды) — раньше messages (общий
     # обработчик текста), иначе /warn, /stats и т.п. дошли бы и до
     # спам-фильтра как обычный текст.
+    dp.include_router(chat_member.router)
     dp.include_router(join.router)
     dp.include_router(raid_detector.router)
     dp.include_router(admin.router)

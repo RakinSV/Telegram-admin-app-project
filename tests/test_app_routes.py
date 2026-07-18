@@ -678,3 +678,35 @@ def test_moderation_detail_hides_target_routing_for_already_posted_post():
     assert r_pending.status_code == 200
     # Пост ещё не опубликован — активная цель есть, ожидаем "Опубликуется в".
     assert "Опубликуется в" in r_pending.text
+
+
+def test_targets_toggle_guardian_syncs_protected_chat_ids():
+    """F28: галочка "использовать Guardian" на цели — переключает
+    use_guardian И перезаписывает guardian.bot_config.protected_chat_ids
+    целиком (не инкрементально)."""
+    from guardian.config import get_guardian_settings, invalidate_settings_cache
+    from guardian.db.models import BotConfig
+    from guardian.db.session import session_scope as guardian_session_scope
+    from tg_repost import targets_repo
+
+    with guardian_session_scope() as session:
+        session.query(BotConfig).delete()
+    invalidate_settings_cache()
+
+    client = _client()
+    _bootstrap(client)
+    target, _ = targets_repo.add_target(-100777123, "Guardian Test Group")
+
+    r = client.post(f"/targets/{target.id}/toggle-guardian", follow_redirects=False)
+    assert r.status_code == 303
+    assert get_guardian_settings().protected_chat_ids == [-100777123]
+
+    # Выключаем обратно — список должен снова стать пустым, не остаться
+    # висеть с "устаревшим" chat_id.
+    r = client.post(f"/targets/{target.id}/toggle-guardian", follow_redirects=False)
+    assert r.status_code == 303
+    assert get_guardian_settings().protected_chat_ids == []
+
+    with guardian_session_scope() as session:
+        session.query(BotConfig).delete()
+    invalidate_settings_cache()

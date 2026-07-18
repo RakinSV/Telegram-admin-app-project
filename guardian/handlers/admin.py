@@ -381,7 +381,7 @@ async def cmd_addword(message: Message, command: CommandObject, bot: Bot) -> Non
     if not word:
         await message.reply("Использование: /addword <слово или фраза>")
         return
-    added = stopwords_repo.add_stopword(word, added_by=str(actor_id))
+    added = stopwords_repo.add_stopword(word, message.chat.id, added_by=str(actor_id))
     _reload_keyword_filter()
     await message.reply(
         f"Стоп-слово «{word}» добавлено."
@@ -399,7 +399,7 @@ async def cmd_delword(message: Message, command: CommandObject, bot: Bot) -> Non
     if not word:
         await message.reply("Использование: /delword <слово или фраза>")
         return
-    stopwords_repo.remove_stopword(word)
+    stopwords_repo.remove_stopword(word, message.chat.id)
     _reload_keyword_filter()
     await message.reply(f"Стоп-слово «{word}» удалено (если было).")
 
@@ -408,7 +408,7 @@ async def cmd_delword(message: Message, command: CommandObject, bot: Bot) -> Non
 async def cmd_listwords(message: Message, bot: Bot) -> None:
     if await _require_admin(message, bot) is None:
         return
-    words = stopwords_repo.list_stopwords()
+    words = stopwords_repo.list_stopwords(message.chat.id)
     await message.reply("Стоп-слова:\n" + ("\n".join(words) if words else "(пусто)"))
 
 
@@ -465,7 +465,7 @@ async def cmd_addomain(message: Message, command: CommandObject, bot: Bot) -> No
     if not raw_domain:
         await message.reply("Использование: /addomain <домен>")
         return
-    domain = domains_repo.add_allowed_domain(raw_domain, str(actor_id))
+    domain = domains_repo.add_allowed_domain(raw_domain, message.chat.id, str(actor_id))
     if not domain:
         await message.reply(
             "Пустой домен (например, только «www.») — нечего добавлять."
@@ -484,7 +484,7 @@ async def cmd_deldomain(message: Message, command: CommandObject, bot: Bot) -> N
     if not raw_domain:
         await message.reply("Использование: /deldomain <домен>")
         return
-    domains_repo.remove_allowed_domain(raw_domain, str(actor_id))
+    domains_repo.remove_allowed_domain(raw_domain, message.chat.id, str(actor_id))
     _reload_link_filter()
     await message.reply(f"Домен «{raw_domain}» удалён из whitelist (если был).")
 
@@ -493,7 +493,7 @@ async def cmd_deldomain(message: Message, command: CommandObject, bot: Bot) -> N
 async def cmd_listdomains(message: Message, bot: Bot) -> None:
     if await _require_admin(message, bot) is None:
         return
-    domains = domains_repo.list_allowed_domains()
+    domains = domains_repo.list_allowed_domains(message.chat.id)
     await message.reply(
         "Whitelist доменов:\n" + ("\n".join(domains) if domains else "(пусто)")
     )

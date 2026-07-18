@@ -79,6 +79,23 @@ def test_save_setting_overwrites_existing_value():
         )
 
 
+def test_sync_protected_chat_ids_round_trip():
+    settings_store.sync_protected_chat_ids([-100333, -100111, -100111])
+    assert get_guardian_settings().protected_chat_ids == [-100333, -100111]
+
+
+def test_sync_protected_chat_ids_overwrites_not_appends():
+    settings_store.sync_protected_chat_ids([-100111])
+    settings_store.sync_protected_chat_ids([-100222])
+    assert get_guardian_settings().protected_chat_ids == [-100222]
+
+
+def test_sync_protected_chat_ids_empty_list_clears():
+    settings_store.sync_protected_chat_ids([-100111])
+    settings_store.sync_protected_chat_ids([])
+    assert get_guardian_settings().protected_chat_ids == []
+
+
 def test_captcha_questions_and_allowed_domains_not_treated_as_settings_overlay():
     """`bot_config` хранит не только настройки — `captcha_questions` (G01) и
     `allowed_domains` (G04) там же, но это НЕ поля `GuardianSettings` и не

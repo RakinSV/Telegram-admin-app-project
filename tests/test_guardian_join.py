@@ -12,23 +12,31 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from guardian import settings_store
+from guardian.config import invalidate_settings_cache
 from guardian.handlers import join
-from guardian.db.models import Member
+from guardian.db.models import BotConfig, Member
 from guardian.db.session import session_scope
+
+_CHAT_ID = -100123  # GUARDIAN_GROUP_ID из tests/conftest.py
 
 
 def _clear_members() -> None:
     with session_scope() as session:
         session.query(Member).delete()
+        session.query(BotConfig).delete()
 
 
 @pytest.fixture(autouse=True)
 def _isolated_pending():
     join._pending.clear()
     _clear_members()
+    invalidate_settings_cache()
+    settings_store.sync_protected_chat_ids([_CHAT_ID])  # F28: список, не одна группа
     yield
     join._pending.clear()
     _clear_members()
+    invalidate_settings_cache()
 
 
 def _fake_user(

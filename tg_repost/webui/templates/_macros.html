@@ -10,9 +10,32 @@
 </form>
 {% endmacro %}
 
-{% macro hidden_confirm_form(action, hidden_name, hidden_value, label, confirm_key='common.confirm_delete', css_class='secondary') %}
+{% macro hidden_confirm_form(action, hidden_name, hidden_value, label, confirm_key='common.confirm_delete', css_class='secondary', extra={}) %}
 <form method="post" action="{{ action }}" style="display:inline;" onsubmit="return confirm('{{ t(confirm_key) }}');">
   <input type="hidden" name="{{ hidden_name }}" value="{{ hidden_value }}">
+  {% for extra_name, extra_value in extra.items() %}
+  <input type="hidden" name="{{ extra_name }}" value="{{ extra_value }}">
+  {% endfor %}
   <button type="submit" class="{{ css_class }}">{{ label }}</button>
 </form>
+{% endmacro %}
+
+{# F28: селектор защищаемой группы для страниц Guardian (стоп-слова/домены/
+   доверенные/дашборд раздельны по каждой группе) — переключение через
+   навигацию на тот же путь с новым `?chat_id=`. #}
+{% macro chat_selector(protected_targets, selected_chat_id, base_path) %}
+<div class="field-row">
+  <label for="guardian_chat_selector">{{ t('guardian.select_chat_label') }}</label>
+  <select id="guardian_chat_selector" onchange="location = '{{ base_path }}?chat_id=' + this.value;">
+    {% for cid, label in protected_targets %}
+    <option value="{{ cid }}" {% if cid == selected_chat_id %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endmacro %}
+
+{% macro no_protected_chats_warning() %}
+<div class="card" style="border-color: var(--warn);">
+  {{ t('guardian.no_protected_chats_warning') | safe }}
+</div>
 {% endmacro %}
