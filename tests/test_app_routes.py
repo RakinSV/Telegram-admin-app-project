@@ -680,6 +680,271 @@ def test_moderation_detail_hides_target_routing_for_already_posted_post():
     assert "Опубликуется в" in r_pending.text
 
 
+def test_moderation_target_edit_delete_pin_round_trip():
+    """F29: управление уже опубликованным постом, по цели — веб-роуты."""
+    from unittest.mock import AsyncMock
+    from types import SimpleNamespace
+
+    from tg_repost import post_targets_repo
+    from tg_repost.db.models import PostKind, PostStatus
+    from tg_repost.webui.supervisor import get_components
+
+    client = _client()
+    _bootstrap(client)
+
+    with session_scope() as session:
+        posted = Post(
+            kind=PostKind.SOURCE, original_text="orig", rewritten_text="v0",
+            status=PostStatus.POSTED,
+        )
+        session.add(posted)
+        session.flush()
+        post_id = posted.id
+    post_targets_repo.record_targets(post_id, [(-100555, 42, None)])
+    target_id = post_targets_repo.list_targets_for_post(post_id)[0].id
+
+    bot = AsyncMock()
+    components = get_components()
+    components.application = SimpleNamespace(bot=bot)
+    try:
+        r = client.post(
+            f"/moderation/{post_id}/targets/{target_id}/edit",
+            data={"published_text": "исправленный текст"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+        bot.edit_message_text.assert_awaited_once()
+
+        r = client.post(f"/moderation/{post_id}/targets/{target_id}/pin", follow_redirects=False)
+        assert r.status_code == 303
+        assert post_targets_repo.get_target(target_id).pinned is True
+
+        r = client.post(f"/moderation/{post_id}/targets/{target_id}/unpin", follow_redirects=False)
+        assert r.status_code == 303
+        assert post_targets_repo.get_target(target_id).pinned is False
+
+        r = client.post(f"/moderation/{post_id}/targets/{target_id}/delete", follow_redirects=False)
+        assert r.status_code == 303
+        bot.delete_message.assert_awaited_once()
+        assert post_targets_repo.get_target(target_id).message_id is None
+    finally:
+        components.application = None
+
+
+def test_moderation_target_edit_400_when_bot_not_running():
+    from tg_repost import post_targets_repo
+    from tg_repost.db.models import PostKind, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        posted = Post(
+            kind=PostKind.SOURCE, original_text="orig", status=PostStatus.POSTED,
+        )
+        session.add(posted)
+        session.flush()
+        post_id = posted.id
+    post_targets_repo.record_targets(post_id, [(-100555, 42, None)])
+    target_id = post_targets_repo.list_targets_for_post(post_id)[0].id
+
+    r = client.post(
+        f"/moderation/{post_id}/targets/{target_id}/edit",
+        data={"published_text": "x"}, follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_export_download_json_and_csv():
+    """F38: скачивание экспорта — правильный Content-Type/Content-Disposition."""
+    from datetime import datetime, timezone
+    from tg_repost.db.models import Post, PostKind, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        session.add(Post(
+            kind=PostKind.SOURCE, original_text="x", rewritten_text="y",
+            status=PostStatus.POSTED, posted_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        ))
+
+    r = client.get("/export/download?format=json")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert "attachment" in r.headers["content-disposition"]
+
+    r = client.get("/export/download?format=csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+
+
+def test_export_download_rejects_invalid_date():
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/export/download?since=not-a-date")
+    assert r.status_code == 400
+
+
+def test_ads_revenue_create_list_delete_round_trip():
+    """F35: добавление/удаление записи ручного учёта дохода."""
+    from tg_repost.ads import revenue_repo
+
+    client = _client()
+    _bootstrap(client)
+
+    r = client.post(
+        "/ads/revenue",
+        data={
+            "source": "Telega.in", "amount": "1500.50", "currency": "rub",
+            "recorded_at": "2026-07-01", "note": "test entry",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    rows = revenue_repo.list_revenue()
+    assert len(rows) == 1
+    assert rows[0].source == "Telega.in"
+    assert rows[0].currency == "RUB"
+
+    r = client.get("/ads")
+    assert "Telega.in" in r.text
+    assert "1500.50" in r.text
+
+    r = client.post(f"/ads/revenue/{rows[0].id}/delete", follow_redirects=False)
+    assert r.status_code == 303
+    assert revenue_repo.list_revenue() == []
+
+
+def test_ads_revenue_rejects_invalid_amount():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/ads/revenue",
+        data={"source": "X", "amount": "not-a-number", "recorded_at": "2026-07-01"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_ads_revenue_rejects_invalid_date():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/ads/revenue",
+        data={"source": "X", "amount": "100", "recorded_at": "not-a-date"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_polls_create_valid_redirects_to_moderation_queue():
+    """F33: создание опроса кладёт его в очередь модерации как обычный пост."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+
+    r = client.post(
+        "/polls",
+        data={
+            "question": "Любимый язык программирования?",
+            "options": "Python\nRust\n",
+            "is_anonymous": "1",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/moderation"
+
+    with session_scope() as session:
+        poll = session.query(Post).filter(Post.kind == PostKind.POLL).one()
+        assert poll.status == PostStatus.REWRITTEN
+        assert poll.rewritten_text == "Любимый язык программирования?"
+        assert poll.poll_options == '["Python", "Rust"]'
+
+    r = client.get("/moderation")
+    assert "poll" in r.text
+
+
+def test_polls_create_rejects_too_few_options():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/polls", data={"question": "Q?", "options": "one\n"}, follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_polls_create_rejects_empty_question():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/polls", data={"question": "   ", "options": "a\nb\n"}, follow_redirects=False,
+    )
+    assert r.status_code == 400
+
+
+def test_invites_create_list_revoke_round_trip():
+    """F32: создание/отзыв инвайт-ссылки через веб-роут."""
+    from unittest.mock import AsyncMock
+    from types import SimpleNamespace
+
+    from tg_repost import invites_repo, targets_repo
+    from tg_repost.webui.supervisor import get_components
+
+    client = _client()
+    _bootstrap(client)
+    targets_repo.add_target(-100444, "Invite Test Group")
+
+    bot = AsyncMock()
+    bot.create_chat_invite_link.return_value = AsyncMock(invite_link="https://t.me/+abc123")
+    components = get_components()
+    components.application = SimpleNamespace(bot=bot)
+    try:
+        r = client.post(
+            "/invites",
+            data={"chat_id": "-100444", "name": "test link", "member_limit": ""},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+
+        r = client.get("/invites")
+        assert "https://t.me/+abc123" in r.text
+
+        link_id = invites_repo.list_invite_links(-100444)[0].id
+        r = client.post(f"/invites/{link_id}/revoke", follow_redirects=False)
+        assert r.status_code == 303
+        bot.revoke_chat_invite_link.assert_awaited_once()
+        assert invites_repo.get_invite_link(link_id).is_revoked is True
+    finally:
+        components.application = None
+
+
+def test_invites_join_request_approve_via_web():
+    from unittest.mock import AsyncMock
+    from types import SimpleNamespace
+
+    from tg_repost import invites_repo
+    from tg_repost.webui.supervisor import get_components
+
+    client = _client()
+    _bootstrap(client)
+    invites_repo.record_join_request(-100555, 777, "requester", None)
+    request_id = invites_repo.list_pending_join_requests(-100555)[0].id
+
+    bot = AsyncMock()
+    components = get_components()
+    components.application = SimpleNamespace(bot=bot)
+    try:
+        r = client.post(f"/invites/join-requests/{request_id}/approve", follow_redirects=False)
+        assert r.status_code == 303
+        bot.approve_chat_join_request.assert_awaited_once_with(chat_id=-100555, user_id=777)
+        assert invites_repo.get_join_request(request_id).status == "approved"
+    finally:
+        components.application = None
+
+
 def test_targets_toggle_guardian_syncs_protected_chat_ids():
     """F28: галочка "использовать Guardian" на цели — переключает
     use_guardian И перезаписывает guardian.bot_config.protected_chat_ids

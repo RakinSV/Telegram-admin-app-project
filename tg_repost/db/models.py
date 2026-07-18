@@ -107,6 +107,10 @@ class PostKind(str, enum.Enum):
     SOURCE = "source"
     AD = "ad"
     DIGEST = "digest"
+    # F33: опрос — публикуется через `bot.send_poll`, не `send_message`/
+    # `send_photo`. Как AD/DIGEST, создаётся сразу REWRITTEN (нет реального
+    # источника/рерайта) — идёт по тому же пайплайну модерации/публикации.
+    POLL = "poll"
 
 
 class InvalidStatusTransition(Exception):
@@ -284,6 +288,14 @@ class Post(Base):
     active_rewrite_variant_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active_cover_variant_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # F33: только для kind=POLL — вопрос лежит в `rewritten_text` (как текст
+    # у обычного поста), варианты ответа — JSON-массив строк здесь (Bot API
+    # ограничивает 2-10 вариантов по 1-100 символов, не проверяем на уровне
+    # модели — валидация на входе, в веб-роуте).
+    poll_options: Mapped[str | None] = mapped_column(Text, nullable=True)
+    poll_is_anonymous: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    poll_allows_multiple_answers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # Индекс — дашборд (`webui/dashboard.py`) фильтрует/сортирует по этому
     # полю на каждой загрузке (recent_posts, todays_rewrite_tokens,
     # error_rate); без индекса это full table scan при росте `posts`,
@@ -322,6 +334,34 @@ class PostStat(Base):
     forward_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reaction_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class PostTarget(Base):
+    """Результат публикации поста В КОНКРЕТНУЮ целевую группу (F29).
+
+    `Post.posted_message_id`/`posted_chat_id` хранят только ПЕРВУЮ успешную
+    цель (см. `telegram/publisher.py::publish_post`) — этого было достаточно
+    для сбора статистики и превью, пока пост публиковался в одну группу или
+    когда "куда именно ушло" было не важно. F29 (редактирование/удаление/
+    закрепление УЖЕ опубликованного поста) требует знать ВСЕ target'ы, а не
+    только первый — отсюда отдельная таблица, по одной строке на каждую
+    попытку публикации (успешную и неуспешную), заполняется `publish_post`
+    целиком при каждой публикации."""
+
+    __tablename__ = "post_targets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    # NULL, если публикация в эту цель провалилась (см. `error`).
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # F29: закреплено ли ботом сообщение в этой цели — Bot API не отдаёт
+    # состояние pin по chat_id/message_id напрямую, приходится хранить
+    # свою правду и доверять ей (обновляется явно при pin/unpin).
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class PostRewriteVariant(Base):
@@ -367,6 +407,29 @@ class AdBrief(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class AdRevenue(Base):
+    """Ручная запись рекламного дохода (F35) — НЕ интеграция с биржей (нет
+    партнёрского API-доступа ни к одной конкретной бирже, решено с
+    пользователем 2026-07-18), просто журнал: кто заплатил, сколько, когда.
+    `ad_brief_id` необязателен — доход может быть от сделки вне системы
+    брифов (например, разовая спонсорская интеграция)."""
+
+    __tablename__ = "ad_revenue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ad_brief_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ad_briefs.id"), nullable=True
+    )
+    source: Mapped[str] = mapped_column(String(255))
+    amount: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
+    # Дата сделки/поступления денег — НЕ обязательно "сегодня" (запись часто
+    # вносится задним числом), поэтому отдельно от `created_at`.
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ChannelGrowthSnapshot(Base):
     """Снимок числа подписчиков целевого канала во времени (F22)."""
 
@@ -376,6 +439,52 @@ class ChannelGrowthSnapshot(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
     subscriber_count: Mapped[int] = mapped_column(Integer)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class InviteLink(Base):
+    """Инвайт-ссылка целевой группы, созданная через бота (F32).
+
+    Bot API не даёт способа перечислить УЖЕ существующие инвайт-ссылки чата
+    (только создать/отозвать/отредактировать конкретную) — эта таблица САМА
+    является источником истины о том, какие ссылки бот когда-либо создал;
+    ссылки, созданные вручную в Telegram (не через эту систему), здесь не
+    появятся и системой не управляются."""
+
+    __tablename__ = "invite_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    invite_link: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    member_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    creates_join_request: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class JoinRequestRecord(Base):
+    """Заявка на вступление в целевую группу с подтверждением админом (F32) —
+    заполняется апдейтом `chat_join_request` (Bot API), решение (approve/
+    decline) принимается владельцем через Telegram-бота или веб-админку."""
+
+    __tablename__ = "join_requests"
+    __table_args__ = (
+        UniqueConstraint("chat_id", "user_id", "status", name="uq_join_request_pending"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # pending | approved | declined — часть уникального ограничения выше:
+    # НЕ более одной PENDING заявки от одного user_id на один chat_id
+    # одновременно (Telegram и так не шлёт chat_join_request повторно, пока
+    # заявка не решена, но защита на уровне БД дешевле, чем полагаться на
+    # это поведение). approved/declined-записи копятся как история.
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TelethonSession(Base):

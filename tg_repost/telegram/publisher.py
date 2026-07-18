@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 from pathlib import Path
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
 
-from tg_repost.db.models import Post, PostStatus, TargetGroup, parse_chat_ids_csv
+from tg_repost import post_targets_repo
+from tg_repost.config import get_settings
+from tg_repost.db.models import Post, PostKind, PostStatus, TargetGroup, parse_chat_ids_csv
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.retry import retry_async
@@ -86,19 +89,50 @@ def resolve_target_labels_for_post(post_id: int) -> list[str]:
     return [titles.get(cid) or str(cid) for cid in chat_ids]
 
 
-async def _send_one(bot: Bot, chat_id: int, text: str, media_path: str | None) -> int:
+async def _send_one(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    media_path: str | None,
+    *,
+    poll_options: list[str] | None = None,
+    poll_is_anonymous: bool = True,
+    poll_allows_multiple: bool = False,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> int:
     """Отправить пост в один чат. Возвращает message_id.
 
     Текст отправляется как plain text (без parse_mode): контент — это вывод LLM
     и заголовки внешних источников (F16), которые могут содержать <, & или
     HTML-теги. С parse_mode=HTML это привело бы к ошибке парсинга или инъекции
     ссылок; plain text безопасен и предсказуем.
-    """
+
+    F33: `poll_options` — отдельная ветка (`bot.send_poll`, не
+    `send_message`/`send_photo`) — опрос не может одновременно быть постом с
+    медиа, `media_path` в этом случае игнорируется (проверяется до попадания
+    сюда — на входе в `/polls`, а не здесь).
+
+    F34: `reply_markup` — необязательная inline-кнопка (сейчас единственный
+    сценарий — ссылка на источник, см. `publish_post`). На опрос НЕ подаём
+    (`send_poll` вызов выше её игнорирует) — сознательно узкий скоуп первой
+    версии, у Bot API кнопки на опросах работают иначе и не тестировались."""
+    if poll_options is not None:
+        msg = await bot.send_poll(
+            chat_id=chat_id,
+            question=text[:300],
+            options=poll_options,
+            is_anonymous=poll_is_anonymous,
+            allows_multiple_answers=poll_allows_multiple,
+        )
+        return msg.message_id
+
     if media_path:
         caption = text[:_MAX_CAPTION] if text else None
         # Файл читаем в потоке, чтобы не блокировать event loop.
         photo_bytes = await asyncio.to_thread(Path(media_path).read_bytes)
-        msg = await bot.send_photo(chat_id=chat_id, photo=photo_bytes, caption=caption)
+        msg = await bot.send_photo(
+            chat_id=chat_id, photo=photo_bytes, caption=caption, reply_markup=reply_markup,
+        )
         # Если текст длиннее подписи — досылаем хвост отдельным сообщением.
         if text and len(text) > _MAX_CAPTION:
             await bot.send_message(
@@ -106,7 +140,7 @@ async def _send_one(bot: Bot, chat_id: int, text: str, media_path: str | None) -
             )
         return msg.message_id
 
-    msg = await bot.send_message(chat_id=chat_id, text=text[:_MAX_TEXT])
+    msg = await bot.send_message(chat_id=chat_id, text=text[:_MAX_TEXT], reply_markup=reply_markup)
     return msg.message_id
 
 
@@ -130,6 +164,26 @@ async def publish_post(bot: Bot, post_id: int) -> None:
             return
         text = post.rewritten_text or post.original_text
         media_path = post.media_path
+        # F33: опрос не может нести медиа — игнорируем media_path, если он
+        # каким-то образом оказался задан на POLL-посте (валидация на входе
+        # в /polls и так это исключает, это защита в глубину).
+        is_poll = post.kind == PostKind.POLL
+        poll_options = json.loads(post.poll_options) if is_poll and post.poll_options else None
+        poll_is_anonymous = post.poll_is_anonymous
+        poll_allows_multiple = post.poll_allows_multiple_answers
+        if is_poll:
+            media_path = None
+
+        # F34: inline-кнопка со ссылкой на источник — только если явно
+        # включено настройкой И у поста реально есть на что ссылаться
+        # (AD/DIGEST/POLL никогда не имеют source_link, кнопка на них не
+        # появится независимо от настройки).
+        settings = get_settings()
+        reply_markup = None
+        if settings.post_source_button_enabled and post.source_link:
+            reply_markup = InlineKeyboardMarkup([[
+                InlineKeyboardButton(settings.post_source_button_label, url=post.source_link),
+            ]])
 
     chat_ids = resolve_targets_for_post(post_id)
     if not chat_ids:
@@ -158,7 +212,13 @@ async def publish_post(bot: Bot, post_id: int) -> None:
     async def _send_to_target(chat_id: int) -> tuple[int, int | None, str | None]:
         try:
             mid = await retry_async(
-                functools.partial(_send_one, bot, chat_id, text, media_path),
+                functools.partial(
+                    _send_one, bot, chat_id, text, media_path,
+                    poll_options=poll_options,
+                    poll_is_anonymous=poll_is_anonymous,
+                    poll_allows_multiple=poll_allows_multiple,
+                    reply_markup=reply_markup,
+                ),
                 description=f"публикация поста {post_id} в {chat_id}",
                 delay_override=_retry_after_delay,
             )
@@ -169,6 +229,10 @@ async def publish_post(bot: Bot, post_id: int) -> None:
         return chat_id, mid, None
 
     results = await asyncio.gather(*(_send_to_target(chat_id) for chat_id in chat_ids))
+    # F29: сохраняем результат КАЖДОЙ цели (не только первой успешной) —
+    # нужно, чтобы потом редактировать/удалять/закреплять пост по каждой
+    # цели отдельно (см. post_targets_repo.py).
+    post_targets_repo.record_targets(post_id, results)
 
     first_message_id: int | None = None
     first_chat_id: int | None = None

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ t('polls.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('polls.title') }}</h1>
+<p class="muted">{{ t('polls.desc') }}</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/polls">
+    <div class="field-row">
+      <label for="question">{{ t('polls.question_label') }}</label>
+      <input type="text" id="question" name="question" maxlength="300" required>
+    </div>
+    <div class="field-row">
+      <label for="options">{{ t('polls.options_label') }}</label>
+      <textarea id="options" name="options" rows="6" placeholder="{{ t('polls.options_placeholder') }}" required></textarea>
+      <div class="hint">{{ t('polls.options_hint') }}</div>
+    </div>
+    <div class="field-row">
+      <label for="is_anonymous">{{ t('polls.is_anonymous_label') }}</label>
+      <input type="checkbox" id="is_anonymous" name="is_anonymous" value="1" checked>
+    </div>
+    <div class="field-row">
+      <label for="allows_multiple_answers">{{ t('polls.allows_multiple_label') }}</label>
+      <input type="checkbox" id="allows_multiple_answers" name="allows_multiple_answers" value="1">
+    </div>
+    <button type="submit">{{ t('polls.create') }}</button>
+  </form>
+</div>
+<p class="muted">{{ t('polls.after_create_hint') }}</p>
+{% endblock %}

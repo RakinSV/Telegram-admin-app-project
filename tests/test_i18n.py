@@ -156,7 +156,8 @@ def test_no_unresolved_translation_keys_across_pages(lang):
     client.get(f"/lang/{lang}", follow_redirects=False)
 
     paths = [
-        "/", "/sources", "/targets", "/moderation", "/ads",
+        "/", "/sources", "/targets", "/moderation", "/ads", "/polls",
+        "/invites", "/export",
         "/telethon-sessions", "/stats", "/stats/best-times", "/stats/growth",
         "/components", "/settings", "/audit", "/logs",
         "/guardian", "/guardian/settings", "/guardian/stopwords",
@@ -195,10 +196,21 @@ def test_no_unresolved_translation_keys_on_moderation_detail_with_variants(lang)
         session.add(PostCoverVariant(post_id=post_id, variant_index=0, media_path="a.jpg"))
         session.add(PostCoverVariant(post_id=post_id, variant_index=1, media_path="b.jpg"))
 
-    r = client.get(f"/moderation/{post_id}")
-    assert r.status_code == 200
-    found = _MISSING_KEY_RE.findall(r.text)
-    assert not found, f"/moderation/{post_id} ({lang}) has unresolved translation keys: {found}"
+    try:
+        r = client.get(f"/moderation/{post_id}")
+        assert r.status_code == 200
+        found = _MISSING_KEY_RE.findall(r.text)
+        assert not found, f"/moderation/{post_id} ({lang}) has unresolved translation keys: {found}"
+    finally:
+        # Без явной очистки PostRewriteVariant/PostCoverVariant переживают
+        # удаление Post (нет ON DELETE CASCADE) — при полном опустошении
+        # таблицы posts в другом тесте SQLite может переиспользовать этот же
+        # id для НОВОГО поста, и осиротевшие варианты "всплывают" у него
+        # (найдено на прогоне полного сьюта: ловил test_post_variants.py).
+        with session_scope() as session:
+            session.query(PostRewriteVariant).filter(PostRewriteVariant.post_id == post_id).delete()
+            session.query(PostCoverVariant).filter(PostCoverVariant.post_id == post_id).delete()
+            session.query(Post).filter(Post.id == post_id).delete()
 
 
 @pytest.mark.parametrize("lang", ["ru", "en"])

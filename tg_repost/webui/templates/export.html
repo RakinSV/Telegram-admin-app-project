@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ t('export.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('export.title') }}</h1>
+<p class="muted">{{ t('export.desc') }}</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="get" action="/export/download" id="export-form">
+    <div class="field-row">
+      <label for="since">{{ t('export.since_label') }}</label>
+      <input type="date" id="since" name="since">
+      <div class="hint">{{ t('export.date_range_hint') }}</div>
+    </div>
+    <div class="field-row">
+      <label for="until">{{ t('export.until_label') }}</label>
+      <input type="date" id="until" name="until">
+    </div>
+    <input type="hidden" name="format" id="export-format" value="json">
+    <button type="submit" onclick="document.getElementById('export-format').value='json';">{{ t('export.download_json') }}</button>
+    <button type="submit" onclick="document.getElementById('export-format').value='csv';" class="secondary">{{ t('export.download_csv') }}</button>
+  </form>
+</div>
+{% endblock %}

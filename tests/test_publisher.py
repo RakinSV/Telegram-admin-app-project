@@ -4,13 +4,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from unittest.mock import AsyncMock
 
 from telegram.error import RetryAfter, TimedOut
 
-from tg_repost import sources_repo, targets_repo
-from tg_repost.db.models import Post, PostKind, PostStatus, Source, TargetGroup
+from tg_repost import post_targets_repo, sources_repo, targets_repo
+from tg_repost.db.models import Post, PostKind, PostStatus, PostTarget, Source, TargetGroup
 from tg_repost.db.session import session_scope
 from tg_repost.telegram.publisher import (
     _retry_after_delay,
@@ -32,6 +33,7 @@ def test_retry_after_delay_returns_none_for_unrelated_exceptions():
 
 def _clean() -> None:
     with session_scope() as session:
+        session.query(PostTarget).delete()
         session.query(Post).delete()
         session.query(Source).delete()
         session.query(TargetGroup).delete()
@@ -122,7 +124,7 @@ def test_resolve_target_labels_empty_when_nowhere_to_post():
 def _fake_bot(*, fail_chat_ids: frozenset[int] = frozenset()) -> AsyncMock:
     bot = AsyncMock()
 
-    async def _send_message(chat_id, text):  # noqa: ARG001
+    async def _send_message(chat_id, text, **kwargs):  # noqa: ARG001
         if chat_id in fail_chat_ids:
             raise TimedOut()
         msg = AsyncMock()
@@ -263,7 +265,7 @@ async def test_publish_post_sends_to_multiple_targets_concurrently():
 
     bot = AsyncMock()
 
-    async def _slow_send(chat_id, text):  # noqa: ARG001
+    async def _slow_send(chat_id, text, **kwargs):  # noqa: ARG001
         await asyncio.sleep(0.2)
         msg = AsyncMock()
         msg.message_id = 1000
@@ -279,4 +281,178 @@ async def test_publish_post_sends_to_multiple_targets_concurrently():
     with session_scope() as session:
         updated = session.get(Post, post.id)
         assert updated.status == PostStatus.POSTED
+    _clean()
+
+
+# --- F29: post_targets записываются на каждую публикацию ---
+
+async def test_publish_post_records_post_target_for_each_success(monkeypatch):
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    targets_repo.add_target(-100222, "B")
+    post = _make_post()
+    bot = _fake_bot()
+
+    await publish_post(bot, post.id)
+
+    rows = post_targets_repo.list_targets_for_post(post.id)
+    assert {(r.chat_id, r.message_id, r.ok) for r in rows} == {
+        (-100111, 1000, True), (-100222, 1000, True),
+    }
+    _clean()
+
+
+async def test_publish_post_records_post_target_for_failure_too(monkeypatch):
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "OK")
+    targets_repo.add_target(-100222, "Broken")
+    post = _make_post()
+    bot = _fake_bot(fail_chat_ids=frozenset({-100222}))
+
+    await publish_post(bot, post.id)
+
+    rows = {r.chat_id: r for r in post_targets_repo.list_targets_for_post(post.id)}
+    assert rows[-100111].ok is True
+    assert rows[-100111].message_id == 1000
+    assert rows[-100222].ok is False
+    assert rows[-100222].message_id is None
+    assert rows[-100222].error
+    _clean()
+
+
+# --- F33: опросы публикуются через bot.send_poll ---
+
+
+def _make_poll_post(**kwargs) -> Post:
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.POLL, original_text="orig", status=PostStatus.APPROVED, **kwargs,
+        )
+        session.add(post)
+        session.flush()
+        pid = post.id
+    with session_scope() as session:
+        return session.get(Post, pid)
+
+
+async def test_publish_post_poll_calls_send_poll_not_send_message(monkeypatch):
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    post = _make_poll_post(
+        rewritten_text="Любимый цвет?",
+        poll_options=json.dumps(["Красный", "Синий"]),
+        poll_is_anonymous=False,
+        poll_allows_multiple_answers=True,
+    )
+
+    bot = AsyncMock()
+    poll_msg = AsyncMock()
+    poll_msg.message_id = 2000
+    bot.send_poll = AsyncMock(return_value=poll_msg)
+
+    await publish_post(bot, post.id)
+
+    bot.send_poll.assert_awaited_once_with(
+        chat_id=-100111, question="Любимый цвет?", options=["Красный", "Синий"],
+        is_anonymous=False, allows_multiple_answers=True,
+    )
+    bot.send_message.assert_not_awaited()
+    with session_scope() as session:
+        updated = session.get(Post, post.id)
+        assert updated.status == PostStatus.POSTED
+        assert updated.posted_message_id == 2000
+    _clean()
+
+
+async def test_publish_post_poll_ignores_media_path(monkeypatch):
+    """Защита в глубину (см. publisher.py docstring): если у POLL-поста
+    каким-то образом задан media_path, публикация всё равно идёт через
+    send_poll, не send_photo."""
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    post = _make_poll_post(
+        rewritten_text="Q?",
+        poll_options=json.dumps(["a", "b"]),
+        media_path="/tmp/should-be-ignored.jpg",
+    )
+
+    bot = AsyncMock()
+    poll_msg = AsyncMock()
+    poll_msg.message_id = 2001
+    bot.send_poll = AsyncMock(return_value=poll_msg)
+
+    await publish_post(bot, post.id)
+
+    bot.send_poll.assert_awaited_once()
+    bot.send_photo.assert_not_awaited()
+    _clean()
+
+
+# --- F34: inline-кнопка "источник" на опубликованном посте ---
+
+
+async def test_publish_post_adds_source_button_when_enabled_and_link_present(monkeypatch):
+    from tg_repost.webui import settings_store
+
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    settings_store.save_setting("post_source_button_enabled", True, "bool")
+    settings_store.save_setting("post_source_button_label", "Читать полностью", "str")
+    try:
+        targets_repo.add_target(-100111, "A")
+        post = _make_post(source_link="https://example.com/orig")
+        bot = _fake_bot()
+
+        await publish_post(bot, post.id)
+
+        kwargs = bot.send_message.call_args.kwargs
+        markup = kwargs["reply_markup"]
+        assert markup.inline_keyboard[0][0].text == "Читать полностью"
+        assert markup.inline_keyboard[0][0].url == "https://example.com/orig"
+    finally:
+        with session_scope() as session:
+            from tg_repost.db.models import AppSetting
+            session.query(AppSetting).delete()
+        from tg_repost.config import invalidate_settings_cache
+        invalidate_settings_cache()
+    _clean()
+
+
+async def test_publish_post_no_button_when_disabled(monkeypatch):
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    post = _make_post(source_link="https://example.com/orig")
+    bot = _fake_bot()
+
+    await publish_post(bot, post.id)
+
+    assert bot.send_message.call_args.kwargs["reply_markup"] is None
+    _clean()
+
+
+async def test_publish_post_no_button_when_no_source_link(monkeypatch):
+    from tg_repost.webui import settings_store
+
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    settings_store.save_setting("post_source_button_enabled", True, "bool")
+    try:
+        targets_repo.add_target(-100111, "A")
+        post = _make_post()  # без source_link
+        bot = _fake_bot()
+
+        await publish_post(bot, post.id)
+
+        assert bot.send_message.call_args.kwargs["reply_markup"] is None
+    finally:
+        with session_scope() as session:
+            from tg_repost.db.models import AppSetting
+            session.query(AppSetting).delete()
+        from tg_repost.config import invalidate_settings_cache
+        invalidate_settings_cache()
     _clean()

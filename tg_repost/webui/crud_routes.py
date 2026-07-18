@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
@@ -22,11 +24,21 @@ from fastapi.templating import Jinja2Templates
 
 from guardian import settings_store as guardian_settings_store
 
-from tg_repost import discovered_chats_repo, post_variants_repo, sources_repo, targets_repo, telethon_sessions_repo
+from tg_repost import (
+    discovered_chats_repo,
+    post_targets_repo,
+    post_variants_repo,
+    sources_repo,
+    targets_repo,
+    telethon_sessions_repo,
+)
 from tg_repost import moderation as moderation_repo
 from tg_repost.ads import repo as ads_repo
+from tg_repost.ads import revenue_repo as ads_revenue_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import InvalidStatusTransition, parse_chat_ids_csv
+from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus, parse_chat_ids_csv
+from tg_repost.db.session import session_scope
+from tg_repost.export import export_posts_csv, export_posts_json
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
@@ -81,6 +93,9 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
         "rewrite_variants": post_variants_repo.list_rewrite_variants(post_id),
         "cover_variants": post_variants_repo.list_cover_variants(post_id),
         "target_labels": target_labels,
+        # F29: список целей публикации с их message_id — только полезно
+        # показывать, когда пост реально публиковался хоть куда-то.
+        "post_targets": post_targets_repo.list_targets_for_post(post_id),
     }
 
 
@@ -482,6 +497,82 @@ def build_crud_router() -> APIRouter:
             )
         return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
 
+    # --- F29: управление уже опубликованным постом, по цели ---
+
+    @router.post("/moderation/{post_id}/targets/{target_id}/edit")
+    async def moderation_target_edit(
+        request: Request, post_id: int, target_id: int, published_text: str = Form(...)
+    ) -> Response:
+        application = get_components().application
+        if application is None:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html",
+                _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
+                status_code=400,
+            )
+        err = await moderation_repo.edit_published_post(application.bot, target_id, published_text)
+        if err:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html", _moderation_detail_context(post_id, err),
+                status_code=400,
+            )
+        audit.record_audit("post_target_edit", target=f"#{post_id}/{target_id}")
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/targets/{target_id}/delete")
+    async def moderation_target_delete(request: Request, post_id: int, target_id: int) -> Response:
+        application = get_components().application
+        if application is None:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html",
+                _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
+                status_code=400,
+            )
+        err = await moderation_repo.delete_published_post(application.bot, target_id)
+        if err:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html", _moderation_detail_context(post_id, err),
+                status_code=400,
+            )
+        audit.record_audit("post_target_delete", target=f"#{post_id}/{target_id}")
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/targets/{target_id}/pin")
+    async def moderation_target_pin(request: Request, post_id: int, target_id: int) -> Response:
+        application = get_components().application
+        if application is None:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html",
+                _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
+                status_code=400,
+            )
+        err = await moderation_repo.pin_published_post(application.bot, target_id, pin=True)
+        if err:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html", _moderation_detail_context(post_id, err),
+                status_code=400,
+            )
+        audit.record_audit("post_target_pin", target=f"#{post_id}/{target_id}")
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/targets/{target_id}/unpin")
+    async def moderation_target_unpin(request: Request, post_id: int, target_id: int) -> Response:
+        application = get_components().application
+        if application is None:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html",
+                _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
+                status_code=400,
+            )
+        err = await moderation_repo.pin_published_post(application.bot, target_id, pin=False)
+        if err:
+            return _templates.TemplateResponse(
+                request, "moderation_detail.html", _moderation_detail_context(post_id, err),
+                status_code=400,
+            )
+        audit.record_audit("post_target_unpin", target=f"#{post_id}/{target_id}")
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
     @router.get("/media/{filename}")
     async def serve_media(request: Request, filename: str) -> Response:
         """Отдать файл из media_dir (обложки постов) — только для залогиненного
@@ -502,12 +593,20 @@ def build_crud_router() -> APIRouter:
 
     # --- Реклама (F21) ---
 
+    def _ads_context(error: str | None = None) -> dict:
+        briefs = ads_repo.list_briefs()
+        revenue = ads_revenue_repo.list_revenue()
+        return {
+            "briefs": briefs,
+            "truncated": len(briefs) >= _LIST_LIMIT,
+            "revenue": revenue,
+            "revenue_totals": ads_revenue_repo.total_by_currency(revenue),
+            "error": error,
+        }
+
     @router.get("/ads", response_class=HTMLResponse)
     async def ads_list(request: Request) -> Response:
-        briefs = ads_repo.list_briefs()
-        return _templates.TemplateResponse(request, "ads.html", {
-            "briefs": briefs, "truncated": len(briefs) >= _LIST_LIMIT, "error": None,
-        })
+        return _templates.TemplateResponse(request, "ads.html", _ads_context())
 
     @router.post("/ads")
     async def ads_create(
@@ -519,10 +618,10 @@ def build_crud_router() -> APIRouter:
         elif max_uses.isdigit():
             max_uses_int = int(max_uses)
         else:
-            return _templates.TemplateResponse(request, "ads.html", {
-                "briefs": ads_repo.list_briefs(),
-                "error": i18n.t("ads.error_invalid_max_uses"),
-            }, status_code=400)
+            return _templates.TemplateResponse(
+                request, "ads.html",
+                _ads_context(i18n.t("ads.error_invalid_max_uses")), status_code=400,
+            )
         brief = ads_repo.add_brief(brief_text.strip(), max_uses_int)
         audit.record_audit("ad_brief_add", target=f"#{brief.id}", detail=brief.brief_text[:80])
         return RedirectResponse(url="/ads", status_code=303)
@@ -533,6 +632,95 @@ def build_crud_router() -> APIRouter:
         if ads_repo.disable_brief(brief_id):
             audit.record_audit("ad_brief_disable", target=f"#{brief_id}")
         return RedirectResponse(url="/ads", status_code=303)
+
+    # --- F35: ручной учёт рекламного дохода ---
+
+    @router.post("/ads/revenue")
+    async def ads_revenue_create(
+        request: Request,
+        source: str = Form(...),
+        amount: str = Form(...),
+        currency: str = Form("RUB"),
+        recorded_at: str = Form(...),
+        note: str = Form(""),
+        ad_brief_id: str = Form(""),
+    ) -> Response:
+        try:
+            amount_float = float(amount.strip().replace(",", "."))
+        except ValueError:
+            return _templates.TemplateResponse(
+                request, "ads.html",
+                _ads_context(i18n.t("ads.error_invalid_amount")), status_code=400,
+            )
+        try:
+            recorded_at_dt = datetime.strptime(recorded_at.strip(), "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            return _templates.TemplateResponse(
+                request, "ads.html",
+                _ads_context(i18n.t("ads.error_invalid_date")), status_code=400,
+            )
+        brief_id = int(ad_brief_id) if ad_brief_id.strip().isdigit() else None
+        row = ads_revenue_repo.add_revenue(
+            source.strip(), amount_float, currency.strip().upper() or "RUB",
+            recorded_at_dt, ad_brief_id=brief_id, note=note.strip() or None,
+        )
+        audit.record_audit(
+            "ad_revenue_add", target=f"#{row.id}", detail=f"{row.source}: {row.amount} {row.currency}",
+        )
+        return RedirectResponse(url="/ads", status_code=303)
+
+    @router.post("/ads/revenue/{revenue_id}/delete")
+    async def ads_revenue_delete(request: Request, revenue_id: int) -> Response:
+        del request
+        if ads_revenue_repo.delete_revenue(revenue_id):
+            audit.record_audit("ad_revenue_delete", target=f"#{revenue_id}")
+        return RedirectResponse(url="/ads", status_code=303)
+
+    # --- Опросы (F33) ---
+
+    @router.get("/polls", response_class=HTMLResponse)
+    async def polls_page(request: Request) -> Response:
+        return _templates.TemplateResponse(request, "polls.html", {"error": None})
+
+    @router.post("/polls")
+    async def polls_create(
+        request: Request,
+        question: str = Form(...),
+        options: str = Form(...),
+        is_anonymous: str = Form(""),
+        allows_multiple_answers: str = Form(""),
+    ) -> Response:
+        question = question.strip()
+        option_list = [line.strip() for line in options.splitlines() if line.strip()]
+        error: str | None = None
+        if not question or len(question) > 300:
+            error = i18n.t("polls.error_invalid_question")
+        elif not (2 <= len(option_list) <= 10):
+            error = i18n.t("polls.error_option_count")
+        elif any(len(o) > 100 for o in option_list):
+            error = i18n.t("polls.error_option_too_long")
+        if error:
+            return _templates.TemplateResponse(
+                request, "polls.html", {"error": error}, status_code=400,
+            )
+
+        with session_scope() as session:
+            post = Post(
+                kind=PostKind.POLL,
+                original_text=question,
+                rewritten_text=question,
+                poll_options=json.dumps(option_list),
+                poll_is_anonymous=bool(is_anonymous),
+                poll_allows_multiple_answers=bool(allows_multiple_answers),
+                status=PostStatus.REWRITTEN,
+            )
+            session.add(post)
+            session.flush()
+            post_id = post.id
+        audit.record_audit("poll_create", target=f"#{post_id}", detail=question[:80])
+        return RedirectResponse(url="/moderation", status_code=303)
 
     # --- Статистика / расписание / рост (F14, F19, F22) ---
 
@@ -629,6 +817,43 @@ def build_crud_router() -> APIRouter:
                     yield _sse_event(line)
 
         return StreamingResponse(event_source(), media_type="text/event-stream")
+
+    # --- Экспорт содержимого канала (F38) ---
+
+    @router.get("/export", response_class=HTMLResponse)
+    async def export_page(request: Request) -> Response:
+        return _templates.TemplateResponse(request, "export.html", {"error": None})
+
+    @router.get("/export/download")
+    async def export_download(
+        request: Request, format: str = "json", since: str = "", until: str = ""
+    ) -> Response:
+        since_dt: datetime | None = None
+        until_dt: datetime | None = None
+        try:
+            if since.strip():
+                since_dt = datetime.strptime(since.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if until.strip():
+                until_dt = datetime.strptime(until.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return _templates.TemplateResponse(
+                request, "export.html",
+                {"error": i18n.t("export.error_invalid_date")}, status_code=400,
+            )
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+        if format == "csv":
+            content = export_posts_csv(since_dt, until_dt)
+            media_type, filename = "text/csv", f"posts_{stamp}.csv"
+        else:
+            content = export_posts_json(since_dt, until_dt)
+            media_type, filename = "application/json", f"posts_{stamp}.json"
+
+        audit.record_audit("content_export", target=format, detail=f"{since or '…'} — {until or '…'}")
+        return Response(
+            content=content, media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     return router
 

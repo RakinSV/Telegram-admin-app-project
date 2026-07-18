@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ t('invites.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('invites.title') }}</h1>
+<p class="muted">{{ t('invites.desc') }}</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <form method="post" action="/invites">
+    <div class="field-row">
+      <label for="chat_id">{{ t('invites.col_chat') }}</label>
+      <select id="chat_id" name="chat_id" required>
+        {% for tg in targets %}
+        <option value="{{ tg.chat_id }}">{{ tg.title or tg.chat_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="name">{{ t('invites.name_label') }}</label>
+      <input type="text" id="name" name="name" placeholder="{{ t('invites.name_placeholder') }}">
+    </div>
+    <div class="field-row">
+      <label for="member_limit">{{ t('invites.member_limit_label') }}</label>
+      <input type="text" id="member_limit" name="member_limit" placeholder="{{ t('invites.member_limit_placeholder') }}">
+    </div>
+    <div class="field-row">
+      <label for="creates_join_request">{{ t('invites.creates_join_request_label') }}</label>
+      <input type="checkbox" id="creates_join_request" name="creates_join_request" value="1">
+      <div class="hint">{{ t('invites.creates_join_request_hint') }}</div>
+    </div>
+    <button type="submit">{{ t('invites.create') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('invites.links_title') }}</h2>
+  <table>
+    <tr>
+      <th>{{ t('invites.col_chat') }}</th><th>{{ t('invites.col_link') }}</th>
+      <th>{{ t('invites.col_name') }}</th><th>{{ t('invites.col_status') }}</th><th></th>
+    </tr>
+    {% for chat_id, links in links_by_chat.items() %}
+      {% for link in links %}
+      <tr>
+        <td>{{ chat_id }}</td>
+        <td><code>{{ link.invite_link }}</code></td>
+        <td>{{ link.name or '' }}</td>
+        <td>
+          {% if link.is_revoked %}
+          <span class="badge muted">{{ t('invites.revoked') }}</span>
+          {% else %}
+          <span class="badge ok">{{ t('invites.active') }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not link.is_revoked %}
+          {{ m.confirm_form('/invites/%d/revoke'|format(link.id), t('invites.revoke'), confirm_key='common.confirm_deactivate') }}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('invites.join_requests_title') }}</h2>
+  <table>
+    <tr>
+      <th>{{ t('invites.col_chat') }}</th><th>{{ t('invites.col_user') }}</th>
+      <th>{{ t('invites.col_requested_at') }}</th><th></th>
+    </tr>
+    {% for jr in pending_requests %}
+    <tr>
+      <td>{{ jr.chat_id }}</td>
+      <td>{{ '@' + jr.username if jr.username else 'id' + jr.user_id|string }}</td>
+      <td>{{ jr.requested_at.strftime("%Y-%m-%d %H:%M") if jr.requested_at else "" }}</td>
+      <td>
+        <form method="post" action="/invites/join-requests/{{ jr.id }}/approve" style="display:inline;">
+          <button type="submit">{{ t('invites.approve') }}</button>
+        </form>
+        <form method="post" action="/invites/join-requests/{{ jr.id }}/decline" style="display:inline;">
+          <button type="submit" class="secondary">{{ t('invites.decline') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">{{ t('invites.no_pending_requests') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

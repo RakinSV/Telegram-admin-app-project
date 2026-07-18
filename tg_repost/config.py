@@ -300,6 +300,12 @@ class Settings(BaseSettings):
     growth_min_snapshots: int = Field(2, alias="GROWTH_MIN_SNAPSHOTS")
     growth_report_window_days: int = Field(7, alias="GROWTH_REPORT_WINDOW_DAYS")
 
+    # --- F34: inline-кнопка "источник" на опубликованном посте ---
+    # Только для постов с `source_link` (kind=SOURCE) — AD/DIGEST/POLL его
+    # не имеют, кнопка на них не появляется независимо от этой настройки.
+    post_source_button_enabled: bool = Field(False, alias="POST_SOURCE_BUTTON_ENABLED")
+    post_source_button_label: str = Field("Читать в источнике", alias="POST_SOURCE_BUTTON_LABEL")
+
     @field_validator("filter_stop_words", "filter_required_words", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> list[str]:

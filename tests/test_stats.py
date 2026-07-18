@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tg_repost import post_targets_repo
 from tg_repost.config import invalidate_settings_cache
-from tg_repost.db.models import AppSetting, Post, PostKind, PostStat, PostStatus, Secret
+from tg_repost.db.models import AppSetting, Post, PostKind, PostStat, PostStatus, PostTarget, Secret
 from tg_repost.db.session import session_scope
 from tg_repost.scheduler import stats as stats_module
 from tg_repost.scheduler.stats import (
@@ -25,6 +26,7 @@ from tg_repost.webui import settings_store
 def _clear_posts() -> None:
     with session_scope() as session:
         session.query(PostStat).delete()
+        session.query(PostTarget).delete()
         session.query(Post).delete()
 
 
@@ -168,6 +170,15 @@ def _make_posted_post(**kwargs) -> int:
         return post.id
 
 
+def _make_posted_post_with_target(chat_id: int, message_id: int, **kwargs) -> int:
+    """F31: `collect_stats` теперь читает цели из `post_targets` (F29), а не
+    из `Post.posted_chat_id`/`posted_message_id` напрямую — тесты, гоняющие
+    `collect_stats` целиком, должны создать саму строку post_targets."""
+    post_id = _make_posted_post(**kwargs)
+    post_targets_repo.record_targets(post_id, [(chat_id, message_id, None)])
+    return post_id
+
+
 async def test_handle_negative_reactions_sets_flag_and_notifies():
     post_id = _make_posted_post()
     application = AsyncMock()
@@ -273,7 +284,7 @@ async def test_collect_stats_triggers_negative_alert_when_threshold_exceeded():
     settings_store.save_setting("negative_reaction_threshold", 3, "int")
     invalidate_settings_cache()
     now = datetime.now(timezone.utc)
-    post_id = _make_posted_post(posted_at=now, posted_chat_id=-100123, posted_message_id=42)
+    post_id = _make_posted_post_with_target(-100123, 42, posted_at=now)
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 5})
@@ -292,7 +303,7 @@ async def test_collect_stats_no_alert_when_threshold_zero():
     settings_store.save_setting("negative_reaction_threshold", 0, "int")
     invalidate_settings_cache()
     now = datetime.now(timezone.utc)
-    _make_posted_post(posted_at=now, posted_chat_id=-100123, posted_message_id=42)
+    _make_posted_post_with_target(-100123, 42, posted_at=now)
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 999})
@@ -308,7 +319,7 @@ async def test_collect_stats_no_alert_below_threshold():
     settings_store.save_setting("negative_reaction_threshold", 10, "int")
     invalidate_settings_cache()
     now = datetime.now(timezone.utc)
-    _make_posted_post(posted_at=now, posted_chat_id=-100123, posted_message_id=42)
+    _make_posted_post_with_target(-100123, 42, posted_at=now)
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 3})
@@ -317,3 +328,60 @@ async def test_collect_stats_no_alert_below_threshold():
     await collect_stats(client, application)
 
     application.bot.send_message.assert_not_awaited()
+
+
+# --- F31: метрики суммируются по ВСЕМ успешным целям поста ---
+
+
+async def test_collect_stats_sums_metrics_across_multiple_targets():
+    _clear_posts()
+    now = datetime.now(timezone.utc)
+    post_id = _make_posted_post(posted_at=now)
+    post_targets_repo.record_targets(
+        post_id, [(-100111, 1, None), (-100222, 2, None)]
+    )
+
+    client = AsyncMock()
+    client.get_messages.side_effect = [
+        _fake_message({"👍": 3}, views=100, forwards=5),
+        _fake_message({"👍": 2}, views=50, forwards=1),
+    ]
+
+    captured = await collect_stats(client, None)
+
+    assert captured == 1
+    with session_scope() as session:
+        stat = session.query(PostStat).filter(PostStat.post_id == post_id).one()
+        assert stat.view_count == 150
+        assert stat.forward_count == 6
+        assert stat.reaction_count == 5
+
+
+async def test_collect_stats_skips_post_with_no_successful_targets():
+    _clear_posts()
+    now = datetime.now(timezone.utc)
+    post_id = _make_posted_post(posted_at=now)
+    post_targets_repo.record_targets(post_id, [(-100111, None, "TimedOut")])
+
+    client = AsyncMock()
+    captured = await collect_stats(client, None)
+
+    assert captured == 0
+    client.get_messages.assert_not_awaited()
+
+
+async def test_collect_stats_ignores_failed_target_alongside_successful_one():
+    _clear_posts()
+    now = datetime.now(timezone.utc)
+    post_id = _make_posted_post(posted_at=now)
+    post_targets_repo.record_targets(
+        post_id, [(-100111, 1, None), (-100222, None, "TimedOut")]
+    )
+
+    client = AsyncMock()
+    client.get_messages.return_value = _fake_message({}, views=100, forwards=5)
+
+    captured = await collect_stats(client, None)
+
+    assert captured == 1
+    client.get_messages.assert_awaited_once_with(-100111, ids=1)

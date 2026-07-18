@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from telegram.ext import Application
 from telethon import TelegramClient
 
+from tg_repost import post_targets_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStat, PostStatus
@@ -152,60 +153,85 @@ async def _handle_negative_reactions(
 async def collect_stats(client: TelegramClient, application: Application | None = None) -> int:
     """Снять метрики недавно опубликованных постов. Возвращает число снимков.
 
+    F31: раньше опрашивалась только ПЕРВАЯ цель публикации (`Post.
+    posted_chat_id`/`posted_message_id`) — если пост ушёл в несколько групп,
+    метрики остальных целей нигде не учитывались. Теперь опрашиваются ВСЕ
+    успешные цели (см. `post_targets_repo.py`, F29) и суммируются в один
+    снимок `PostStat` на пост — просмотры/форварды/реакции физически
+    привязаны к конкретному сообщению в конкретном чате, `PostStat` же
+    остаётся ПОСТ-уровневым (не хочется плодить снимки на каждую цель —
+    /stats и так агрегирует по постам, не по целям).
+
     `application` нужен только для F25 (уведомление/авто-удаление при
     негативных реакциях) — без него сбор метрик работает как раньше, просто
-    без этой проверки (см. `_handle_negative_reactions`).
-    """
+    без этой проверки (см. `_handle_negative_reactions`). F25-проверка
+    теперь идёт ПО КАЖДОЙ цели отдельно (превышение порога в одной группе не
+    должно ни маскироваться, ни удваиваться метриками другой)."""
     settings = get_settings()
     since = datetime.now(timezone.utc) - timedelta(days=settings.stats_window_days)
 
     with session_scope() as session:
-        targets = [
-            (p.id, p.posted_chat_id, p.posted_message_id)
-            for p in session.query(Post)
-            .filter(
-                Post.status == PostStatus.POSTED,
-                Post.posted_message_id.is_not(None),
-                Post.posted_chat_id.is_not(None),
-                Post.posted_at >= since,
-            )
+        post_ids = [
+            p.id
+            for p in session.query(Post.id)
+            .filter(Post.status == PostStatus.POSTED, Post.posted_at >= since)
             .all()
         ]
 
     captured = 0
-    for post_id, chat_id, message_id in targets:
-        try:
-            message = await client.get_messages(chat_id, ids=message_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Не удалось получить метрики поста %s: %s", post_id, exc)
-            continue
-        if message is None:
+    for post_id in post_ids:
+        targets = [
+            t for t in post_targets_repo.list_targets_for_post(post_id)
+            if t.ok and t.message_id is not None
+        ]
+        if not targets:
             continue
 
+        total_views = 0
+        total_forwards = 0
+        total_reactions = 0
+        got_any = False
+        for target in targets:
+            # Гарантировано фильтром `targets` выше — mypy не может вывести
+            # это через атрибут объекта, полученного из списка.
+            assert target.message_id is not None
+            try:
+                message = await client.get_messages(target.chat_id, ids=target.message_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Не удалось получить метрики поста %s в %s: %s",
+                    post_id, target.chat_id, exc,
+                )
+                continue
+            if message is None:
+                continue
+            got_any = True
+            total_views += getattr(message, "views", None) or 0
+            total_forwards += getattr(message, "forwards", None) or 0
+            total_reactions += _count_reactions(message) or 0
+
+            if settings.negative_reaction_threshold > 0:
+                negative = _count_negative_reactions(message)
+                if negative >= settings.negative_reaction_threshold:
+                    await _handle_negative_reactions(
+                        application, post_id, target.chat_id, target.message_id, negative,
+                    )
+
+            # F17 — мягкий джиттер между запросами метрик.
+            await jitter_sleep(0.3, 1.0)
+
+        if not got_any:
+            continue
         with session_scope() as session:
             session.add(
                 PostStat(
                     post_id=post_id,
-                    view_count=getattr(message, "views", None),
-                    forward_count=getattr(message, "forwards", None),
-                    reaction_count=_count_reactions(message),
+                    view_count=total_views or None,
+                    forward_count=total_forwards or None,
+                    reaction_count=total_reactions or None,
                 )
             )
         captured += 1
-
-        if settings.negative_reaction_threshold > 0:
-            negative = _count_negative_reactions(message)
-            if negative >= settings.negative_reaction_threshold:
-                # Гарантировано запросом выше (`posted_chat_id`/`posted_message_id`
-                # оба `is_not(None)`) — mypy не может это вывести из фильтра SQL.
-                assert chat_id is not None
-                assert message_id is not None
-                await _handle_negative_reactions(
-                    application, post_id, chat_id, message_id, negative,
-                )
-
-        # F17 — мягкий джиттер между запросами метрик.
-        await jitter_sleep(0.3, 1.0)
 
     logger.info("Статистика собрана по %d постам", captured)
     return captured

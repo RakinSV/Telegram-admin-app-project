@@ -291,6 +291,16 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "бота /growth показывает прирост за период (счётчики, не "
         "статистическая корреляция).",
     ),
+    SettingsGroup(
+        "post_source_button", "Кнопка источника на посте — F34",
+        (
+            SettingField("post_source_button_enabled", "Показывать кнопку", "bool"),
+            SettingField("post_source_button_label", "Текст кнопки", "str"),
+        ),
+        "Inline-кнопка со ссылкой на оригинал под опубликованным постом — "
+        "только для постов из источников (у рекламы/дайджестов/опросов "
+        "нет ссылки на первоисточник, кнопка на них не появится).",
+    ),
 )
 
 SECRET_LABELS: dict[str, str] = {

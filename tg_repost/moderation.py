@@ -9,7 +9,9 @@ inline-кнопки ✅/❌/✏️), и веб-админкой (`webui/app.py`,
 from __future__ import annotations
 
 from telegram import Bot
+from telegram.error import BadRequest
 
+from tg_repost import post_targets_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStatus
 from tg_repost.db.session import session_scope
@@ -83,3 +85,74 @@ def edit_post_text(post_id: int, new_text: str) -> bool:
             return False
         post.rewritten_text = new_text
         return True
+
+
+# --- F29: управление УЖЕ ОПУБЛИКОВАННЫМ постом, по каждой цели отдельно ---
+# (см. `db/models.py::PostTarget`, `post_targets_repo.py`) — независимо от
+# approve/reject/edit выше, которые работают ТОЛЬКО до публикации.
+
+
+async def edit_published_post(bot: Bot, target_id: int, new_text: str) -> str | None:
+    """Отредактировать уже опубликованное сообщение в ОДНОЙ цели. Вернуть
+    текст ошибки для показа пользователю, либо None при успехе.
+
+    Если публикация шла с медиа — правим caption (лимит 1024 симв., см.
+    `telegram/publisher.py::_MAX_CAPTION`), иначе — текст сообщения. Если
+    исходный текст был длиннее лимита подписи, `_send_one` досылал хвост
+    ОТДЕЛЬНЫМ сообщением — эта функция его не трогает (правит только
+    первое/основное сообщение), ограничение осознанно принято ради
+    простоты: составные посты правятся редко и полное отслеживание
+    хвостового message_id не стоит доп. сложности на однопользовательском
+    инструменте."""
+    target = post_targets_repo.get_target(target_id)
+    if target is None or not target.ok or target.message_id is None:
+        return "Цель не найдена или сообщение туда не публиковалось."
+    with session_scope() as session:
+        post = session.get(Post, target.post_id)
+        has_media = bool(post and post.media_path)
+    try:
+        if has_media:
+            await bot.edit_message_caption(
+                chat_id=target.chat_id, message_id=target.message_id,
+                caption=new_text[:1024],
+            )
+        else:
+            await bot.edit_message_text(
+                chat_id=target.chat_id, message_id=target.message_id, text=new_text[:4096],
+            )
+    except BadRequest as exc:
+        return str(exc)
+    return None
+
+
+async def delete_published_post(bot: Bot, target_id: int) -> str | None:
+    """Удалить уже опубликованное сообщение в ОДНОЙ цели. None при успехе."""
+    target = post_targets_repo.get_target(target_id)
+    if target is None or not target.ok or target.message_id is None:
+        return "Цель не найдена или сообщение туда не публиковалось."
+    try:
+        await bot.delete_message(chat_id=target.chat_id, message_id=target.message_id)
+    except BadRequest as exc:
+        return str(exc)
+    post_targets_repo.set_message_id(target_id, None)
+    return None
+
+
+async def pin_published_post(bot: Bot, target_id: int, pin: bool) -> str | None:
+    """Закрепить/открепить уже опубликованное сообщение в ОДНОЙ цели.
+    None при успехе."""
+    target = post_targets_repo.get_target(target_id)
+    if target is None or not target.ok or target.message_id is None:
+        return "Цель не найдена или сообщение туда не публиковалось."
+    try:
+        if pin:
+            await bot.pin_chat_message(
+                chat_id=target.chat_id, message_id=target.message_id,
+                disable_notification=True,
+            )
+        else:
+            await bot.unpin_chat_message(chat_id=target.chat_id, message_id=target.message_id)
+    except BadRequest as exc:
+        return str(exc)
+    post_targets_repo.set_pinned(target_id, pin)
+    return None

@@ -35,4 +35,73 @@
     {% endfor %}
   </table>
 </div>
+
+<h2>{{ t('ads.revenue_title') }}</h2>
+<p class="muted">{{ t('ads.revenue_desc') }}</p>
+
+{% if revenue_totals %}
+<div class="card grid">
+  {% for currency, total in revenue_totals.items() %}
+  <div class="stat">
+    <div class="num">{{ "%.2f"|format(total) }}</div>
+    <div class="label">{{ currency }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/ads/revenue">
+    <div class="field-row">
+      <label for="rev_source">{{ t('ads.revenue_source_label') }}</label>
+      <input type="text" id="rev_source" name="source" placeholder="{{ t('ads.revenue_source_placeholder') }}" required>
+    </div>
+    <div class="field-row">
+      <label for="rev_amount">{{ t('ads.revenue_amount_label') }}</label>
+      <input type="text" id="rev_amount" name="amount" placeholder="1000" required>
+    </div>
+    <div class="field-row">
+      <label for="rev_currency">{{ t('ads.revenue_currency_label') }}</label>
+      <input type="text" id="rev_currency" name="currency" value="RUB" maxlength="8">
+    </div>
+    <div class="field-row">
+      <label for="rev_date">{{ t('ads.revenue_date_label') }}</label>
+      <input type="date" id="rev_date" name="recorded_at" required>
+    </div>
+    <div class="field-row">
+      <label for="rev_brief">{{ t('ads.revenue_brief_label') }}</label>
+      <select id="rev_brief" name="ad_brief_id">
+        <option value="">{{ t('ads.revenue_brief_none') }}</option>
+        {% for b in briefs %}
+        <option value="{{ b.id }}">#{{ b.id }} — {{ b.brief_text[:40] }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="rev_note">{{ t('ads.revenue_note_label') }}</label>
+      <input type="text" id="rev_note" name="note" placeholder="{{ t('ads.revenue_note_placeholder') }}">
+    </div>
+    <button type="submit">{{ t('ads.revenue_add') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('ads.revenue_col_date') }}</th><th>{{ t('ads.revenue_col_source') }}</th>
+      <th>{{ t('ads.revenue_col_amount') }}</th><th>{{ t('ads.revenue_col_note') }}</th><th></th>
+    </tr>
+    {% for r in revenue %}
+    <tr>
+      <td>{{ r.recorded_at.strftime("%Y-%m-%d") if r.recorded_at else "" }}</td>
+      <td>{{ r.source }}{% if r.ad_brief_id %} <span class="muted">(#{{ r.ad_brief_id }})</span>{% endif %}</td>
+      <td>{{ "%.2f"|format(r.amount) }} {{ r.currency }}</td>
+      <td>{{ r.note or "" }}</td>
+      <td>{{ m.confirm_form('/ads/revenue/%d/delete'|format(r.id), t('common.delete'), confirm_key='common.confirm_delete') }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
 {% endblock %}

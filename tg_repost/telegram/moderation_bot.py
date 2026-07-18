@@ -20,6 +20,7 @@ from telegram import (
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ChatJoinRequestHandler,
     ChatMemberHandler,
     CommandHandler,
     ContextTypes,
@@ -27,13 +28,14 @@ from telegram.ext import (
     filters,
 )
 
-from tg_repost import discovered_chats_repo, post_variants_repo, targets_repo
+from tg_repost import discovered_chats_repo, invites_repo, post_variants_repo, targets_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.moderation import approve_post, edit_post_text, reject_post
 from tg_repost.retry import retry_async
+from tg_repost.telegram.invites import approve_join_request, decline_join_request
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
 
 logger = get_logger(__name__)
@@ -249,6 +251,10 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _cycle_cover(query, post_id, -1)
     elif action == "cvnext":
         await _cycle_cover(query, post_id, 1)
+    elif action == "jrq_ok":
+        await _decide_join_request(query, context, post_id, approved=True)
+    elif action == "jrq_no":
+        await _decide_join_request(query, context, post_id, approved=False)
 
 
 async def _edit_result_message(query, text: str) -> None:
@@ -284,6 +290,19 @@ async def _reject(query, post_id: int) -> None:
         await _edit_result_message(query, f"Пост #{post_id} не найден.")
         return
     await _edit_result_message(query, f"❌ Пост #{post_id} отклонён.")
+
+
+async def _decide_join_request(
+    query, context: ContextTypes.DEFAULT_TYPE, request_id: int, *, approved: bool
+) -> None:
+    """F32: одобрить/отклонить заявку на вступление по кнопке из уведомления."""
+    fn = approve_join_request if approved else decline_join_request
+    ok = await fn(context.application.bot, request_id)
+    if not ok:
+        await _edit_result_message(query, "Заявка уже решена или не найдена.")
+        return
+    verdict = "✅ Одобрена" if approved else "❌ Отклонена"
+    await _edit_result_message(query, f"Заявка #{request_id}: {verdict}.")
 
 
 async def _start_edit(query, context: ContextTypes.DEFAULT_TYPE, post_id: int) -> None:
@@ -510,6 +529,37 @@ async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     targets_repo.sync_can_post(chat.id, can_post)
 
 
+async def _on_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """F32: заявка на вступление в группу с подтверждением админом —
+    приходит ТОЛЬКО если у чата включена настройка "одобрять новых
+    участников" (отдельная от обычного вступления, `chat_member`-апдейта
+    здесь НЕТ). Записываем и уведомляем владельца кнопками
+    Одобрить/Отклонить — то же место (личка боту), что и модерация постов."""
+    request = update.chat_join_request
+    if request is None:
+        return
+    invites_repo.record_join_request(
+        request.chat.id, request.from_user.id, request.from_user.username, request.bio,
+    )
+    pending = invites_repo.list_pending_join_requests(request.chat.id)
+    record = next((r for r in pending if r.user_id == request.from_user.id), None)
+    if record is None:
+        return
+    settings = get_settings()
+    who = f"@{request.from_user.username}" if request.from_user.username else request.from_user.full_name
+    text = f"📥 Заявка на вступление в «{request.chat.title}» от {who} (id{request.from_user.id})."
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Одобрить", callback_data=f"jrq_ok:{record.id}"),
+        InlineKeyboardButton("❌ Отклонить", callback_data=f"jrq_no:{record.id}"),
+    ]])
+    try:
+        await context.bot.send_message(
+            chat_id=settings.tg_owner_user_id, text=text, reply_markup=keyboard,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Не удалось уведомить о заявке на вступление: %s", sanitize_proxy_error(str(exc)))
+
+
 async def _cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /stats — сводка просмотров за период (F14)."""
     from tg_repost.scheduler.stats import stats_summary
@@ -579,4 +629,5 @@ def build_application() -> Application:
         MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _on_text)
     )
     application.add_handler(ChatMemberHandler(_on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    application.add_handler(ChatJoinRequestHandler(_on_chat_join_request))
     return application

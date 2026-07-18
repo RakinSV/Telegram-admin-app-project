@@ -87,6 +87,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.targets": {"ru": "Цели", "en": "Targets"},
     "nav.moderation": {"ru": "Модерация", "en": "Moderation"},
     "nav.ads": {"ru": "Реклама", "en": "Ads"},
+    "nav.invites": {"ru": "Инвайты", "en": "Invites"},
+    "nav.polls": {"ru": "Опросы", "en": "Polls"},
+    "nav.export": {"ru": "Экспорт", "en": "Export"},
     "nav.telethon_sessions": {"ru": "Telethon-сессии", "en": "Telethon sessions"},
     "nav.stats": {"ru": "Статистика", "en": "Stats"},
     "nav.components": {"ru": "Компоненты", "en": "Components"},
@@ -492,6 +495,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "will send this post straight to “failed”.",
     },
 
+    # --- F29: управление уже опубликованным постом ---
+    "moderation_detail.published_targets_title": {
+        "ru": "Опубликовано в", "en": "Published to",
+    },
+    "moderation_detail.col_chat": {"ru": "Группа", "en": "Group"},
+    "moderation_detail.col_target_status": {"ru": "Статус", "en": "Status"},
+    "moderation_detail.target_ok": {"ru": "опубликовано", "en": "published"},
+    "moderation_detail.target_deleted": {"ru": "удалено", "en": "deleted"},
+    "moderation_detail.target_failed": {"ru": "ошибка публикации", "en": "publish failed"},
+    "moderation_detail.edit_published_placeholder": {
+        "ru": "Новый текст", "en": "New text",
+    },
+    "moderation_detail.pin": {"ru": "📌 Закрепить", "en": "📌 Pin"},
+    "moderation_detail.unpin": {"ru": "Открепить", "en": "Unpin"},
+
     # --- Реклама ---
     "ads.title": {"ru": "Нативная реклама", "en": "Native ads"},
     "ads.desc": {
@@ -510,6 +528,108 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Лимит показов должен быть целым неотрицательным числом или пустым.",
         "en": "The usage cap must be a non-negative integer or blank.",
     },
+
+    # --- F35: ручной учёт рекламного дохода ---
+    "ads.revenue_title": {"ru": "Доход от рекламы", "en": "Ad revenue"},
+    "ads.revenue_desc": {
+        "ru": "Ручной журнал поступлений — не интеграция с рекламной "
+        "биржей, просто учёт кто/сколько/когда заплатил.",
+        "en": "A manual revenue log — not an integration with an ad "
+        "exchange, just a record of who paid how much and when.",
+    },
+    "ads.revenue_source_label": {"ru": "Биржа/заказчик", "en": "Exchange/customer"},
+    "ads.revenue_source_placeholder": {"ru": "Например, Telega.in", "en": "e.g. Telega.in"},
+    "ads.revenue_amount_label": {"ru": "Сумма", "en": "Amount"},
+    "ads.revenue_currency_label": {"ru": "Валюта", "en": "Currency"},
+    "ads.revenue_date_label": {"ru": "Дата", "en": "Date"},
+    "ads.revenue_brief_label": {"ru": "Бриф (опционально)", "en": "Brief (optional)"},
+    "ads.revenue_brief_none": {"ru": "— без привязки —", "en": "— unlinked —"},
+    "ads.revenue_note_label": {"ru": "Примечание", "en": "Note"},
+    "ads.revenue_note_placeholder": {"ru": "Опционально", "en": "Optional"},
+    "ads.revenue_add": {"ru": "Добавить запись", "en": "Add entry"},
+    "ads.revenue_col_date": {"ru": "Дата", "en": "Date"},
+    "ads.revenue_col_source": {"ru": "Биржа/заказчик", "en": "Exchange/customer"},
+    "ads.revenue_col_amount": {"ru": "Сумма", "en": "Amount"},
+    "ads.revenue_col_note": {"ru": "Примечание", "en": "Note"},
+    "ads.error_invalid_amount": {
+        "ru": "Сумма должна быть числом.", "en": "The amount must be a number.",
+    },
+    "ads.error_invalid_date": {
+        "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
+    },
+
+    # --- F33: опросы ---
+    "polls.title": {"ru": "Опросы", "en": "Polls"},
+    "polls.desc": {
+        "ru": "Создать опрос — он появится в очереди модерации (/moderation), "
+        "как обычный пост, и опубликуется тем же способом.",
+        "en": "Create a poll — it appears in the moderation queue "
+        "(/moderation) like a regular post and publishes the same way.",
+    },
+    "polls.question_label": {"ru": "Вопрос", "en": "Question"},
+    "polls.options_label": {"ru": "Варианты ответа", "en": "Answer options"},
+    "polls.options_placeholder": {"ru": "По одному варианту на строку", "en": "One option per line"},
+    "polls.options_hint": {"ru": "От 2 до 10 вариантов, до 100 символов каждый.", "en": "2 to 10 options, up to 100 characters each."},
+    "polls.is_anonymous_label": {"ru": "Анонимный опрос", "en": "Anonymous poll"},
+    "polls.allows_multiple_label": {"ru": "Разрешить несколько вариантов", "en": "Allow multiple answers"},
+    "polls.create": {"ru": "Создать опрос", "en": "Create poll"},
+    "polls.after_create_hint": {
+        "ru": "После создания опрос нужно одобрить в очереди модерации, как и обычный пост.",
+        "en": "After creating, approve the poll in the moderation queue like any other post.",
+    },
+    "polls.error_invalid_question": {
+        "ru": "Вопрос обязателен и не должен превышать 300 символов.",
+        "en": "The question is required and must be under 300 characters.",
+    },
+    "polls.error_option_count": {
+        "ru": "Нужно от 2 до 10 вариантов ответа.",
+        "en": "There must be between 2 and 10 answer options.",
+    },
+    "polls.error_option_too_long": {
+        "ru": "Каждый вариант ответа — не более 100 символов.",
+        "en": "Each answer option must be under 100 characters.",
+    },
+
+    # --- F32: инвайт-ссылки и заявки на вступление ---
+    "invites.title": {"ru": "Инвайты и заявки", "en": "Invites and requests"},
+    "invites.desc": {
+        "ru": "Инвайт-ссылки целевых групп и заявки на вступление "
+        "(если у группы включено подтверждение админом).",
+        "en": "Invite links for target groups and join requests "
+        "(if the group has admin approval enabled).",
+    },
+    "invites.col_chat": {"ru": "Группа", "en": "Group"},
+    "invites.col_link": {"ru": "Ссылка", "en": "Link"},
+    "invites.col_name": {"ru": "Название", "en": "Name"},
+    "invites.col_status": {"ru": "Статус", "en": "Status"},
+    "invites.col_user": {"ru": "Пользователь", "en": "User"},
+    "invites.col_requested_at": {"ru": "Когда", "en": "When"},
+    "invites.name_label": {"ru": "Название ссылки", "en": "Link name"},
+    "invites.name_placeholder": {"ru": "Например, «из Instagram»", "en": "e.g. \"from Instagram\""},
+    "invites.member_limit_label": {"ru": "Лимит участников", "en": "Member limit"},
+    "invites.member_limit_placeholder": {"ru": "Пусто = без лимита", "en": "Blank = unlimited"},
+    "invites.creates_join_request_label": {
+        "ru": "Требовать подтверждение админа", "en": "Require admin approval",
+    },
+    "invites.creates_join_request_hint": {
+        "ru": "Вступающие по этой ссылке попадут в «Заявки на вступление» "
+        "ниже вместо мгновенного добавления в группу.",
+        "en": "People joining via this link will appear under \"Join "
+        "requests\" below instead of joining instantly.",
+    },
+    "invites.create": {"ru": "Создать ссылку", "en": "Create link"},
+    "invites.error_invalid_member_limit": {
+        "ru": "Лимит участников должен быть целым положительным числом или пустым.",
+        "en": "The member limit must be a positive integer or blank.",
+    },
+    "invites.links_title": {"ru": "Инвайт-ссылки", "en": "Invite links"},
+    "invites.active": {"ru": "активна", "en": "active"},
+    "invites.revoked": {"ru": "отозвана", "en": "revoked"},
+    "invites.revoke": {"ru": "Отозвать", "en": "Revoke"},
+    "invites.join_requests_title": {"ru": "Заявки на вступление", "en": "Join requests"},
+    "invites.no_pending_requests": {"ru": "Заявок нет.", "en": "No pending requests."},
+    "invites.approve": {"ru": "✅ Одобрить", "en": "✅ Approve"},
+    "invites.decline": {"ru": "❌ Отклонить", "en": "❌ Decline"},
 
     # --- Telethon-сессии ---
     "telethon_sessions.title": {"ru": "Дополнительные Telethon-сессии", "en": "Additional Telethon sessions"},
@@ -767,6 +887,26 @@ STRINGS: dict[str, dict[str, str]] = {
     "logs.status_live": {"ru": "живо", "en": "live"},
     "logs.status_reconnecting": {"ru": "переподключение…", "en": "reconnecting…"},
 
+    # --- F38: экспорт содержимого канала ---
+    "export.title": {"ru": "Экспорт содержимого", "en": "Content export"},
+    "export.desc": {
+        "ru": "Все опубликованные посты в независимом от системы формате — "
+        "для передачи новому владельцу канала или архива.",
+        "en": "All published posts in a system-independent format — for "
+        "handing off to a new channel owner or for archival.",
+    },
+    "export.since_label": {"ru": "С даты", "en": "From date"},
+    "export.until_label": {"ru": "По дату", "en": "To date"},
+    "export.date_range_hint": {
+        "ru": "Оба поля необязательны — пусто значит «весь архив».",
+        "en": "Both fields are optional — blank means \"the whole archive\".",
+    },
+    "export.download_json": {"ru": "Скачать JSON", "en": "Download JSON"},
+    "export.download_csv": {"ru": "Скачать CSV", "en": "Download CSV"},
+    "export.error_invalid_date": {
+        "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
+    },
+
     # --- Guardian: дашборд ---
     "guardian_dashboard.title": {"ru": "Guardian", "en": "Guardian"},
     "guardian_dashboard.desc": {
@@ -982,6 +1122,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Снимает число подписчиков целевых каналов через Telethon.",
         "en": "Snapshots target channel subscriber counts via Telethon.",
     },
+    "settings.group.post_source_button.title": {
+        "ru": "Кнопка источника на посте", "en": "Source button on posts",
+    },
+    "settings.group.post_source_button.desc": {
+        "ru": "Inline-кнопка со ссылкой на оригинал — только для постов из "
+        "источников (у рекламы/дайджестов/опросов нет ссылки на первоисточник).",
+        "en": "Inline button linking to the original — only for posts "
+        "from sources (ads/digests/polls have no original to link to).",
+    },
 
     # --- Настройки tg_repost: лейблы полей ---
     "settings.field.tg_api_id.label": {"ru": "API ID", "en": "API ID"},
@@ -1056,6 +1205,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.growth_snapshot_interval_minutes.label": {"ru": "Период снимков, мин", "en": "Snapshot period, min"},
     "settings.field.growth_min_snapshots.label": {"ru": "Мин. снимков для отчёта", "en": "Min snapshots for a report"},
     "settings.field.growth_report_window_days.label": {"ru": "Окно отчёта, дней", "en": "Report window, days"},
+    "settings.field.post_source_button_enabled.label": {"ru": "Показывать кнопку", "en": "Show button"},
+    "settings.field.post_source_button_label.label": {"ru": "Текст кнопки", "en": "Button text"},
 
     # --- Секреты tg_repost: лейблы + подсказки ---
     "secrets.field.tg_api_hash.label": {"ru": "Telegram API Hash", "en": "Telegram API Hash"},
