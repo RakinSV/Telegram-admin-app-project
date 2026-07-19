@@ -129,12 +129,12 @@ async def on_message(message: Message, bot: Bot) -> None:
         await _delete_and_warn(bot, message, user_id, "пересланное сообщение (форварды запрещены)")
         return
 
-    if flood_filter.check_flood(user_id):
+    if flood_filter.check_flood(message.chat.id, user_id):
         await add_warn(bot, user_id, message.chat.id, "флуд (слишком много сообщений подряд)")
         return
 
     text = message.text or message.caption or ""
-    if text and flood_filter.check_duplicate(user_id, text):
+    if text and flood_filter.check_duplicate(message.chat.id, user_id, text):
         await _delete_and_warn(bot, message, user_id, "дублирующееся сообщение подряд")
         return
 

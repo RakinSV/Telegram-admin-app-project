@@ -510,7 +510,9 @@ def build_crud_router() -> APIRouter:
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.edit_published_post(application.bot, target_id, published_text)
+        err = await moderation_repo.edit_published_post(
+            application.bot, post_id, target_id, published_text
+        )
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),
@@ -528,7 +530,7 @@ def build_crud_router() -> APIRouter:
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.delete_published_post(application.bot, target_id)
+        err = await moderation_repo.delete_published_post(application.bot, post_id, target_id)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),
@@ -546,7 +548,7 @@ def build_crud_router() -> APIRouter:
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.pin_published_post(application.bot, target_id, pin=True)
+        err = await moderation_repo.pin_published_post(application.bot, post_id, target_id, pin=True)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),
@@ -564,7 +566,7 @@ def build_crud_router() -> APIRouter:
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.pin_published_post(application.bot, target_id, pin=False)
+        err = await moderation_repo.pin_published_post(application.bot, post_id, target_id, pin=False)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),

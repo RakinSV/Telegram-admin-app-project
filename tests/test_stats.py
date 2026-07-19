@@ -357,6 +357,35 @@ async def test_collect_stats_sums_metrics_across_multiple_targets():
         assert stat.reaction_count == 5
 
 
+async def test_collect_stats_stores_real_zero_not_none():
+    """Аудит: пост, реально собравший 0 просмотров/форвардов/реакций
+    (метрика СНЯТА успешно, просто нулевая), должен попасть в БД как 0, а
+    не как NULL — иначе `compute_stats_summary` (строка `if ... view_count
+    is not None`) молча выбрасывает его из знаменателя среднего, завышая
+    avg_views."""
+    _clear_posts()
+    now = datetime.now(timezone.utc)
+    post_id = _make_posted_post(posted_at=now)
+    post_targets_repo.record_targets(post_id, [(-100111, 1, None)])
+
+    client = AsyncMock()
+    client.get_messages.return_value = _fake_message({}, views=0, forwards=0)
+
+    captured = await collect_stats(client, None)
+
+    assert captured == 1
+    with session_scope() as session:
+        stat = session.query(PostStat).filter(PostStat.post_id == post_id).one()
+        assert stat.view_count == 0
+        assert stat.forward_count == 0
+        assert stat.reaction_count == 0
+
+    # И зафиксировать, что такой пост теперь ВХОДИТ в подсчёт среднего.
+    summary = compute_stats_summary(window_days=7)
+    assert summary.counted == 1
+    assert summary.avg_views == 0.0
+
+
 async def test_collect_stats_skips_post_with_no_successful_targets():
     _clear_posts()
     now = datetime.now(timezone.utc)

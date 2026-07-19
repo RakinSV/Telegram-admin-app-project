@@ -179,6 +179,31 @@ async def test_raid_independent_per_chat():
     assert raid_detector.is_raid_active(OTHER_CHAT_ID) is False
 
 
+async def test_check_raid_one_chat_failure_does_not_abort_the_rest(monkeypatch):
+    """Аудит: раньше цикл не ловил исключение — неожиданный сбой на ПЕРВОМ
+    по списку чате обрывал бы проверку всех идущих ЗА ним групп до
+    следующего тика APScheduler (через минуту)."""
+    settings_store.save_setting("raid_join_threshold", 2, "int")
+    settings_store.save_setting("raid_join_window_minutes", 2, "int")
+    settings_store.sync_protected_chat_ids([CHAT_ID, OTHER_CHAT_ID])
+    _join_members(5, chat_id=OTHER_CHAT_ID)  # выше порога — должен сработать
+
+    real = raid_detector._new_members_since
+
+    def _boom_for_first_chat(chat_id, window_minutes, now=None):
+        if chat_id == CHAT_ID:
+            raise RuntimeError("симулированный сбой")
+        return real(chat_id, window_minutes, now=now)
+
+    monkeypatch.setattr(raid_detector, "_new_members_since", _boom_for_first_chat)
+
+    bot = AsyncMock()
+    bot.get_chat = AsyncMock(return_value=SimpleNamespace(permissions=None))
+    await raid_detector.check_raid(bot)  # не должно упасть целиком
+
+    assert raid_detector.is_raid_active(OTHER_CHAT_ID) is True
+
+
 async def test_manual_unfreeze_callback_restores_permissions():
     admin_module._admin_cache.clear()
     raid_detector._get_state(CHAT_ID).active = True

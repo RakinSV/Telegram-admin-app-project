@@ -165,7 +165,7 @@ async def test_edit_published_post_uses_edit_text_without_media():
     target_id = _make_target(post_id)
     bot = AsyncMock()
 
-    err = await edit_published_post(bot, target_id, "новый текст")
+    err = await edit_published_post(bot, post_id, target_id, "новый текст")
 
     assert err is None
     bot.edit_message_text.assert_awaited_once_with(
@@ -179,7 +179,7 @@ async def test_edit_published_post_uses_edit_caption_with_media():
     target_id = _make_target(post_id, media=True)
     bot = AsyncMock()
 
-    err = await edit_published_post(bot, target_id, "новая подпись")
+    err = await edit_published_post(bot, post_id, target_id, "новая подпись")
 
     assert err is None
     bot.edit_message_caption.assert_awaited_once_with(
@@ -189,14 +189,14 @@ async def test_edit_published_post_uses_edit_caption_with_media():
 
 
 async def test_edit_published_post_missing_target_returns_error():
-    err = await edit_published_post(AsyncMock(), 999999, "x")
+    err = await edit_published_post(AsyncMock(), 1, 999999, "x")
     assert err is not None
 
 
 async def test_edit_published_post_deleted_target_returns_error():
     post_id = _make_post()
     target_id = _make_target(post_id, message_id=None)
-    err = await edit_published_post(AsyncMock(), target_id, "x")
+    err = await edit_published_post(AsyncMock(), post_id, target_id, "x")
     assert err is not None
 
 
@@ -206,9 +206,25 @@ async def test_edit_published_post_bad_request_returns_error_text():
     bot = AsyncMock()
     bot.edit_message_text = AsyncMock(side_effect=BadRequest("message is not modified"))
 
-    err = await edit_published_post(bot, target_id, "новый текст")
+    err = await edit_published_post(bot, post_id, target_id, "новый текст")
 
     assert err == "message is not modified"
+
+
+async def test_edit_published_post_rejects_target_from_another_post():
+    """Аудит: target_id, реально принадлежащий ЧУЖОМУ посту (правка URL
+    вручную/скопированная ссылка), не должен молча редактировать это чужое
+    сообщение — функция обязана сверить target.post_id с переданным post_id."""
+    real_post_id = _make_post()
+    target_id = _make_target(real_post_id)
+    other_post_id = _make_post()
+    bot = AsyncMock()
+
+    err = await edit_published_post(bot, other_post_id, target_id, "подмена")
+
+    assert err is not None
+    bot.edit_message_text.assert_not_awaited()
+    bot.edit_message_caption.assert_not_awaited()
 
 
 async def test_delete_published_post_clears_message_id():
@@ -216,11 +232,24 @@ async def test_delete_published_post_clears_message_id():
     target_id = _make_target(post_id)
     bot = AsyncMock()
 
-    err = await delete_published_post(bot, target_id)
+    err = await delete_published_post(bot, post_id, target_id)
 
     assert err is None
     bot.delete_message.assert_awaited_once_with(chat_id=-100999, message_id=555)
     assert post_targets_repo.get_target(target_id).message_id is None
+
+
+async def test_delete_published_post_rejects_target_from_another_post():
+    real_post_id = _make_post()
+    target_id = _make_target(real_post_id)
+    other_post_id = _make_post()
+    bot = AsyncMock()
+
+    err = await delete_published_post(bot, other_post_id, target_id)
+
+    assert err is not None
+    bot.delete_message.assert_not_awaited()
+    assert post_targets_repo.get_target(target_id).message_id == 555  # не тронуто
 
 
 async def test_pin_published_post_sets_pinned_flag():
@@ -228,7 +257,7 @@ async def test_pin_published_post_sets_pinned_flag():
     target_id = _make_target(post_id)
     bot = AsyncMock()
 
-    err = await pin_published_post(bot, target_id, pin=True)
+    err = await pin_published_post(bot, post_id, target_id, pin=True)
 
     assert err is None
     bot.pin_chat_message.assert_awaited_once_with(
@@ -243,8 +272,20 @@ async def test_unpin_published_post_clears_pinned_flag():
     post_targets_repo.set_pinned(target_id, True)
     bot = AsyncMock()
 
-    err = await pin_published_post(bot, target_id, pin=False)
+    err = await pin_published_post(bot, post_id, target_id, pin=False)
 
     assert err is None
     bot.unpin_chat_message.assert_awaited_once_with(chat_id=-100999, message_id=555)
     assert post_targets_repo.get_target(target_id).pinned is False
+
+
+async def test_pin_published_post_rejects_target_from_another_post():
+    real_post_id = _make_post()
+    target_id = _make_target(real_post_id)
+    other_post_id = _make_post()
+    bot = AsyncMock()
+
+    err = await pin_published_post(bot, other_post_id, target_id, pin=True)
+
+    assert err is not None
+    bot.pin_chat_message.assert_not_awaited()

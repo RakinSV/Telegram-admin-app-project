@@ -71,6 +71,24 @@ def export_posts_json(since: datetime | None = None, until: datetime | None = No
     return json.dumps(export_posts(since, until), ensure_ascii=False, indent=2)
 
 
+# Экранирование CSV/формул-инъекции (OWASP) — только для полей, реально
+# приходящих из чужого спарсенного канала (`original_text`/`rewritten_text`/
+# `source_link`, полностью управляемы посторонним). Ячейка, начинающаяся с
+# одного из этих символов, интерпретируется Excel/Sheets как формула
+# (`=HYPERLINK(...)`, `=cmd|...`) — ведущий апостроф заставляет открыть её
+# как обычный текст (найдено на аудите). НЕ применяется ко всей строке
+# целиком — системные поля вроде `targets` легитимно начинаются с "-"
+# (отрицательный chat_id), эскейпить их — портить данные, не защищать.
+_FORMULA_LEAD_CHARS = ("=", "+", "-", "@", "\t", "\r")
+_CSV_ESCAPE_FIELDS = ("original_text", "rewritten_text", "source_link")
+
+
+def _csv_safe(value: object) -> object:
+    if isinstance(value, str) and value.startswith(_FORMULA_LEAD_CHARS):
+        return "'" + value
+    return value
+
+
 def export_posts_csv(since: datetime | None = None, until: datetime | None = None) -> str:
     rows = export_posts(since, until)
     buf = io.StringIO()
@@ -83,5 +101,8 @@ def export_posts_csv(since: datetime | None = None, until: datetime | None = Non
         flat["targets"] = "; ".join(
             f"{t['chat_id']}:{t['message_id']}" for t in row["targets"]
         )
-        writer.writerow(flat)
+        writer.writerow({
+            key: _csv_safe(value) if key in _CSV_ESCAPE_FIELDS else value
+            for key, value in flat.items()
+        })
     return buf.getvalue()

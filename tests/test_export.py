@@ -109,3 +109,74 @@ def test_export_posts_empty_when_no_posted_posts():
     assert json.loads(export_posts_json()) == []
     reader = csv.DictReader(io.StringIO(export_posts_csv()))
     assert list(reader) == []
+
+
+def test_export_posts_csv_joins_multiple_targets():
+    _clean()
+    post = _make_posted_post(posted_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+    post_targets_repo.record_targets(post.id, [(-100111, 42, None), (-100222, 7, None)])
+
+    reader = csv.DictReader(io.StringIO(export_posts_csv()))
+    rows = list(reader)
+
+    assert rows[0]["targets"] == "-100111:42; -100222:7"
+    _clean()
+
+
+def _make_posted_post_with_text(original_text: str, source_link: str | None = None) -> Post:
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, original_text=original_text, rewritten_text="final text",
+            status=PostStatus.POSTED, posted_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            source_link=source_link,
+        )
+        session.add(post)
+        session.flush()
+        pid = post.id
+    with session_scope() as session:
+        return session.get(Post, pid)
+
+
+def test_export_posts_csv_escapes_formula_injection():
+    """Аудит: original_text приходит из чужого спарсенного канала — строка,
+    начинающаяся с `=`/`+`/`-`/`@`, интерпретируется Excel/Sheets как формула
+    (например `=HYPERLINK(...)`). Ведущий апостроф обязан это гасить."""
+    _clean()
+    _make_posted_post_with_text(
+        original_text='=HYPERLINK("http://evil.example","click")',
+        source_link="=cmd|'/c calc'!A1",
+    )
+
+    reader = csv.DictReader(io.StringIO(export_posts_csv()))
+    row = next(reader)
+
+    assert row["original_text"].startswith("'=")
+    assert row["source_link"].startswith("'=")
+    _clean()
+
+
+def test_export_posts_csv_does_not_prefix_normal_text():
+    _clean()
+    _make_posted_post_with_text(original_text="обычный текст поста")
+
+    reader = csv.DictReader(io.StringIO(export_posts_csv()))
+    row = next(reader)
+
+    assert row["original_text"] == "обычный текст поста"
+    _clean()
+
+
+def test_export_posts_csv_does_not_escape_negative_chat_id_in_targets():
+    """Аудит: `targets` — системное поле (не пользовательский текст), не
+    должно эскейпиться как формула, даже начинаясь с "-" (отрицательный
+    chat_id) — иначе "-100111:42" превратилось бы в "'-100111:42",
+    испортив данные без реальной защиты (это не источник инъекции)."""
+    _clean()
+    post = _make_posted_post(posted_at=datetime(2026, 6, 1, tzinfo=timezone.utc))
+    post_targets_repo.record_targets(post.id, [(-100111, 42, None)])
+
+    reader = csv.DictReader(io.StringIO(export_posts_csv()))
+    row = next(reader)
+
+    assert row["targets"] == "-100111:42"
+    _clean()

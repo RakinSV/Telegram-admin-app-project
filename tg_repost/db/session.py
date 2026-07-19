@@ -34,9 +34,14 @@ def _get_database_url() -> str:
 _database_url = _get_database_url()
 
 # check_same_thread=False — чтобы SQLite-соединение можно было использовать
-# из разных задач event loop / executor-потоков.
+# из разных задач event loop / executor-потоков. timeout=15 (сек, sqlite3
+# DBAPI ждёт освобождения блокировки перед `OperationalError: database is
+# locked`, дефолт — 5с) — этот файл реально пишется ДВУМЯ независимыми ОС-
+# процессами одновременно (tg_repost и guardian, см. webui/guardian_routes.py
+# про кросс-пакетную запись в guardian.db прямо из этого процесса) — явный
+# запас на случай всплеска одновременных записей (найдено на аудите).
 _connect_args = (
-    {"check_same_thread": False} if _database_url.startswith("sqlite") else {}
+    {"check_same_thread": False, "timeout": 15} if _database_url.startswith("sqlite") else {}
 )
 
 _engine_kwargs: dict = {

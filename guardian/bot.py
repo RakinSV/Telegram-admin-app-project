@@ -90,27 +90,33 @@ def _auto_trust_eligible_members() -> None:
     cutoff = datetime.now(timezone.utc) - timedelta(days=settings.auto_trust_after_days)
     reason = f"автодоверие: {settings.auto_trust_after_days}+ дней без нарушений"
     for chat_id in settings.protected_chat_ids:
-        with session_scope() as session:
-            candidates = (
-                session.query(Member)
-                .filter(
-                    Member.chat_id == chat_id,
-                    Member.join_date < cutoff,
-                    Member.warn_count == 0,
-                    Member.is_trusted.is_(False),
-                    Member.is_banned.is_(False),
-                    Member.is_verified.is_(True),
+        # Аудит: изоляция сбоя по чату — ошибка БД/иная на одной группе не
+        # должна пропускать автодоверие во всех группах, идущих после неё в
+        # списке (найдено на аудите: цикл раньше был без try/except).
+        try:
+            with session_scope() as session:
+                candidates = (
+                    session.query(Member)
+                    .filter(
+                        Member.chat_id == chat_id,
+                        Member.join_date < cutoff,
+                        Member.warn_count == 0,
+                        Member.is_trusted.is_(False),
+                        Member.is_banned.is_(False),
+                        Member.is_verified.is_(True),
+                    )
+                    .all()
                 )
-                .all()
-            )
-            candidate_ids = [m.user_id for m in candidates]
+                candidate_ids = [m.user_id for m in candidates]
 
-        for user_id in candidate_ids:
-            if trusted_repo.add_trusted(user_id, chat_id, added_by="auto", reason=reason):
-                logger.info(
-                    "G12: %s автоматически добавлен в доверенные в чате %s (%s)",
-                    user_id, chat_id, reason,
-                )
+            for user_id in candidate_ids:
+                if trusted_repo.add_trusted(user_id, chat_id, added_by="auto", reason=reason):
+                    logger.info(
+                        "G12: %s автоматически добавлен в доверенные в чате %s (%s)",
+                        user_id, chat_id, reason,
+                    )
+        except Exception:
+            logger.exception("G12: автодоверие не удалось для чата %s", chat_id)
 
 
 def _finalize_yesterday_stats() -> None:
@@ -123,7 +129,18 @@ def _finalize_yesterday_stats() -> None:
     settings = get_guardian_settings()
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
     for chat_id in settings.protected_chat_ids:
-        daily_stats_repo.compute_and_store_daily_stats(chat_id, day=yesterday)
+        # Аудит: без изоляции по чату сбой на ОДНОЙ группе обрывал цикл, и
+        # группы после неё в списке навсегда теряли запись за ЭТОТ конкретный
+        # "вчера" — следующий запуск считает уже ДРУГОЙ день, пропуск не
+        # восстановим (в отличие от остальных джоб этого файла, эта работает
+        # с фиксированной исторической датой, не "текущим состоянием").
+        try:
+            daily_stats_repo.compute_and_store_daily_stats(chat_id, day=yesterday)
+        except Exception:
+            logger.exception(
+                "G17: не удалось зафиксировать daily_stats за %s для чата %s",
+                yesterday, chat_id,
+            )
 
 
 def _seed_stopwords_if_empty() -> None:
@@ -149,12 +166,15 @@ def _seed_stopwords_if_empty() -> None:
         )
         return
     for chat_id in settings.protected_chat_ids:
-        with session_scope() as session:
-            if session.query(StopWord).filter(StopWord.chat_id == chat_id).count() > 0:
-                continue
-            for word in words:
-                session.add(StopWord(word=word.lower(), chat_id=chat_id, added_by="seed"))
-        logger.info("Загружено %d стоп-слов по умолчанию в чат %s", len(words), chat_id)
+        try:
+            with session_scope() as session:
+                if session.query(StopWord).filter(StopWord.chat_id == chat_id).count() > 0:
+                    continue
+                for word in words:
+                    session.add(StopWord(word=word.lower(), chat_id=chat_id, added_by="seed"))
+            logger.info("Загружено %d стоп-слов по умолчанию в чат %s", len(words), chat_id)
+        except Exception:
+            logger.exception("G03: не удалось засеять стоп-слова для чата %s", chat_id)
 
 
 async def _auto_trust_repost_bot(bot: Bot) -> None:
@@ -186,23 +206,28 @@ async def _auto_trust_repost_bot(bot: Bot) -> None:
 
     added_to: list[int] = []
     for chat_id in settings.protected_chat_ids:
-        with session_scope() as session:
-            exists = (
-                session.query(TrustedUser)
-                .filter(TrustedUser.user_id == user_id, TrustedUser.chat_id == chat_id)
-                .one_or_none()
-            )
-            if exists is not None:
-                continue
-            session.add(
-                TrustedUser(
-                    user_id=user_id,
-                    chat_id=chat_id,
-                    added_by="auto",
-                    reason="репост-бот (REPOST_BOT_ID)",
+        try:
+            with session_scope() as session:
+                exists = (
+                    session.query(TrustedUser)
+                    .filter(TrustedUser.user_id == user_id, TrustedUser.chat_id == chat_id)
+                    .one_or_none()
                 )
+                if exists is not None:
+                    continue
+                session.add(
+                    TrustedUser(
+                        user_id=user_id,
+                        chat_id=chat_id,
+                        added_by="auto",
+                        reason="репост-бот (REPOST_BOT_ID)",
+                    )
+                )
+            added_to.append(chat_id)
+        except Exception:
+            logger.exception(
+                "G12: не удалось добавить репост-бота в доверенные для чата %s", chat_id
             )
-        added_to.append(chat_id)
 
     if not added_to:
         return

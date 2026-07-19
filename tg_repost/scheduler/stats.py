@@ -222,13 +222,21 @@ async def collect_stats(client: TelegramClient, application: Application | None 
 
         if not got_any:
             continue
+        # Аудит: раньше `total_views or None` — если сумма по всем целям
+        # РЕАЛЬНО была 0 (не пропуск, а честный ноль, частое дело у нового
+        # поста/малотрафичного канала), в БД писался NULL, неотличимый от
+        # "метрика не снята вообще". `compute_stats_summary` ниже пропускает
+        # строки с `view_count is None` при подсчёте среднего — такие посты
+        # молча выпадали из знаменателя, завышая среднее. `got_any=True`
+        # здесь уже гарантирует, что хотя бы один get_messages реально
+        # ответил — сумма настоящая, ноль в том числе.
         with session_scope() as session:
             session.add(
                 PostStat(
                     post_id=post_id,
-                    view_count=total_views or None,
-                    forward_count=total_forwards or None,
-                    reaction_count=total_reactions or None,
+                    view_count=total_views,
+                    forward_count=total_forwards,
+                    reaction_count=total_reactions,
                 )
             )
         captured += 1

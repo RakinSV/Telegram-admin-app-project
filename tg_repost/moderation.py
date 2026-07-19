@@ -13,7 +13,7 @@ from telegram.error import BadRequest
 
 from tg_repost import post_targets_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostStatus
+from tg_repost.db.models import Post, PostStatus, PostTarget
 from tg_repost.db.session import session_scope
 from tg_repost.telegram.publisher import publish_post
 
@@ -92,7 +92,26 @@ def edit_post_text(post_id: int, new_text: str) -> bool:
 # approve/reject/edit выше, которые работают ТОЛЬКО до публикации.
 
 
-async def edit_published_post(bot: Bot, target_id: int, new_text: str) -> str | None:
+def _get_valid_target(target_id: int, post_id: int) -> tuple[PostTarget | None, str | None]:
+    """Общая проверка для `edit_published_post`/`delete_published_post`/
+    `pin_published_post` — вынесена, т.к. вызывается идентично из всех
+    трёх. Возвращает (target, None) при успехе или (None, текст_ошибки).
+    Аудит: раньше проверялся ТОЛЬКО факт существования цели, но не то, что
+    она принадлежит именно `post_id` из URL — правка вручную
+    отредактированного/скопированного адреса могла задеть сообщение
+    ЧУЖОГО поста, при этом веб-страница показывала бы карточку поста из
+    URL как ни в чём не бывало."""
+    target = post_targets_repo.get_target(target_id)
+    if target is None or not target.ok or target.message_id is None:
+        return None, "Цель не найдена или сообщение туда не публиковалось."
+    if target.post_id != post_id:
+        return None, "Цель принадлежит другому посту."
+    return target, None
+
+
+async def edit_published_post(
+    bot: Bot, post_id: int, target_id: int, new_text: str
+) -> str | None:
     """Отредактировать уже опубликованное сообщение в ОДНОЙ цели. Вернуть
     текст ошибки для показа пользователю, либо None при успехе.
 
@@ -104,9 +123,9 @@ async def edit_published_post(bot: Bot, target_id: int, new_text: str) -> str | 
     простоты: составные посты правятся редко и полное отслеживание
     хвостового message_id не стоит доп. сложности на однопользовательском
     инструменте."""
-    target = post_targets_repo.get_target(target_id)
-    if target is None or not target.ok or target.message_id is None:
-        return "Цель не найдена или сообщение туда не публиковалось."
+    target, err = _get_valid_target(target_id, post_id)
+    if target is None:
+        return err
     with session_scope() as session:
         post = session.get(Post, target.post_id)
         has_media = bool(post and post.media_path)
@@ -125,11 +144,12 @@ async def edit_published_post(bot: Bot, target_id: int, new_text: str) -> str | 
     return None
 
 
-async def delete_published_post(bot: Bot, target_id: int) -> str | None:
+async def delete_published_post(bot: Bot, post_id: int, target_id: int) -> str | None:
     """Удалить уже опубликованное сообщение в ОДНОЙ цели. None при успехе."""
-    target = post_targets_repo.get_target(target_id)
-    if target is None or not target.ok or target.message_id is None:
-        return "Цель не найдена или сообщение туда не публиковалось."
+    target, err = _get_valid_target(target_id, post_id)
+    if target is None:
+        return err
+    assert target.message_id is not None  # гарантировано _get_valid_target
     try:
         await bot.delete_message(chat_id=target.chat_id, message_id=target.message_id)
     except BadRequest as exc:
@@ -138,12 +158,13 @@ async def delete_published_post(bot: Bot, target_id: int) -> str | None:
     return None
 
 
-async def pin_published_post(bot: Bot, target_id: int, pin: bool) -> str | None:
+async def pin_published_post(bot: Bot, post_id: int, target_id: int, pin: bool) -> str | None:
     """Закрепить/открепить уже опубликованное сообщение в ОДНОЙ цели.
     None при успехе."""
-    target = post_targets_repo.get_target(target_id)
-    if target is None or not target.ok or target.message_id is None:
-        return "Цель не найдена или сообщение туда не публиковалось."
+    target, err = _get_valid_target(target_id, post_id)
+    if target is None:
+        return err
+    assert target.message_id is not None  # гарантировано _get_valid_target
     try:
         if pin:
             await bot.pin_chat_message(

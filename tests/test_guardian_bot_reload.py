@@ -42,5 +42,5 @@ def test_reload_filters_applies_updated_flood_thresholds():
     assert ff._max_messages == 1
     assert ff._window_seconds == 5
     # Поведенчески: второе сообщение в окне уже превышает новый (низкий) порог.
-    assert ff.check_flood(user_id=1, now=0.0) is False
-    assert ff.check_flood(user_id=1, now=0.5) is True
+    assert ff.check_flood(-100123, user_id=1, now=0.0) is False
+    assert ff.check_flood(-100123, user_id=1, now=0.5) is True

@@ -435,6 +435,113 @@ async def test_publish_post_no_button_when_disabled(monkeypatch):
     _clean()
 
 
+# --- Аудит: публикация с media_path (send_photo) — ранее нулевое покрытие ---
+
+
+def _make_media_post(tmp_path, text: str, **kwargs) -> Post:
+    image_path = tmp_path / "cover.jpg"
+    image_path.write_bytes(b"fake-jpeg-bytes")
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, original_text=text, rewritten_text=text,
+            status=PostStatus.APPROVED, media_path=str(image_path), **kwargs,
+        )
+        session.add(post)
+        session.flush()
+        pid = post.id
+    with session_scope() as session:
+        return session.get(Post, pid)
+
+
+async def test_publish_post_with_media_sends_photo_with_caption(monkeypatch, tmp_path):
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    post = _make_media_post(tmp_path, "короткая подпись")
+
+    bot = AsyncMock()
+    photo_msg = AsyncMock()
+    photo_msg.message_id = 3000
+    bot.send_photo = AsyncMock(return_value=photo_msg)
+
+    await publish_post(bot, post.id)
+
+    bot.send_photo.assert_awaited_once()
+    kwargs = bot.send_photo.call_args.kwargs
+    assert kwargs["chat_id"] == -100111
+    assert kwargs["caption"] == "короткая подпись"
+    assert kwargs["photo"] == b"fake-jpeg-bytes"
+    bot.send_message.assert_not_awaited()  # текст короче лимита подписи — хвоста нет
+    with session_scope() as session:
+        updated = session.get(Post, post.id)
+        assert updated.status == PostStatus.POSTED
+        assert updated.posted_message_id == 3000
+    _clean()
+
+
+async def test_publish_post_with_media_long_text_sends_tail_message(monkeypatch, tmp_path):
+    """Текст длиннее лимита подписи (1024 симв.) — подпись обрезается,
+    остаток досылается ОТДЕЛЬНЫМ сообщением (см. publisher.py::_send_one)."""
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    targets_repo.add_target(-100111, "A")
+    long_text = "а" * 1500
+    post = _make_media_post(tmp_path, long_text)
+
+    bot = AsyncMock()
+    photo_msg = AsyncMock()
+    photo_msg.message_id = 3001
+    bot.send_photo = AsyncMock(return_value=photo_msg)
+    tail_msg = AsyncMock()
+    tail_msg.message_id = 3002
+    bot.send_message = AsyncMock(return_value=tail_msg)
+
+    await publish_post(bot, post.id)
+
+    caption = bot.send_photo.call_args.kwargs["caption"]
+    assert len(caption) == 1024
+    assert caption == long_text[:1024]
+    bot.send_message.assert_awaited_once()
+    tail_kwargs = bot.send_message.call_args.kwargs
+    assert tail_kwargs["chat_id"] == -100111
+    assert tail_kwargs["text"] == long_text[1024:]
+    # message_id первого успешного результата — от send_photo, не от хвоста.
+    with session_scope() as session:
+        updated = session.get(Post, post.id)
+        assert updated.posted_message_id == 3001
+    _clean()
+
+
+async def test_publish_post_with_media_applies_source_button_to_photo(monkeypatch, tmp_path):
+    from tg_repost.webui import settings_store
+
+    monkeypatch.setattr("tg_repost.retry.asyncio.sleep", AsyncMock())
+    _clean()
+    settings_store.save_setting("post_source_button_enabled", True, "bool")
+    settings_store.save_setting("post_source_button_label", "Читать полностью", "str")
+    try:
+        targets_repo.add_target(-100111, "A")
+        post = _make_media_post(tmp_path, "текст", source_link="https://example.com/orig")
+
+        bot = AsyncMock()
+        photo_msg = AsyncMock()
+        photo_msg.message_id = 3003
+        bot.send_photo = AsyncMock(return_value=photo_msg)
+
+        await publish_post(bot, post.id)
+
+        markup = bot.send_photo.call_args.kwargs["reply_markup"]
+        assert markup.inline_keyboard[0][0].text == "Читать полностью"
+        assert markup.inline_keyboard[0][0].url == "https://example.com/orig"
+    finally:
+        with session_scope() as session:
+            from tg_repost.db.models import AppSetting
+            session.query(AppSetting).delete()
+        from tg_repost.config import invalidate_settings_cache
+        invalidate_settings_cache()
+    _clean()
+
+
 async def test_publish_post_no_button_when_no_source_link(monkeypatch):
     from tg_repost.webui import settings_store
 

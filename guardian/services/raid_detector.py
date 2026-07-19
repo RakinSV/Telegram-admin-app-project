@@ -160,15 +160,23 @@ async def check_raid(bot: Bot, now: datetime | None = None) -> None:
     сна); в проде всегда `None` → `datetime.now(timezone.utc)`."""
     settings = get_guardian_settings()
     for chat_id in settings.protected_chat_ids:
-        state = _get_state(chat_id)
-        if state.active:
-            if _new_members_since(chat_id, settings.raid_cooldown_minutes, now=now) == 0:
-                await _restore_permissions(bot, chat_id)
-            continue
+        # Аудит: изоляция по чату — неожиданное (не TelegramBadRequest,
+        # тот уже перехвачен внутри _trigger_raid_mode/_restore_permissions)
+        # исключение на одном chat_id не должно обрывать проверку
+        # остальных групп в этом же тике; без try/except одна сбойная
+        # группа "съедала" бы весь оставшийся список до следующего тика.
+        try:
+            state = _get_state(chat_id)
+            if state.active:
+                if _new_members_since(chat_id, settings.raid_cooldown_minutes, now=now) == 0:
+                    await _restore_permissions(bot, chat_id)
+                continue
 
-        count = _new_members_since(chat_id, settings.raid_join_window_minutes, now=now)
-        if count > settings.raid_join_threshold:
-            await _trigger_raid_mode(bot, chat_id, count, settings.raid_join_window_minutes)
+            count = _new_members_since(chat_id, settings.raid_join_window_minutes, now=now)
+            if count > settings.raid_join_threshold:
+                await _trigger_raid_mode(bot, chat_id, count, settings.raid_join_window_minutes)
+        except Exception:
+            logger.exception("G14: проверка антирейда упала для чата %s", chat_id)
 
 
 @router.callback_query(F.data.startswith("raid:"))

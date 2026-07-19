@@ -21,8 +21,13 @@ def _get_database_url() -> str:
 
 _database_url = _get_database_url()
 
+# timeout=15 (сек) — этот файл реально пишется ДВУМЯ независимыми ОС-
+# процессами одновременно (guardian и tg_repost, см. webui/guardian_routes.py
+# про кросс-пакетную запись сюда прямо из процесса tg_repost) — явный запас
+# сверх дефолтных 5с sqlite3 на случай всплеска одновременных записей
+# (найдено на аудите; см. тот же комментарий в tg_repost/db/session.py).
 _connect_args = (
-    {"check_same_thread": False} if _database_url.startswith("sqlite") else {}
+    {"check_same_thread": False, "timeout": 15} if _database_url.startswith("sqlite") else {}
 )
 
 _engine_kwargs: dict = {

@@ -361,7 +361,10 @@ class PostTarget(Base):
     # состояние pin по chat_id/message_id напрямую, приходится хранить
     # свою правду и доверять ей (обновляется явно при pin/unpin).
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Аудит: тип честно Optional — колонка nullable в БД (миграция 0015
+    # бэкфиллит старые публикации из `Post.posted_at`, который сам может
+    # быть NULL); новые строки всегда получают значение через `default`.
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class PostRewriteVariant(Base):
