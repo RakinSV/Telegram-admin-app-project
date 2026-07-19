@@ -147,3 +147,64 @@ def test_prune_with_keep_zero_removes_all(tmp_path):
     backup._prune_old_backups(keep=0)
 
     assert list(backups_dir.glob("backup_*.zip")) == []
+
+
+# --- restore_backup (аудит: полный бэкап/восстановление из веб-админки) ---
+
+
+def test_restore_backup_round_trips_env_and_both_databases(tmp_path):
+    (tmp_path / ".env").write_text("SECRET=x")
+    (tmp_path / "tg_repost.db").write_bytes(b"original-tg-repost")
+    (tmp_path / "guardian.db").write_bytes(b"original-guardian")
+    archive_path = backup.run_backup(keep=14)
+
+    # Симулируем повреждение/потерю текущего состояния.
+    (tmp_path / ".env").write_text("CORRUPTED")
+    (tmp_path / "tg_repost.db").write_bytes(b"corrupted")
+    (tmp_path / "guardian.db").write_bytes(b"corrupted")
+
+    restored = backup.restore_backup(archive_path)
+
+    assert (tmp_path / ".env").read_text() == "SECRET=x"
+    assert (tmp_path / "tg_repost.db").read_bytes() == b"original-tg-repost"
+    assert (tmp_path / "guardian.db").read_bytes() == b"original-guardian"
+    assert len(restored) == 3
+
+
+def test_restore_backup_rejects_zip_slip_path_traversal(tmp_path):
+    """Аудит: архив загружается пользователем через веб-форму — запись с
+    "../" в имени не должна писать файл ЗА ПРЕДЕЛЫ текущей рабочей
+    директории. ВЕСЬ архив отклоняется (ничего не пишется), не только
+    опасная запись — частичное восстановление хуже явного отказа."""
+    from zipfile import ZipFile as _ZipFile
+
+    outside_marker = tmp_path.parent / "should-not-exist-zip-slip.txt"
+    outside_marker.unlink(missing_ok=True)
+
+    malicious = tmp_path / "evil.zip"
+    with _ZipFile(malicious, "w") as zf:
+        zf.writestr(".env", "SECRET=x")  # безопасная запись — тоже не должна примениться
+        zf.writestr("../should-not-exist-zip-slip.txt", "pwned")
+
+    try:
+        with pytest.raises(ValueError):
+            backup.restore_backup(malicious)
+        assert not outside_marker.exists()
+        assert not (tmp_path / ".env").exists()  # безопасная запись из ТОГО ЖЕ архива тоже не применилась
+    finally:
+        outside_marker.unlink(missing_ok=True)
+
+
+def test_restore_backup_creates_missing_parent_directories(tmp_path):
+    (tmp_path / ".env").write_text("SECRET=x")
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    (logs_dir / "tg_repost.log").write_text("log line")
+    archive_path = backup.run_backup(keep=14)
+
+    import shutil
+    shutil.rmtree(logs_dir)
+
+    backup.restore_backup(archive_path)
+
+    assert (tmp_path / "logs" / "tg_repost.log").read_text() == "log line"

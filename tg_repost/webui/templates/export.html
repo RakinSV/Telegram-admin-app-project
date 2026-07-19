@@ -4,7 +4,13 @@
 <h1>{{ t('export.title') }}</h1>
 <p class="muted">{{ t('export.desc') }}</p>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if restore_success %}
+<div class="card" style="border-color: var(--ok);">
+  {{ t('export.restore_success', count=restored_count) }}
+</div>
+{% endif %}
 
+<h2>{{ t('export.posts_section_title') }}</h2>
 <div class="card">
   <form method="get" action="/export/download" id="export-form">
     <div class="field-row">
@@ -19,6 +25,25 @@
     <input type="hidden" name="format" id="export-format" value="json">
     <button type="submit" onclick="document.getElementById('export-format').value='json';">{{ t('export.download_json') }}</button>
     <button type="submit" onclick="document.getElementById('export-format').value='csv';" class="secondary">{{ t('export.download_csv') }}</button>
+  </form>
+</div>
+
+<h2>{{ t('export.backup_section_title') }}</h2>
+<p class="muted">{{ t('export.backup_section_desc') }}</p>
+<div class="card">
+  <form method="get" action="/export/backup/download">
+    <button type="submit">{{ t('export.backup_download') }}</button>
+  </form>
+</div>
+<div class="card">
+  <form method="post" action="/export/backup/restore" enctype="multipart/form-data"
+        onsubmit="return confirm('{{ t('export.confirm_restore') }}');">
+    <div class="field-row">
+      <label for="backup_file">{{ t('export.backup_restore_label') }}</label>
+      <input type="file" id="backup_file" name="backup_file" accept=".zip" required>
+      <div class="hint">{{ t('export.backup_restore_hint') }}</div>
+    </div>
+    <button type="submit" class="danger">{{ t('export.backup_restore_button') }}</button>
   </form>
 </div>
 {% endblock %}

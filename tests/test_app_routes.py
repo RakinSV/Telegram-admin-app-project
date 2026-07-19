@@ -785,6 +785,68 @@ def test_export_download_rejects_invalid_date():
     assert r.status_code == 400
 
 
+def test_backup_download_returns_zip_attachment():
+    """Полный бэкап (.env + БД + логи), а не только посты — доступен из
+    веб-админки, не только через ручной запуск с сервера/cron."""
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/export/backup/download")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert "attachment" in r.headers["content-disposition"]
+    assert len(r.content) > 0
+
+
+def test_backup_restore_round_trips_a_downloaded_backup():
+    client = _client()
+    _bootstrap(client)
+    archive = client.get("/export/backup/download").content
+
+    r = client.post(
+        "/export/backup/restore",
+        files={"backup_file": ("backup.zip", archive, "application/zip")},
+    )
+    assert r.status_code == 200
+    assert "restored_count" in r.text or "восстановлен" in r.text.lower()
+
+
+def test_backup_restore_rejects_empty_upload():
+    client = _client()
+    _bootstrap(client)
+    r = client.post(
+        "/export/backup/restore",
+        files={"backup_file": ("empty.zip", b"", "application/zip")},
+    )
+    assert r.status_code == 400
+
+
+def test_backup_restore_rejects_zip_slip_without_writing_outside_cwd(tmp_path):
+    """Аудит: восстановление читает архив, загруженный через веб-форму —
+    запись с "../" в имени не должна писать файл за пределами рабочей
+    директории процесса."""
+    from zipfile import ZIP_DEFLATED, ZipFile
+    import io
+
+    client = _client()
+    _bootstrap(client)
+
+    buf = io.BytesIO()
+    with ZipFile(buf, "w", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("../escaped-zip-slip.txt", "pwned")
+    outside_marker = tmp_path.parent / "escaped-zip-slip.txt"
+    outside_marker.unlink(missing_ok=True)
+
+    try:
+        r = client.post(
+            "/export/backup/restore",
+            files={"backup_file": ("evil.zip", buf.getvalue(), "application/zip")},
+        )
+        assert r.status_code == 400
+        assert not outside_marker.exists()
+    finally:
+        outside_marker.unlink(missing_ok=True)
+
+
 def test_ads_revenue_create_list_delete_round_trip():
     """F35: добавление/удаление записи ручного учёта дохода."""
     from tg_repost.ads import revenue_repo

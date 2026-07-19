@@ -15,10 +15,12 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from zipfile import BadZipFile
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
@@ -40,6 +42,7 @@ from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostSta
 from tg_repost.db.session import session_scope
 from tg_repost.export import export_posts_csv, export_posts_json
 from tg_repost.logging_conf import get_logger
+from tg_repost.tools.backup import restore_backup, run_backup
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
@@ -855,6 +858,64 @@ def build_crud_router() -> APIRouter:
         return Response(
             content=content, media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # --- Полный бэкап/восстановление (.env + обе БД + логи) ---
+    # Аудит-фикс: "бэкап только постов" было неверным впечатлением —
+    # `tools/backup.py::run_backup` и раньше архивировал ВСЁ (.env целиком,
+    # обе SQLite БД целиком — токены/секреты/настройки/protected_chat_ids/
+    # стоп-слова внутри, посты — лишь часть этого), но запускался только
+    # вручную с сервера или по cron. Здесь тот же механизм, доступный из
+    # веб-админки: скачать сейчас, восстановить из ранее скачанного архива.
+
+    @router.get("/export/backup/download")
+    async def export_backup_download(request: Request) -> Response:
+        try:
+            archive_path = await asyncio.to_thread(run_backup, 14)
+        except RuntimeError as exc:
+            return _templates.TemplateResponse(
+                request, "export.html", {"error": str(exc)}, status_code=400,
+            )
+        audit.record_audit("full_backup_download", target=archive_path.name)
+        return FileResponse(
+            archive_path, media_type="application/zip", filename=archive_path.name,
+        )
+
+    @router.post("/export/backup/restore")
+    async def export_backup_restore(
+        request: Request, backup_file: UploadFile = File(...)
+    ) -> Response:
+        raw = await backup_file.read()
+        if not raw:
+            return _templates.TemplateResponse(
+                request, "export.html",
+                {"error": i18n.t("export.error_empty_backup_file")}, status_code=400,
+            )
+        # Безопасность прежде всего: снимок ТЕКУЩЕГО состояния ДО перезаписи —
+        # если восстановление окажется ошибкой (не тот файл, повреждённый
+        # архив), есть куда откатиться. Пусто бэкапить (первый запуск, ни
+        # .env, ни БД ещё нет) — не блокирует восстановление, это не ошибка.
+        try:
+            await asyncio.to_thread(run_backup, 14)
+        except RuntimeError:
+            pass
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = Path(tmp.name)
+        try:
+            restored = await asyncio.to_thread(restore_backup, tmp_path)
+        except (ValueError, BadZipFile) as exc:
+            return _templates.TemplateResponse(
+                request, "export.html",
+                {"error": i18n.t("export.error_restore_failed", detail=str(exc))},
+                status_code=400,
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+        audit.record_audit("full_backup_restore", detail=f"{len(restored)} файлов")
+        return _templates.TemplateResponse(
+            request, "export.html",
+            {"error": None, "restore_success": True, "restored_count": len(restored)},
         )
 
     return router

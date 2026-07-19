@@ -89,7 +89,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.ads": {"ru": "Реклама", "en": "Ads"},
     "nav.invites": {"ru": "Инвайты", "en": "Invites"},
     "nav.polls": {"ru": "Опросы", "en": "Polls"},
-    "nav.export": {"ru": "Экспорт", "en": "Export"},
+    "nav.export": {"ru": "Экспорт / Импорт", "en": "Export / Import"},
     "nav.telethon_sessions": {"ru": "Telethon-сессии", "en": "Telethon sessions"},
     "nav.stats": {"ru": "Статистика", "en": "Stats"},
     "nav.components": {"ru": "Компоненты", "en": "Components"},
@@ -887,14 +887,15 @@ STRINGS: dict[str, dict[str, str]] = {
     "logs.status_live": {"ru": "живо", "en": "live"},
     "logs.status_reconnecting": {"ru": "переподключение…", "en": "reconnecting…"},
 
-    # --- F38: экспорт содержимого канала ---
-    "export.title": {"ru": "Экспорт содержимого", "en": "Content export"},
+    # --- F38: экспорт содержимого канала + полный бэкап/восстановление ---
+    "export.title": {"ru": "Экспорт / Импорт", "en": "Export / Import"},
     "export.desc": {
-        "ru": "Все опубликованные посты в независимом от системы формате — "
-        "для передачи новому владельцу канала или архива.",
-        "en": "All published posts in a system-independent format — for "
-        "handing off to a new channel owner or for archival.",
+        "ru": "Содержимое канала отдельно, полный бэкап системы (токены, "
+        "настройки, БД целиком) отдельно — см. секции ниже.",
+        "en": "Channel content separately, a full system backup (tokens, "
+        "settings, the whole database) separately — see the sections below.",
     },
+    "export.posts_section_title": {"ru": "Посты", "en": "Posts"},
     "export.since_label": {"ru": "С даты", "en": "From date"},
     "export.until_label": {"ru": "По дату", "en": "To date"},
     "export.date_range_hint": {
@@ -905,6 +906,51 @@ STRINGS: dict[str, dict[str, str]] = {
     "export.download_csv": {"ru": "Скачать CSV", "en": "Download CSV"},
     "export.error_invalid_date": {
         "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
+    },
+    "export.backup_section_title": {
+        "ru": "Полный бэкап (токены, настройки, БД целиком)",
+        "en": "Full backup (tokens, settings, the whole database)",
+    },
+    "export.backup_section_desc": {
+        "ru": "Архив `.env` + обеих БД (tg_repost и Guardian) + логов — "
+        "буквально всё: посты, источники, цели, настройки, зашифрованные "
+        "секреты/токены. То же самое, что делает `python -m "
+        "tg_repost.tools.backup` по cron, но по кнопке и из браузера.",
+        "en": "An archive of `.env` + both databases (tg_repost and "
+        "Guardian) + logs — literally everything: posts, sources, targets, "
+        "settings, encrypted secrets/tokens. The same thing `python -m "
+        "tg_repost.tools.backup` does via cron, just a button in the browser.",
+    },
+    "export.backup_download": {"ru": "Скачать бэкап сейчас", "en": "Download backup now"},
+    "export.backup_restore_label": {"ru": "Файл бэкапа (.zip)", "en": "Backup file (.zip)"},
+    "export.backup_restore_hint": {
+        "ru": "⚠️ Перезаписывает .env и ОБЕ БД поверх текущих — перед этим "
+        "автоматически снимается снимок текущего состояния. После "
+        "восстановления нужен перезапуск контейнеров (docker compose "
+        "restart), живого применения без рестарта нет.",
+        "en": "⚠️ Overwrites .env and BOTH databases in place — a snapshot "
+        "of the current state is taken automatically first. Restart the "
+        "containers (docker compose restart) after restoring — this has "
+        "no live effect without a restart.",
+    },
+    "export.backup_restore_button": {"ru": "Восстановить из бэкапа", "en": "Restore from backup"},
+    "export.confirm_restore": {
+        "ru": "Перезаписать .env и обе БД содержимым загруженного архива? "
+        "Текущее состояние будет автоматически сохранено перед этим.",
+        "en": "Overwrite .env and both databases with the uploaded archive? "
+        "The current state will be saved automatically first.",
+    },
+    "export.restore_success": {
+        "ru": "Восстановлено {count} файлов. Перезапусти контейнеры (docker "
+        "compose restart), чтобы применить.",
+        "en": "Restored {count} files. Restart the containers (docker "
+        "compose restart) to apply.",
+    },
+    "export.error_empty_backup_file": {
+        "ru": "Файл бэкапа пуст или не выбран.", "en": "The backup file is empty or wasn't selected.",
+    },
+    "export.error_restore_failed": {
+        "ru": "Не удалось восстановить: {detail}", "en": "Restore failed: {detail}",
     },
 
     # --- Guardian: дашборд ---

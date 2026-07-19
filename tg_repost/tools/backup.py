@@ -125,6 +125,35 @@ def run_backup(keep: int) -> Path:
     return archive_path
 
 
+def restore_backup(zip_path: Path) -> list[Path]:
+    """Восстановить файлы из архива, созданного `run_backup()` (или веб-
+    формой `/export`, тот же формат), на их исходные относительные пути —
+    имя записи в архиве (`arcname`) при бэкапе ВСЕГДА совпадало с этим же
+    относительным путём (см. `run_backup`), так что распаковка "как есть"
+    и есть восстановление.
+
+    Защита от zip slip (аудит: загружаемый пользователем архив — вектор
+    произвольной записи файла, если имя записи содержит "../") — СНАЧАЛА
+    проверяются пути ВСЕХ записей, и только потом что-либо пишется на диск:
+    архив с хотя бы одной небезопасной записью отклоняется целиком, частичное
+    восстановление хуже явного отказа."""
+    restored: list[Path] = []
+    cwd = Path.cwd().resolve()
+    with ZipFile(zip_path) as zf:
+        targets: list[tuple[str, Path]] = []
+        for name in zf.namelist():
+            target = (cwd / name).resolve()
+            if not target.is_relative_to(cwd):
+                raise ValueError(f"Небезопасный путь в архиве, восстановление отменено: {name}")
+            targets.append((name, target))
+        for name, target in targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(name) as src, open(target, "wb") as dst:
+                dst.write(src.read())
+            restored.append(target)
+    return restored
+
+
 def _main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep", type=int, default=14, help="сколько последних бэкапов хранить (0 = все)")
