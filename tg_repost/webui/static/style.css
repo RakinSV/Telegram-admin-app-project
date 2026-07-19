@@ -8,9 +8,21 @@
   --ok: #3ec97a;
   --warn: #e0a82e;
   --err: #e0524f;
+  /* Единая кривая для всех UI-переходов (не встроенный ease — тот слишком
+     слабый и не даёт ощущения отклика). Один и тот же admin используется
+     десятки раз за сессию, поэтому везде короткие (120-160мс) и точечные
+     transition на конкретных свойствах, не decoration. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 * { box-sizing: border-box; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 body {
   margin: 0;
@@ -39,6 +51,7 @@ nav.sidebar a {
   padding: 8px 10px;
   border-radius: 6px;
   margin-bottom: 2px;
+  transition: background-color 140ms var(--ease-out), color 140ms var(--ease-out);
 }
 
 nav.sidebar a:hover, nav.sidebar a.active { background: #20242e; color: var(--text); }
@@ -49,6 +62,7 @@ nav.sidebar a.active { color: var(--accent); font-weight: 600; }
   flex: 1; text-align: center; padding: 4px 6px; border-radius: 6px;
   color: var(--muted); text-decoration: none; font-size: 12px;
   border: 1px solid var(--border);
+  transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 .lang-switch a.active { color: var(--accent); border-color: var(--accent); }
 .auth-page .lang-switch { max-width: 120px; margin: 0 auto 16px; }
@@ -88,8 +102,17 @@ th { color: var(--muted); font-weight: 500; }
 .card select, .card textarea, .field-row input, .field-row select {
   background: #11131a; border: 1px solid var(--border); color: var(--text);
   padding: 6px 8px; border-radius: 6px; font-family: inherit; font-size: 13px;
+  transition: border-color 140ms var(--ease-out);
 }
 .card textarea { width: 100%; }
+
+/* Функциональный сигнал "ты сейчас в этом поле" — раньше фокус был
+   визуально неотличим от обычного состояния (аудит дизайна). */
+.card input:focus, .card select:focus, .card textarea:focus,
+.field-row input:focus, .field-row select:focus, .auth-page input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
 .field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .field-row label {
@@ -110,6 +133,7 @@ th { color: var(--muted); font-weight: 500; }
   border-bottom: 1px solid var(--border); cursor: pointer; width: auto;
 }
 .check-item:last-child { border-bottom: none; }
+.check-item { transition: background-color 120ms var(--ease-out); }
 .check-item:hover { background: #171a22; }
 .check-item input[type=checkbox] { width: 16px; height: 16px; flex-shrink: 0; }
 .inline-form { display: flex; gap: 8px; align-items: center; }
@@ -118,15 +142,29 @@ th { color: var(--muted); font-weight: 500; }
 button, input[type=submit] {
   background: var(--accent); color: #fff; border: none; padding: 8px 16px;
   border-radius: 6px; cursor: pointer; font-size: 13px;
+  transition: opacity 140ms var(--ease-out), background-color 140ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 button:hover, input[type=submit]:hover { opacity: .9; }
+/* Нажатие должно ощущаться — раньше кнопки не реагировали на клик визуально
+   вообще (аудит дизайна: emil-design-eng). Скромный scale, не bounce. */
+button:active, input[type=submit]:active { transform: scale(0.97); }
 button.secondary { background: #2a2f3a; }
 button.danger { background: transparent; color: var(--err); border: 1px solid var(--err); }
 button.danger:hover { background: rgba(224,82,79,.12); opacity: 1; }
 button.small { padding: 4px 10px; font-size: 12px; }
 
 .settings-group { margin-bottom: 22px; scroll-margin-top: 12px; }
-.error { color: var(--err); margin-bottom: 12px; }
+/* Ошибка формы — новая на каждой отрисовке страницы (полный reload, не
+   SPA-ререндер), поэтому keyframes уместны — их не прервёт повторный
+   триггер. Только opacity, без translate: класс используется и как
+   блочный баннер, и как inline-предупреждение в ячейке таблицы, где сдвиг
+   по Y дал бы дрожание строки. */
+.error {
+  color: var(--err); margin-bottom: 12px;
+  animation: error-in 180ms var(--ease-out);
+}
+@keyframes error-in { from { opacity: 0; } }
 .muted { color: var(--muted); }
 
 /* Якорь-навигация по группам на /settings и /guardian/settings — раньше
@@ -141,6 +179,7 @@ button.small { padding: 4px 10px; font-size: 12px; }
   font-size: 12px; padding: 4px 9px; border-radius: 999px;
   background: var(--panel); border: 1px solid var(--border);
   color: var(--muted); text-decoration: none; white-space: nowrap;
+  transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 .section-nav a:hover { color: var(--text); border-color: var(--accent); }
 
