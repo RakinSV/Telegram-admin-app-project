@@ -919,10 +919,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Действий ещё не было.", "en": "No actions yet.",
     },
     "guardian_dashboard.not_configured_warning": {
-        "ru": "⚠️ GUARDIAN_BOT_TOKEN/GUARDIAN_GROUP_ID не заданы — правь "
-        "`.env` на сервере, отсюда не редактируются.",
-        "en": "⚠️ GUARDIAN_BOT_TOKEN/GUARDIAN_GROUP_ID aren't set — edit "
-        "`.env` on the server, they can't be edited from here.",
+        "ru": "⚠️ Токен бота Guardian не задан — впиши его в "
+        "<a href=\"/settings#guardian_bot\">Настройках</a> (группа "
+        "«Guardian»), затем перезапусти контейнер guardian, чтобы он его "
+        "подхватил. GUARDIAN_GROUP_ID больше не нужен — какие группы "
+        "защищать, выбирается галочкой на странице «Цели».",
+        "en": "⚠️ The Guardian bot token isn't set — enter it in "
+        "<a href=\"/settings#guardian_bot\">Settings</a> (the «Guardian» "
+        "group), then restart the guardian container to pick it up. "
+        "GUARDIAN_GROUP_ID is no longer needed — which groups are "
+        "protected is chosen via the checkbox on the «Targets» page.",
     },
     "guardian_dashboard.config_title": {"ru": "Текущий конфиг", "en": "Current config"},
     "guardian_dashboard.spam_mode": {"ru": "Режим спам-фильтра", "en": "Spam filter mode"},
@@ -1131,6 +1137,17 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Inline button linking to the original — only for posts "
         "from sources (ads/digests/polls have no original to link to).",
     },
+    "settings.group.guardian_bot.title": {
+        "ru": "Guardian — токен бота-модератора", "en": "Guardian — moderator bot token",
+    },
+    "settings.group.guardian_bot.desc": {
+        "ru": "Guardian — отдельный бот и процесс от репост-бота выше. "
+        "Список защищаемых групп и остальные настройки — на странице "
+        "«Guardian» в меню, здесь только его токен.",
+        "en": "Guardian is a separate bot and process from the repost bot "
+        "above. Protected groups and the rest of its settings live on the "
+        "«Guardian» page in the menu — only its token lives here.",
+    },
 
     # --- Настройки tg_repost: лейблы полей ---
     "settings.field.tg_api_id.label": {"ru": "API ID", "en": "API ID"},
@@ -1254,6 +1271,21 @@ STRINGS: dict[str, dict[str, str]] = {
     "secrets.field.bot_api_proxy_url.hint": {
         "ru": "SOCKS5-прокси для Bot API репост-бота — не MTProto, другой протокол.",
         "en": "SOCKS5 proxy for the repost bot's Bot API — not MTProto, a different protocol.",
+    },
+    "secrets.field.guardian_bot_token.label": {
+        "ru": "Guardian Bot Token", "en": "Guardian Bot Token",
+    },
+    "secrets.field.guardian_bot_token.hint": {
+        "ru": "Токен ОТДЕЛЬНОГО бота-модератора Guardian — не тот же бот, "
+        "что публикует посты. Получить: @BotFather → /newbot. Guardian — "
+        "отдельный процесс/контейнер: после сохранения перезапусти его "
+        "(`docker compose restart guardian`), живого применения без "
+        "рестарта для этого поля нет.",
+        "en": "Token for the SEPARATE Guardian moderator bot — not the "
+        "same bot that publishes posts. Get one via @BotFather → /newbot. "
+        "Guardian is a separate process/container: restart it after "
+        "saving (`docker compose restart guardian`) — this field has no "
+        "live effect without a restart.",
     },
     "secrets.field.openai_api_key.label": {"ru": "OpenAI API Key", "en": "OpenAI API Key"},
     "secrets.field.openai_api_key.hint": {

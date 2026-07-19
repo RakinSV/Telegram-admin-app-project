@@ -301,6 +301,15 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "только для постов из источников (у рекламы/дайджестов/опросов "
         "нет ссылки на первоисточник, кнопка на них не появится).",
     ),
+    SettingsGroup(
+        "guardian_bot", "Guardian — токен бота-модератора",
+        (),
+        "Guardian (капча, антиспам, антирейд) — ОТДЕЛЬНЫЙ бот и процесс от "
+        "репост-бота выше. Список защищаемых групп и остальные настройки "
+        "Guardian (стоп-слова, домены, пороги) — на странице «Guardian» в "
+        "меню, здесь только его токен (секрет).",
+        secret_keys=("guardian_bot_token",),
+    ),
 )
 
 SECRET_LABELS: dict[str, str] = {
@@ -313,6 +322,7 @@ SECRET_LABELS: dict[str, str] = {
     "mtproto_proxy_secret": "MTProto Proxy Secret",
     "telethon_proxy_url": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
     "bot_api_proxy_url": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
+    "guardian_bot_token": "Guardian Bot Token",
 }
 
 # Что это и где взять — показывается на /secrets рядом с полем, чтобы не
@@ -354,6 +364,15 @@ SECRET_HINTS: dict[str, str] = {
         "SOCKS5-прокси для Bot API репост-бота (постинг/модерация) — НЕ "
         "MTProto, другой протокол. Логин:пароль опциональны, как и у "
         "Telethon-прокси выше. Формат: socks5://[user:pass@]host:port."
+    ),
+    "guardian_bot_token": (
+        "Токен ОТДЕЛЬНОГО бота-модератора Guardian — НЕ тот же бот, что "
+        "публикует посты выше. Получить: диалог с @BotFather → /newbot "
+        "(либо переиспользуй уже существующего бота, если заводил его "
+        "раньше вручную). Guardian — отдельный процесс/контейнер: после "
+        "сохранения его нужно перезапустить (`docker compose restart "
+        "guardian`), чтобы он подхватил токен — живого применения без "
+        "рестарта для этого поля нет."
     ),
 }
 

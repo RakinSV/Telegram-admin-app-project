@@ -370,7 +370,12 @@ class Settings(BaseSettings):
 # `secrets` зашифрованными (см. tg_repost/crypto.py), редактируются write-only,
 # никогда не показываются в открытом виде. Имена — реальные snake_case
 # атрибуты `Settings`, а не ALIAS (`.env`-имена) — так совпадает с ключом,
-# который пишет/читает `webui/settings_store.py`.
+# который пишет/читает `webui/settings_store.py`. ИСКЛЮЧЕНИЕ: "guardian_bot_token"
+# НЕ атрибут `Settings` (это токен ДРУГОГО бота, отдельный процесс) — хранится
+# здесь же (одна инфраструктура шифрования на оба процесса, `WEBUI_MASTER_KEY`
+# общий), но `_apply_secret_overrides` ниже пропускает его через `Settings`
+# (hasattr=False) — расшифровывает и применяет его САМ `guardian/config.py`
+# (кросс-процессное чтение таблицы `secrets`, см. его docstring).
 SECRET_FIELD_NAMES: tuple[str, ...] = (
     "tg_api_hash",
     "tg_session_string",
@@ -381,6 +386,7 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "mtproto_proxy_secret",
     "telethon_proxy_url",
     "bot_api_proxy_url",
+    "guardian_bot_token",
 )
 
 
