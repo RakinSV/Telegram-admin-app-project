@@ -129,3 +129,77 @@ def test_humanize_block_applies_to_every_style(style):
 def test_default_humanize_instructions_are_not_empty():
     # Пустой дефолт означал бы, что галочка включена, а эффекта нет.
     assert get_settings().rewrite_humanize_instructions.strip()
+
+
+# --- качество дефолтных промптов ---
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_style_setting_default_matches_prompt_file(style):
+    """Единый источник истины для дефолтов — файлы `prompts/*.txt`.
+
+    Регрессия: у стиля "default" дефолт дублировался ещё и литералом в
+    config.py, и две копии успели разойтись — в файле остался старый слабый
+    текст. Очистка поля в админке откатывала пользователя на СТАРУЮ редакцию,
+    и заметить это было нечем.
+    """
+    field = _STYLE_SETTING_FIELDS[style]
+    assert getattr(get_settings(), field).strip() == load_prompt(style).strip()
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_material_comes_before_instructions_in_prompt(style):
+    """Материал сверху, задача снизу: со статьёй на несколько тысяч символов
+    инструкции, стоящие ПЕРЕД ней, размываются — модель хуже держит правила.
+    Раньше все шаблоны были устроены наоборот."""
+    template = resolve_rewrite_template(style)
+    material_end = template.index("</статья_по_ссылке>")
+    assert template.index("{post_text}") < material_end
+    assert template.index("{link_content}") < material_end
+    # Финальный контракт ответа — в самом конце, последним, что видит модель.
+    assert "ОТВЕТ" in template[material_end:]
+    assert template.rstrip().endswith(("»", ".", "»."))
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_prompt_states_telegram_length_budget(style):
+    """Лимит подписи к медиа в Telegram — 1024 символа. Без явного бюджета
+    «полный рерайт по статье» стабильно вылезал за него, и пост разрывался
+    на подпись и отдельное сообщение."""
+    template = resolve_rewrite_template(style)
+    assert "600" in template and "900" in template
+    assert "1024" in template
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_prompt_handles_empty_article_block_explicitly(style):
+    """Пустой блок статьи — штатная ситуация (ссылки не было / сайт не отдал
+    текст). Модель не должна ни оправдываться, ни выдумывать недостающее."""
+    template = resolve_rewrite_template(style)
+    assert "пустой" in template
+    assert "не выдумывай" in template.lower() or "не добавляй" in template.lower()
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_prompt_forbids_preamble_in_output(style):
+    template = resolve_rewrite_template(style)
+    assert "ТОЛЬКО текст поста" in template
+
+
+def test_humanize_block_lists_concrete_ai_tells_not_vague_advice():
+    """«Пиши живее» модель игнорирует. Работают конкретные запрещённые
+    обороты, по которым текст и опознаётся как машинный."""
+    block = get_settings().rewrite_humanize_instructions
+    for marker in ("не просто", "стоит отметить", "таким образом", "подводя итог"):
+        assert marker in block
+
+
+def test_humanize_block_never_wraps_a_quoted_phrase_across_lines():
+    """Запрещённый оборот, разорванный переносом строки («таким\\n образом»),
+    перестаёт читаться как цельная фраза — и правило слабеет ровно там, где
+    оно должно быть буквальным. Найдено тестом на реальном тексте."""
+    import re
+
+    block = get_settings().rewrite_humanize_instructions
+    broken = [m for m in re.findall(r"«[^»]*»", block) if "\n" in m]
+    assert broken == [], f"обороты разорваны переносом: {broken}"

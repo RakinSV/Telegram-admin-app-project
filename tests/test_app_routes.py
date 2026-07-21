@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.webui import app as app_module
-from tg_repost.webui import audit, auth, setup_token
+from tg_repost.webui import audit, auth, settings_store, setup_token
 from tg_repost.webui.app import create_app
 from tg_repost.webui.settings_store import SETTINGS_GROUPS
 
@@ -178,6 +178,50 @@ def test_settings_save_invalid_number_returns_clean_400():
     )
     assert r.status_code == 400
     assert "error" in r.text.lower() or "Некорректн" in r.text
+
+
+def test_settings_reset_field_restores_code_default():
+    """Сохранённое в админке значение перекрывает дефолт кода НАВСЕГДА: один
+    раз нажав «Сохранить» в группе «Рерайт», владелец замораживал тогдашнюю
+    редакцию промптов и переставал получать их улучшения с новыми версиями."""
+    from tg_repost.config import get_settings
+    from tg_repost.rewriter.client import load_prompt, resolve_rewrite_template
+
+    client = _client()
+    _bootstrap(client)
+    settings_store.save_setting("rewrite_prompt_news", "мой промпт", "str")
+    assert resolve_rewrite_template("news") == "мой промпт"
+
+    r = client.post("/settings/rewrite/reset/rewrite_prompt_news", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings#rewrite"
+    # Вернулись к дефолту, который приезжает с версией кода.
+    assert get_settings().rewrite_prompt_news.strip() == load_prompt("news").strip()
+
+
+def test_settings_reset_rejects_field_outside_the_group():
+    """Роут не должен превращаться в «удали любую строку app_settings по
+    имени» — поле проверяется по составу конкретной группы."""
+    client = _client()
+    _bootstrap(client)
+    settings_store.save_setting("rewrite_prompt_news", "мой промпт", "str")
+
+    r = client.post("/settings/covers/reset/rewrite_prompt_news")
+    assert r.status_code == 404
+    assert settings_store.effective_value(
+        next(f for g in SETTINGS_GROUPS for f in g.fields if f.name == "rewrite_prompt_news")
+    ) == "мой промпт"
+
+
+def test_settings_reset_button_only_shown_for_overridden_fields():
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/settings")
+    assert 'id="reset-rewrite_prompt_news"' not in r.text  # ничего не сохраняли
+
+    settings_store.save_setting("rewrite_prompt_news", "мой промпт", "str")
+    r = client.get("/settings")
+    assert 'id="reset-rewrite_prompt_news"' in r.text
 
 
 def test_settings_page_renders_field_hints():

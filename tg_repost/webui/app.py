@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, Form, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -161,6 +161,10 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
                     "needs_resync": f.needs_resync,
                     "choices": f.choices,
                     "value": settings_store.effective_value(f),
+                    # Есть ли сохранённое значение, перекрывающее дефолт кода.
+                    # Только для таких полей показывается кнопка сброса — у
+                    # остальных сбрасывать нечего, и кнопка бы врала.
+                    "is_overridden": settings_store.is_overridden(f),
                 }
                 for f in group.fields
             ],
@@ -573,6 +577,33 @@ def _protected_router() -> APIRouter:
                 await resync_scheduler_jobs()
                 audit.record_audit("component_resync", target="scheduler")
         return RedirectResponse(url="/settings", status_code=303)
+
+    @router.post("/settings/{group_key}/reset/{field_name}")
+    async def settings_reset_field(
+        request: Request, group_key: str, field_name: str,
+    ) -> Response:
+        """Убрать сохранённое значение поля — вернуться к дефолту кода/`.env`.
+
+        Нужно прежде всего промптам: их дефолты живут в
+        `rewriter/prompts/*.txt` и приезжают с новой версией кода, но
+        сохранённое в админке значение перекрывает их НАВСЕГДА. Один раз
+        нажав «Сохранить» в группе «Рерайт», владелец замораживал тогдашнюю
+        редакцию всех промптов группы и переставал получать улучшения — из
+        интерфейса это никак не следовало.
+
+        Поле проверяется по составу группы, а не по одному имени: иначе
+        роут стал бы «удали мне любую строку из app_settings по имени».
+        """
+        del request
+        group = next(
+            (g for g in settings_store.SETTINGS_GROUPS if g.key == group_key), None
+        )
+        if group is None or not any(f.name == field_name for f in group.fields):
+            raise HTTPException(status_code=404, detail="Нет такого поля в группе")
+
+        if settings_store.reset_setting(field_name):
+            audit.record_audit("setting_reset", target=field_name)
+        return RedirectResponse(url=f"/settings#{group_key}", status_code=303)
 
     async def _resync_if_openai_key(key: str) -> None:
         # `openai_api_key` используется долгоживущим `RewriterClient`

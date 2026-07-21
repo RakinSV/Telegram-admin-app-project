@@ -17,6 +17,12 @@
   <h2>{{ group.title }}</h2>
   {% if group.description %}<p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ group.description }}</p>{% endif %}
   <div class="card">
+    {# Формы сброса живут ВНЕ формы группы — вложенные <form> недопустимы.
+       Кнопки внутри field-row привязаны к ним через атрибут form=. #}
+    {% for field in group.fields if field.is_overridden %}
+    <form method="post" action="/settings/{{ group.key }}/reset/{{ field.name }}"
+          id="reset-{{ field.name }}" hidden></form>
+    {% endfor %}
     <form method="post" action="/settings/{{ group.key }}">
       {% for field in group.fields %}
       <div class="field-row">
@@ -24,6 +30,18 @@
           {{ field.label }}
           {% if field.needs_resync %}<span class="badge warn">{{ t('common.resync_badge') }}</span>{% endif %}
         </label>
+        {# Сохранённое значение перекрывает дефолт кода навсегда: промпты,
+           приезжающие с новой версией, до владельца уже не доходят. Кнопка
+           показывается только когда сбрасывать реально есть что. Форма
+           отдельная от формы группы — вложенные <form> недопустимы, поэтому
+           стоит ДО неё и submit'ится через атрибут form=. #}
+        {% if field.is_overridden %}
+        <button type="submit" class="secondary small" form="reset-{{ field.name }}"
+                title="{{ t('settings.reset_field_title') }}"
+                onclick="return confirm('{{ t('settings.confirm_reset_field') }}');">
+          {{ t('settings.reset_field') }}
+        </button>
+        {% endif %}
         {% if field.choices %}
           <select id="{{ field.name }}" name="{{ field.name }}">
             {% for choice in field.choices %}

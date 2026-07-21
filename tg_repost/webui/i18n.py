@@ -866,6 +866,19 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.expand_text_field": {
         "ru": "Показать и отредактировать текст", "en": "Show and edit text",
     },
+    "settings.reset_field": {"ru": "↺ по умолчанию", "en": "↺ default"},
+    "settings.reset_field_title": {
+        "ru": "Убрать сохранённое значение и вернуться к тому, что идёт с "
+              "версией системы. Показывается только у изменённых полей.",
+        "en": "Drop the saved value and go back to what ships with this "
+              "version. Shown only for fields you have changed.",
+    },
+    # Без апострофов: строка уходит в JS confirm() внутри HTML-атрибута
+    # (см. предупреждение над common.confirm_delete и тест на это).
+    "settings.confirm_reset_field": {
+        "ru": "Вернуть поле к значению по умолчанию? Ваша версия будет потеряна.",
+        "en": "Reset this field to its default? Your version will be lost.",
+    },
     "settings.error_invalid_number": {
         "ru": "Некорректное значение в группе «{group}» — числовое поле должно содержать число.",
         "en": "Invalid value in group “{group}” — a numeric field must contain a number.",

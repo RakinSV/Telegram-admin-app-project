@@ -563,3 +563,60 @@ async def test_publish_post_no_button_when_no_source_link(monkeypatch):
         from tg_repost.config import invalidate_settings_cache
         invalidate_settings_cache()
     _clean()
+
+
+# --- разрыв длинного текста между подписью к картинке и хвостом ---
+
+
+def test_split_for_caption_keeps_short_text_intact():
+    from tg_repost.telegram.publisher import split_for_caption
+
+    head, tail = split_for_caption("короткий пост", limit=1024)
+    assert head == "короткий пост"
+    assert tail == ""
+
+
+def test_split_for_caption_breaks_on_paragraph_not_mid_word():
+    """Раньше резалось ровно на text[:1024], то есть посреди слова: подпись
+    обрывалась на «...осн», хвост начинался с «овные причины»."""
+    from tg_repost.telegram.publisher import split_for_caption
+
+    text = "Первый абзац умещается.\n\n" + "Второй абзац начинается тут. " * 20
+    head, tail = split_for_caption(text, limit=60)
+    assert head == "Первый абзац умещается."
+    assert tail.startswith("Второй абзац")
+
+
+def test_split_for_caption_falls_back_to_sentence_then_word():
+    from tg_repost.telegram.publisher import split_for_caption
+
+    sentences = "Первое предложение. Второе предложение. " + "хвост " * 30
+    head, tail = split_for_caption(sentences, limit=45)
+    assert head.endswith(".")
+    assert not head.endswith(" ")
+    assert tail
+
+    no_punct = "слово " * 40
+    head, tail = split_for_caption(no_punct, limit=50)
+    assert not head.endswith("сло")  # не посреди слова
+    assert head and tail
+
+
+def test_split_for_caption_never_loses_or_duplicates_characters():
+    """Инвариант: голова + хвост = исходный текст с точностью до пробелов на
+    границе. Потерянный кусок означал бы молча съеденный текст поста."""
+    from tg_repost.telegram.publisher import split_for_caption
+
+    text = "Абзац один.\n\nАбзац два, подлиннее и с деталями. " * 12
+    head, tail = split_for_caption(text, limit=200)
+    assert (head + tail).replace(" ", "").replace("\n", "") == \
+        text.replace(" ", "").replace("\n", "")
+
+
+def test_split_for_caption_hard_cuts_when_no_boundary_in_window():
+    from tg_repost.telegram.publisher import split_for_caption
+
+    text = "a" * 3000  # ни пробелов, ни знаков — отступать некуда
+    head, tail = split_for_caption(text, limit=1024)
+    assert len(head) == 1024
+    assert len(tail) == 3000 - 1024

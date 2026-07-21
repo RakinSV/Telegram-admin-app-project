@@ -413,6 +413,38 @@ def effective_value(field: SettingField) -> object:
     return getattr(get_settings(), field.name)
 
 
+def is_overridden(field: SettingField) -> bool:
+    """Есть ли для поля сохранённое в админке значение (строка в
+    `app_settings`), перекрывающее дефолт кода/`.env`."""
+    with session_scope() as session:
+        return session.query(AppSetting.id).filter(
+            AppSetting.key == field.name,
+        ).first() is not None
+
+
+def reset_setting(key: str) -> bool:
+    """Убрать оверлей настройки — вернуться к дефолту кода/`.env`.
+
+    Нужно прежде всего для промптов. Дефолты промптов живут в
+    `rewriter/prompts/*.txt` и обновляются с новой версией кода, но
+    СОХРАНЁННОЕ в админке значение перекрывает их навсегда: один раз нажав
+    «Сохранить» в группе «Рерайт», владелец замораживал тогдашнюю редакцию
+    всех промптов группы и больше не получал улучшений — и понять это из
+    интерфейса было невозможно.
+
+    Возвращает True, если оверлей действительно был (для честного сообщения
+    в UI: «сброшено» против «и так было по умолчанию»).
+    """
+    if key not in Settings.model_fields:
+        raise ValueError(f"Неизвестная настройка: {key}")
+    with session_scope() as session:
+        deleted = session.query(AppSetting).filter(AppSetting.key == key).delete()
+    invalidate_settings_cache()
+    if deleted:
+        logger.info("Настройка '%s' сброшена к значению по умолчанию", key)
+    return bool(deleted)
+
+
 def save_setting(key: str, value: object, value_type: str) -> None:
     """Сохранить настройку в `app_settings` и сразу применить (live)."""
     if key not in Settings.model_fields:

@@ -32,6 +32,34 @@ logger = get_logger(__name__)
 # Лимит Telegram: 4096 символов на сообщение, 1024 на подпись к медиа.
 _MAX_TEXT = 4096
 _MAX_CAPTION = 1024
+# Насколько далеко от лимита разрешено отступить назад ради разрыва по абзацу
+# или предложению. Больше — рискуем срезать заметный кусок подписи в отдельное
+# сообщение; меньше — граница почти всегда попадёт в середину фразы.
+_SPLIT_LOOKBACK = 200
+
+
+def split_for_caption(text: str, limit: int = _MAX_CAPTION) -> tuple[str, str]:
+    """Разбить текст на подпись к картинке и хвост-сообщение по осмысленной
+    границе: абзац → конец предложения → пробел → жёстко по лимиту.
+
+    Раньше резалось ровно на `text[:1024]`, то есть посреди слова: подпись
+    обрывалась на «...осн», а хвост начинался с «овные причины». Промпты
+    просят укладываться в ~900 символов, так что разрыв — редкий случай, но
+    когда он случается, выглядеть он должен как абзац, а не как обрыв связи.
+    """
+    if len(text) <= limit:
+        return text, ""
+
+    window_start = max(0, limit - _SPLIT_LOOKBACK)
+    window = text[window_start:limit]
+    for separator in ("\n\n", "\n", ". ", "! ", "? ", " "):
+        idx = window.rfind(separator)
+        if idx != -1:
+            cut = window_start + idx + len(separator)
+            head, tail = text[:cut].rstrip(), text[cut:].lstrip()
+            if head and tail:
+                return head, tail
+    return text[:limit], text[limit:]
 
 
 def _active_target_chat_ids() -> list[int]:
@@ -127,17 +155,16 @@ async def _send_one(
         return msg.message_id
 
     if media_path:
-        caption = text[:_MAX_CAPTION] if text else None
+        caption, tail = split_for_caption(text) if text else ("", "")
         # Файл читаем в потоке, чтобы не блокировать event loop.
         photo_bytes = await asyncio.to_thread(Path(media_path).read_bytes)
         msg = await bot.send_photo(
-            chat_id=chat_id, photo=photo_bytes, caption=caption, reply_markup=reply_markup,
+            chat_id=chat_id, photo=photo_bytes, caption=caption or None,
+            reply_markup=reply_markup,
         )
-        # Если текст длиннее подписи — досылаем хвост отдельным сообщением.
-        if text and len(text) > _MAX_CAPTION:
-            await bot.send_message(
-                chat_id=chat_id, text=text[_MAX_CAPTION:_MAX_CAPTION + _MAX_TEXT]
-            )
+        # Если текст не влез в подпись — досылаем хвост отдельным сообщением.
+        if tail:
+            await bot.send_message(chat_id=chat_id, text=tail[:_MAX_TEXT])
         return msg.message_id
 
     msg = await bot.send_message(chat_id=chat_id, text=text[:_MAX_TEXT], reply_markup=reply_markup)
