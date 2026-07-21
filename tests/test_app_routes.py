@@ -180,6 +180,73 @@ def test_settings_save_invalid_number_returns_clean_400():
     assert "error" in r.text.lower() or "Некорректн" in r.text
 
 
+def test_settings_page_renders_field_hints():
+    """Регрессия: подсказки к полям настроек существовали в каталоге i18n, но
+    контекст шаблона их вообще не передавал — ни одна не отображалась."""
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "Насколько свободно модель формулирует" in r.text  # rewrite_temperature.hint
+    assert "уходит в модель" in r.text  # link_content_max_chars.hint
+
+
+def test_settings_page_shows_no_unresolved_hint_placeholders():
+    """Поля без подсказки должны давать ПУСТО, а не "[settings.field.x.hint]"
+    — ради этого контекст использует i18n.opt(), а не i18n.t()."""
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/settings")
+    assert ".hint]" not in r.text
+
+
+def test_long_text_settings_render_collapsed_not_as_wall_of_textareas():
+    """В группе «Рерайт» шесть длинных промптов подряд — развёрнутыми они
+    превращают страницу в стену моноширинного текста."""
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/settings")
+    assert 'class="text-field"' in r.text
+    # <details> без атрибута open = свёрнут; контролы внутри всё равно
+    # участвуют в submit формы (см. test_rewrite_prompts_save_round_trip).
+    assert "<details class=\"text-field\" open" not in r.text
+
+
+def test_rewrite_prompts_save_round_trip_through_collapsed_field():
+    """Главный функциональный риск свёрнутого <details>: значение должно
+    доезжать до сервера и применяться движком."""
+    from tg_repost.rewriter.client import resolve_rewrite_template
+
+    client = _client()
+    _bootstrap(client)
+    r = client.get("/settings")
+    assert r.status_code == 200
+
+    custom = "Свой промпт новостей: {post_text} / {link_content}"
+    r = client.post(
+        "/settings/rewrite",
+        data={
+            "openai_base_url": "https://api.openai.com/v1",
+            "openai_model": "gpt-4o-mini",
+            "rewrite_temperature": "0.8",
+            "rewrite_variant_count": "1",
+            "fetch_link_content_enabled": "on",
+            "link_content_max_chars": "6000",
+            "link_fetch_timeout_seconds": "10",
+            "rewrite_humanize_enabled": "on",
+            "rewrite_humanize_instructions": "не как бот",
+            "rewrite_prompt_template": "база {post_text} {link_content}",
+            "rewrite_prompt_news": custom,
+            "rewrite_prompt_opinion": "мнение {post_text} {link_content}",
+            "rewrite_prompt_instruction": "инструкция {post_text} {link_content}",
+            "rewrite_prompt_humor": "юмор {post_text} {link_content}",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303, r.text[:500]
+    assert resolve_rewrite_template("news") == custom
+
+
 def _covers_form(**overrides: str) -> dict:
     base = {
         "enable_auto_cover": "on",
@@ -465,6 +532,23 @@ def test_source_detail_shows_targets_as_checkboxes():
     assert 'type="checkbox"' in r.text
     assert "Канал А" in r.text and "Канал Б" in r.text
     assert 'value="-1001111"' in r.text
+
+
+def test_source_style_dropdown_distinguishes_inherit_from_explicit_default():
+    """Регрессия: в списке стилей было ДВА визуально одинаковых пункта
+    «default» с разным поведением — пустое значение тянет ГЛОБАЛЬНЫЙ профиль
+    (а он может быть каким угодно), явный «default» всегда базовый."""
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@style_src")
+
+    r = client.get(f"/sources/{src.id}")
+    assert r.status_code == 200
+    assert "по глобальной настройке" in r.text
+    # Ссылка «где править промпт этого стиля» — иначе выбор стиля повисает
+    # без связи с местом, где его текст вообще настраивается.
+    assert "/settings#rewrite" in r.text
 
 
 def test_source_update_checkboxes_map_to_target_chat_ids():

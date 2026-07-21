@@ -59,6 +59,9 @@ def _settings_groups_context() -> list[dict]:
                 {
                     "name": f.name,
                     "label": i18n.t(f"guardian.settings.field.{f.name}.label"),
+                    # i18n.opt — см. тот же приём в app.py::_settings_groups_context:
+                    # подсказка необязательна, t() дал бы "[...hint]" у полей без неё.
+                    "hint": i18n.opt(f"guardian.settings.field.{f.name}.hint"),
                     "value_type": f.value_type,
                     "choices": f.choices,
                     "value": settings_store.effective_value(f),

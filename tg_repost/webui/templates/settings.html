@@ -35,12 +35,21 @@
         {% elif field.value_type == "csv_list" %}
           <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value|join(', ') }}">
         {% elif field.value_type == "text" %}
-          <textarea id="{{ field.name }}" name="{{ field.name }}" rows="14" style="flex-basis: 100%; font-family: monospace; font-size: 12px;">{{ field.value }}</textarea>
+          {# Промпты по 14 строк каждый: в группе «Рерайт» их шесть подряд,
+             развёрнутыми они превращают страницу в стену моноширинного
+             текста, сквозь которую не видно обычных полей. Свёрнутый
+             <details> всё так же отправляется вместе с формой — контролы
+             внутри закрытого details участвуют в submit. #}
+          <details class="text-field">
+            <summary>{{ t('settings.expand_text_field') }}</summary>
+            <textarea id="{{ field.name }}" name="{{ field.name }}" rows="14">{{ field.value }}</textarea>
+          </details>
         {% elif field.value_type in ("int", "float") %}
           <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% else %}
           <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% endif %}
+        {% if field.hint %}<div class="hint">{{ field.hint }}</div>{% endif %}
       </div>
       {% endfor %}
       <button type="submit">{{ t('common.save_group') }}</button>

@@ -152,6 +152,11 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
                 {
                     "name": f.name,
                     "label": i18n.t(f"settings.field.{f.name}.label"),
+                    # i18n.opt, а не i18n.t: подсказка есть далеко не у
+                    # каждого поля (у части название говорит само за себя), а
+                    # t() вывалил бы в интерфейс "[settings.field.x.hint]" для
+                    # всех остальных. Шаблон рендерит блок только при непустой.
+                    "hint": i18n.opt(f"settings.field.{f.name}.hint"),
                     "value_type": f.value_type,
                     "needs_resync": f.needs_resync,
                     "choices": f.choices,

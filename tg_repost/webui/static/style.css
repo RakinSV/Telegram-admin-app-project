@@ -123,6 +123,26 @@ th { color: var(--muted); font-weight: 500; }
 .field-row input[type=password], .field-row select { flex: 1 1 200px; }
 .field-row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
 
+/* Свёрнутый редактор длинного текста (промпты рерайта и обложек). В группе
+   «Рерайт» таких полей шесть подряд — развёрнутыми они превращали страницу
+   в стену моноширинного текста, сквозь которую не видно обычных полей.
+   Контролы внутри закрытого <details> всё так же участвуют в submit. */
+.text-field { flex: 1 1 200px; }
+.text-field > summary {
+  cursor: pointer; font-size: 12px; color: var(--muted);
+  padding: 5px 8px; border: 1px dashed var(--border); border-radius: 6px;
+  list-style: none; user-select: none;
+  transition: border-color 140ms var(--ease-out), color 140ms var(--ease-out);
+}
+.text-field > summary::-webkit-details-marker { display: none; }
+.text-field > summary::before { content: "▸ "; }
+.text-field[open] > summary::before { content: "▾ "; }
+.text-field > summary:hover { border-color: var(--accent); color: var(--text); }
+.text-field > textarea {
+  margin-top: 6px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px; line-height: 1.5;
+}
+
 /* Список выбора целей публикации (source_detail) и подобные. */
 .check-list {
   border: 1px solid var(--border); border-radius: 6px; max-height: 260px;

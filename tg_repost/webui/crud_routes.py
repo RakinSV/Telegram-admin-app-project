@@ -194,6 +194,11 @@ def build_crud_router() -> APIRouter:
         return {
             "source": source,
             "known_styles": KNOWN_STYLES,
+            # Для подписи пункта «наследовать» в списке стилей: пустое значение
+            # у источника тянет ИМЕННО этот глобальный профиль, а он не
+            # обязательно "default" — раньше пункт подписывался жёстко словом
+            # "default" и был неотличим от явного профиля default.
+            "default_style_profile": get_settings().default_style_profile,
             "targets": targets,
             "selected_chat_ids": selected,
             "orphan_ids": orphan_ids,

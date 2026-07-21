@@ -21,8 +21,25 @@ logger = get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-# Известные стиль-профили рерайта (F15). default — нейтральный.
-KNOWN_STYLES = ("default", "news", "opinion", "instruction", "humor")
+# Имя настройки с текстом промпта для каждого стиль-профиля (F15). Раньше поле
+# было только у "default", а остальные стили читались прямо из файлов —
+# источник со `style_profile="news"` молча игнорировал промпт, отредактированный
+# в админке. Теперь редактируются все; файл `prompts/<стиль>.txt` остаётся
+# запасным вариантом, если поле очистили пустым.
+#
+# Порядок ключей = порядок в выпадающем списке стилей на /sources/{id}.
+_STYLE_SETTING_FIELDS = {
+    "default": "rewrite_prompt_template",
+    "news": "rewrite_prompt_news",
+    "opinion": "rewrite_prompt_opinion",
+    "instruction": "rewrite_prompt_instruction",
+    "humor": "rewrite_prompt_humor",
+}
+
+# Известные стиль-профили рерайта (F15). default — нейтральный. Выводится из
+# карты выше, а не отдельным литералом: иначе стиль, добавленный только в один
+# из двух списков, снова появился бы в UI с нередактируемым промптом.
+KNOWN_STYLES = tuple(_STYLE_SETTING_FIELDS)
 
 
 @dataclass
@@ -61,20 +78,6 @@ def resolve_style_prompt(style: str | None) -> str:
         if candidate and prompt_exists(candidate):
             return candidate
     return "default"
-
-
-# Имя настройки с текстом промпта для каждого стиля (F15). Раньше поле было
-# только у "default", а остальные стили читались прямо из файлов — источник
-# со `style_profile="news"` молча игнорировал промпт, отредактированный в
-# админке. Теперь редактируются все пять; файл `prompts/<стиль>.txt` остаётся
-# запасным вариантом, если поле очистили пустым.
-_STYLE_SETTING_FIELDS = {
-    "default": "rewrite_prompt_template",
-    "news": "rewrite_prompt_news",
-    "opinion": "rewrite_prompt_opinion",
-    "instruction": "rewrite_prompt_instruction",
-    "humor": "rewrite_prompt_humor",
-}
 
 
 def resolve_rewrite_template(prompt_name: str) -> str:

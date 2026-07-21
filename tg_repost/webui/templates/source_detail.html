@@ -25,11 +25,18 @@
     <div class="field-row">
       <label for="style_profile">{{ t('source_detail.style_label') }}</label>
       <select id="style_profile" name="style_profile">
-        <option value="" {{ 'selected' if not source.style_profile else '' }}>default</option>
+        {# Пустое значение = наследовать ГЛОБАЛЬНЫЙ профиль (он может быть
+           каким угодно, не обязательно "default"), поэтому подписывается не
+           просто "default": раньше в списке было два визуально одинаковых
+           пункта "default" с разным поведением. #}
+        <option value="" {{ 'selected' if not source.style_profile else '' }}>
+          {{ t('source_detail.style_inherit', profile=default_style_profile) }}
+        </option>
         {% for st in known_styles %}
         <option value="{{ st }}" {{ 'selected' if source.style_profile == st else '' }}>{{ st }}</option>
         {% endfor %}
       </select>
+      <div class="hint">{{ t('source_detail.style_hint') | safe }}</div>
     </div>
     <div class="field-row">
       <label for="enrich_mode">{{ t('source_detail.enrich_label') }}</label>

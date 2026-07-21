@@ -98,6 +98,23 @@ def test_t_applies_format_kwargs():
     )
 
 
+def test_opt_returns_empty_string_for_missing_key():
+    """`opt()` — для НЕОБЯЗАТЕЛЬНЫХ строк (подсказки к полям настроек): их
+    около сотни, подсказка осмысленна далеко не у каждого поля, и `t()`
+    вывалил бы в интерфейс "[settings.field.x.hint]" для всех остальных."""
+    assert i18n.opt("нет.такого.ключа.вообще") == ""
+
+
+def test_opt_returns_translation_when_key_exists():
+    i18n.set_current_lang("ru")
+    assert i18n.opt("settings.field.rewrite_temperature.hint").startswith("Насколько")
+
+
+def test_opt_does_not_crash_on_format_kwargs_for_missing_key():
+    # Пустая строка не должна пытаться .format() и падать на KeyError.
+    assert i18n.opt("нет.такого.ключа", limit=5) == ""
+
+
 def test_humanize_action_known_and_unknown():
     i18n.set_current_lang("ru")
     assert i18n.humanize_action("source_add") == "Добавлен источник"

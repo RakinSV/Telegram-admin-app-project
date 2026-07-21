@@ -29,11 +29,19 @@
           </select>
         {% elif field.value_type == "bool" %}
           <input type="checkbox" id="guardian-{{ field.name }}" name="{{ field.name }}" {{ "checked" if field.value else "" }}>
+        {% elif field.value_type == "text" %}
+          {# Тот же свёрнутый редактор, что в settings.html — контролы внутри
+             закрытого <details> всё так же участвуют в submit формы. #}
+          <details class="text-field">
+            <summary>{{ t('settings.expand_text_field') }}</summary>
+            <textarea id="guardian-{{ field.name }}" name="{{ field.name }}" rows="14">{{ field.value }}</textarea>
+          </details>
         {% elif field.value_type in ("int", "float") %}
           <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="guardian-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% else %}
           <input type="text" id="guardian-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% endif %}
+        {% if field.hint %}<div class="hint">{{ field.hint }}</div>{% endif %}
       </div>
       {% endfor %}
       <button type="submit">{{ t('common.save_group') }}</button>

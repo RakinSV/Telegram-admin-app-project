@@ -74,6 +74,26 @@ def t(key: str, **kwargs: object) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
+def opt(key: str, **kwargs: object) -> str:
+    """Как `t()`, но для НЕОБЯЗАТЕЛЬНЫХ строк: отсутствующий ключ даёт пустую
+    строку, а не `[ключ]`.
+
+    Нужно для подсказок к полям настроек: их около сотни, подсказка осмысленна
+    далеко не у каждого поля (у `stats_window_days` название говорит само за
+    себя), а `t()` вывалил бы в интерфейс `[settings.field.x.hint]` для всех
+    полей без подсказки. Шаблон рендерит блок подсказки только при непустом
+    результате.
+
+    Для ОБЯЗАТЕЛЬНЫХ строк по-прежнему `t()` — там молчаливое исчезновение
+    текста как раз то, чего мы избегаем.
+    """
+    entry = STRINGS.get(key)
+    if entry is None:
+        return ""
+    text = entry.get(get_current_lang(), entry.get(DEFAULT_LANG, ""))
+    return text.format(**kwargs) if (text and kwargs) else text
+
+
 # ---------------------------------------------------------------------------
 # Каталог строк. Организован по разделам приложения, не по языку — так легко
 # видеть RU/EN пару рядом и не разойтись в смысле при правке одного языка.
@@ -343,6 +363,20 @@ STRINGS: dict[str, dict[str, str]] = {
     },
 
     "source_detail.style_label": {"ru": "Стиль рерайта", "en": "Rewrite style"},
+    # Пункт «наследовать» назывался ровно так же, как явный профиль default —
+    # в списке было два визуально одинаковых «default» с разным поведением
+    # (пустое значение тянет ГЛОБАЛЬНЫЙ профиль, который может быть каким
+    # угодно; явный «default» всегда базовый). Теперь разница видна.
+    "source_detail.style_inherit": {
+        "ru": "по глобальной настройке ({profile})",
+        "en": "use global setting ({profile})",
+    },
+    "source_detail.style_hint": {
+        "ru": "Текст промпта для каждого стиля правится в "
+              "<a href=\"/settings#rewrite\">Настройках → Рерайт</a>.",
+        "en": "The prompt text for each style is edited in "
+              "<a href=\"/settings#rewrite\">Settings → Rewrite</a>.",
+    },
     "source_detail.enrich_label": {"ru": "Добор источников", "en": "Source enrichment"},
     "source_detail.enrich_default": {"ru": "по глобальной настройке", "en": "use global setting"},
     "source_detail.enrich_on": {"ru": "включён", "en": "on"},
@@ -813,6 +847,9 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.telethon_login_cta": {"ru": "Войти через Telegram →", "en": "Sign in with Telegram →"},
     "settings.jump_to": {"ru": "Перейти к разделу", "en": "Jump to section"},
+    "settings.expand_text_field": {
+        "ru": "Показать и отредактировать текст", "en": "Show and edit text",
+    },
     "settings.error_invalid_number": {
         "ru": "Некорректное значение в группе «{group}» — числовое поле должно содержать число.",
         "en": "Invalid value in group “{group}” — a numeric field must contain a number.",
