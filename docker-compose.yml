@@ -44,6 +44,33 @@ services:
       - ./data/logs:/app/logs
       - ./data/media:/app/media
 
+  searxng:
+    # Свой метапоисковик для добора источников (F16, SEARCH_PROVIDER=searxng).
+    # Зачем свой, а не внешний API: бесплатен без оговорок — ни ключа, ни
+    # аккаунта, ни квоты, — и позволяет выбрать, какие движки опрашивать
+    # (SEARXNG_ENGINES), что решает случай «часть выдачи недоступна из сети
+    # сервера». У Brave бесплатный тир закрыт для новых регистраций с февраля
+    # 2026, поэтому дефолтный провайдер теперь этот.
+    #
+    # Порт НАРУЖУ не публикуется намеренно: ходит к нему только tg_repost по
+    # внутренней compose-сети (http://searxng:8080). Открытый в интернет
+    # SearXNG быстро становится чужим открытым прокси.
+    image: docker.io/searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      # Должен совпадать с адресом, по которому его зовёт tg_repost.
+      SEARXNG_BASE_URL: "http://searxng:8080/"
+    volumes:
+      # settings.yml генерируется при первом старте. ОБЯЗАТЕЛЬНО добавить в
+      # него формат json, иначе API отвечает 403 (по умолчанию активен только
+      # html):
+      #   search:
+      #     formats:
+      #       - html
+      #       - json
+      # После правки: docker compose restart searxng
+      - ./data/searxng:/etc/searxng
+
   guardian:
     # Отдельный бот от tg_repost (модерация группы, не публикация контента —
     # см. guardian/GUARDIAN.md), тот же образ, свой entrypoint/команда и своя

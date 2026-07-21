@@ -227,6 +227,13 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "enrichment", "Добор источников — F16",
         (
             SettingField("enable_source_enrichment", "Включён глобально", "bool"),
+            SettingField(
+                "search_provider", "Поисковик", "str",
+                choices=("searxng", "brave", "ddgs"),
+            ),
+            SettingField("searxng_base_url", "SearXNG: адрес", "str"),
+            SettingField("searxng_engines", "SearXNG: движки", "str"),
+            SettingField("searxng_language", "SearXNG: язык выдачи", "str"),
             SettingField("brave_search_url", "Brave Search URL", "str"),
             SettingField("enrichment_max_results", "Макс. результатов поиска", "int"),
             SettingField("enrichment_max_sources", "Макс. источников в посте", "int"),
@@ -234,9 +241,13 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "version_comparison_enabled", "Сравнение версий источников — F24", "bool",
             ),
         ),
-        "Ищет через Brave Search доп. ссылки по теме поста, добавляет блок "
-        "«📚 Источники» — рост доверия к посту. Нужен ключ Brave Search API "
-        "ниже, иначе блок просто не добавляется.",
+        "Ищет доп. ссылки по теме поста и добавляет блок «📚 Источники» — рост "
+        "доверия к посту. Поисковик выбирается ниже: searxng — свой сервис в "
+        "Docker, бесплатен без оговорок (ни ключа, ни аккаунта, ни квоты) и "
+        "позволяет выбрать движки, что важно, если часть выдачи недоступна из "
+        "сети сервера; brave — внешний API, бесплатный тир закрыт для новых "
+        "регистраций с февраля 2026; ddgs — DuckDuckGo без ключа, но "
+        "неофициально и с троттлингом.",
         secret_keys=("brave_api_key",),
     ),
     SettingsGroup(

@@ -17,7 +17,7 @@ import re
 
 from tg_repost.config import get_settings
 from tg_repost.db.models import Source
-from tg_repost.enrichment.search import BraveSearchClient, SearchResult
+from tg_repost.enrichment.search import SearchResult, get_search_client
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, load_prompt
 
@@ -130,8 +130,10 @@ def enrichment_enabled_for(source: Source | None) -> bool:
 async def enrich_post(rewriter: RewriterClient, original_text: str) -> str:
     """Вернуть блок «Источники:» для поста или пустую строку при неудаче."""
     settings = get_settings()
-    brave = BraveSearchClient()
-    if not brave.configured:
+    # Провайдер выбирается настройкой `search_provider` (searxng | brave |
+    # ddgs) — см. enrichment/search.py::get_search_client.
+    search = get_search_client()
+    if not search.configured:
         return ""
 
     try:
@@ -144,7 +146,7 @@ async def enrich_post(rewriter: RewriterClient, original_text: str) -> str:
             return ""
 
         # 2. Поиск.
-        results = await brave.search(query, count=settings.enrichment_max_results)
+        results = await search.search(query, count=settings.enrichment_max_results)
         if not results:
             return ""
 

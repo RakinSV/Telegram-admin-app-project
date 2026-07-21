@@ -330,8 +330,28 @@ class Settings(BaseSettings):
     # Профиль по умолчанию, если у источника не задан свой (имя файла промпта).
     default_style_profile: str = Field("default", alias="DEFAULT_STYLE_PROFILE")
 
-    # --- F16: поиск дополнительных источников (Brave Search) ---
+    # --- F16: поиск дополнительных источников ---
     enable_source_enrichment: bool = Field(False, alias="ENABLE_SOURCE_ENRICHMENT")
+    # Какой поисковик опрашивать (см. enrichment/search.py::get_search_client).
+    # Дефолт searxng: единственный вариант, бесплатный без оговорок — свой
+    # сервис, ни ключа, ни аккаунта, ни квоты. У Brave бесплатный тир закрыт
+    # для новых регистраций с февраля 2026.
+    search_provider: str = Field("searxng", alias="SEARCH_PROVIDER")
+
+    # SearXNG — свой метапоисковик (docker-compose поднимает сервис `searxng`).
+    # Внутри compose-сети адрес именно такой; при запуске без Docker поменяй
+    # на http://127.0.0.1:8080.
+    searxng_base_url: str = Field("http://searxng:8080", alias="SEARXNG_BASE_URL")
+    # Через запятую, без пробелов: какие движки опрашивать (google,bing,duckduckgo,
+    # yandex,brave...). Пусто = движки по умолчанию из settings.yml самого
+    # SearXNG. Полезно, когда часть выдачи недоступна из сети сервера —
+    # отключаешь молчащие движки и не ждёшь их таймаутов на каждом запросе.
+    searxng_engines: str = Field("", alias="SEARXNG_ENGINES")
+    # Язык выдачи: ru, en, all. Пусто = как настроено в самом SearXNG.
+    searxng_language: str = Field("", alias="SEARXNG_LANGUAGE")
+
+    # Brave Search API. Бесплатный тир закрыт для новых регистраций в феврале
+    # 2026 — ключ работает только у тех, кто подписался раньше.
     brave_api_key: str = Field("", alias="BRAVE_API_KEY")
     brave_search_url: str = Field(
         "https://api.search.brave.com/res/v1/web/search", alias="BRAVE_SEARCH_URL"

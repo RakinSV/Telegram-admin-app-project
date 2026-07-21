@@ -1397,6 +1397,50 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.max_auto_deletes_per_hour.label": {"ru": "Потолок авто-удалений в час", "en": "Auto-delete cap/hour"},
     "settings.field.default_style_profile.label": {"ru": "Профиль по умолчанию", "en": "Default profile"},
     "settings.field.enable_source_enrichment.label": {"ru": "Включён глобально", "en": "Enabled globally"},
+    "settings.field.search_provider.label": {"ru": "Поисковик", "en": "Search provider"},
+    "settings.field.search_provider.hint": {
+        "ru": "searxng — свой сервис в Docker: бесплатен без оговорок (ни ключа, "
+              "ни аккаунта, ни квоты) и позволяет выбрать движки. brave — "
+              "внешний API, бесплатный тир закрыт для новых регистраций с "
+              "февраля 2026, ключ работает только у подписавшихся раньше. "
+              "ddgs — DuckDuckGo без ключа, но библиотека неофициальная и "
+              "ловит троттлинг; нужен отдельный pip install ddgs.",
+        "en": "searxng — your own service in Docker: free with no strings (no "
+              "key, no account, no quota) and lets you pick the engines. "
+              "brave — external API; its free tier closed to new signups in "
+              "February 2026, keys still work only for earlier subscribers. "
+              "ddgs — DuckDuckGo without a key, but the library is unofficial "
+              "and gets throttled; needs a separate pip install ddgs.",
+    },
+    "settings.field.searxng_base_url.label": {"ru": "SearXNG: адрес", "en": "SearXNG: base URL"},
+    "settings.field.searxng_base_url.hint": {
+        "ru": "Внутри docker-compose — http://searxng:8080 (имя сервиса). Без "
+              "Docker — http://127.0.0.1:8080. В settings.yml самого SearXNG "
+              "должен быть включён формат json, иначе на запрос придёт 403: "
+              "по умолчанию активен только html.",
+        "en": "Inside docker-compose it is http://searxng:8080 (the service "
+              "name). Without Docker: http://127.0.0.1:8080. SearXNG's own "
+              "settings.yml must enable the json format or requests get a 403 "
+              "— only html is active by default.",
+    },
+    "settings.field.searxng_engines.label": {"ru": "SearXNG: движки", "en": "SearXNG: engines"},
+    "settings.field.searxng_engines.hint": {
+        "ru": "Через запятую без пробелов: google,bing,duckduckgo,yandex. "
+              "Пусто — движки по умолчанию из settings.yml. Смысл ограничивать: "
+              "если часть выдачи недоступна из сети сервера, молчащие движки "
+              "съедают таймаут на каждом запросе.",
+        "en": "Comma-separated, no spaces: google,bing,duckduckgo,yandex. Empty "
+              "means the defaults from settings.yml. Worth narrowing: if some "
+              "engines are unreachable from the server's network, they burn a "
+              "timeout on every query.",
+    },
+    "settings.field.searxng_language.label": {
+        "ru": "SearXNG: язык выдачи", "en": "SearXNG: results language",
+    },
+    "settings.field.searxng_language.hint": {
+        "ru": "ru, en или all. Пусто — как настроено в самом SearXNG.",
+        "en": "ru, en or all. Empty means whatever SearXNG itself is set to.",
+    },
     "settings.field.brave_search_url.label": {"ru": "Brave Search URL", "en": "Brave Search URL"},
     "settings.field.enrichment_max_results.label": {"ru": "Макс. результатов поиска", "en": "Max search results"},
     "settings.field.enrichment_max_sources.label": {"ru": "Макс. источников в посте", "en": "Max sources per post"},
