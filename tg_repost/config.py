@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, field_validator
@@ -20,6 +21,28 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from tg_repost.logging_conf import get_logger
 
 logger = get_logger(__name__)
+
+_PROMPTS_DIR = Path(__file__).parent / "rewriter" / "prompts"
+
+
+def _prompt_file_default(name: str) -> str:
+    """Стартовое значение промпт-настройки — из файла `rewriter/prompts/`.
+
+    Файлы остаются источником истины для ДЕФОЛТОВ (их удобно править в git и
+    видеть в diff), а поле настройки даёт админке возможность переопределить
+    промпт без передеплоя. Читается напрямую, а не через
+    `rewriter.client.load_prompt()`: тот импортирует config.py, вышел бы
+    циклический импорт.
+
+    Отсутствие файла не должно ронять весь процесс на старте (`Settings()`
+    конструируется раньше всего остального) — пустой дефолт означает, что
+    `resolve_rewrite_template()` откатится на `default`.
+    """
+    try:
+        return (_PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Не прочитан файл промпта %s.txt: %s", name, exc)
+        return ""
 
 # Дефолт для `rewrite_prompt_template` ниже — редактируется пользователем
 # прямо в /settings (textarea), это ТОЛЬКО стартовое значение. `{post_text}` —
@@ -61,18 +84,75 @@ _DEFAULT_REWRITE_PROMPT = """Ты — редактор Telegram-канала. С
 ---
 """
 
+# Анти-ИИ блок (F15-доп.) — приклеивается к ЛЮБОМУ промпту рерайта, когда
+# включён `rewrite_humanize_enabled`. Отдельно от самих стиль-промптов
+# намеренно: правило "не звучи как нейросеть" одинаково для новости, мнения
+# и юмора, дублировать его в пяти шаблонах — гарантированно разъехавшиеся
+# копии. Список ниже — не абстрактное "пиши живее", а конкретные маркеры
+# LLM-текста, которые и делают рерайт узнаваемо машинным.
+_DEFAULT_HUMANIZE_INSTRUCTIONS = """Отдельно и обязательно — текст не должен читаться как написанный нейросетью:
+
+- Разная длина предложений. Короткое рядом с длинным. Не выстраивай их в
+  ровный ряд одинаковых по ритму фраз — это первый и главный признак ИИ.
+- Убери конструкции «не просто X, а Y», «это не только X, но и Y»,
+  «в мире, где...», «давайте разберёмся», «важно понимать, что».
+- Никаких дежурных связок: «стоит отметить», «следует подчеркнуть»,
+  «в заключение», «подводя итог», «таким образом», «более того».
+- Не выстраивай всё тройками («быстро, дёшево и надёжно») — это шаблон.
+- Не начинай каждый абзац с эмодзи и не делай идеально параллельные
+  буллеты одинаковой длины. Живой текст неровный.
+- Не разжёвывай очевидное и не подстраховывайся оговорками на каждом шагу.
+- Пиши конкретно: числа, названия, детали вместо общих формулировок.
+- Не пиши вывод-мораль в конце, если её не было в исходном материале."""
+
 # Дефолт для `cover_image_prompt_template` (F18-доп., стратегия "openai") —
 # промпт для самого генератора картинок (не для LLM, выбирающего короткий
-# search-запрос, как в cover_prompt.txt для unsplash/comfyui). `{post_text}` —
-# исходный пост, редактируется в /settings (textarea).
-_DEFAULT_COVER_IMAGE_PROMPT = """Photorealistic cover image for a Telegram news post, no text or watermarks \
-in the image, 16:9-friendly composition.
+# search-запрос, как в cover_search_prompt_template для unsplash/comfyui).
+# `{post_text}` — исходный пост, редактируется в /settings (textarea).
+#
+# "no text" повторено несколько раз и в начале, и в конце намеренно: модели
+# генерации изображений систематически дорисовывают надписи/подписи/логотипы
+# на "новостных" картинках, одного упоминания в середине промпта не хватает.
+# Сцена просится АССОЦИАТИВНАЯ, а не буквальная иллюстрация заголовка —
+# буквальная почти всегда вырождается в коллаж с псевдотекстом.
+_DEFAULT_COVER_IMAGE_PROMPT = """Create a photorealistic cover image. ABSOLUTELY NO TEXT, no letters, no words, \
+no numbers, no captions, no watermarks, no logos, no signage, no UI elements \
+anywhere in the image.
 
-Post topic:
+Do not illustrate the headline literally. Instead show a single clean, \
+evocative real-world scene that is associated with the topic below — an \
+object, a place, a situation or a material detail that a photo editor would \
+pick to sit above this story.
+
+Style: editorial photography, natural light, shallow depth of field, \
+uncluttered composition with clear negative space, 16:9-friendly framing.
+
+Topic (for association only, never render its words in the image):
 ---
 {post_text}
 ---
-"""
+
+Remember: the image must contain no readable text of any kind."""
+
+# Дефолт для `cover_search_prompt_template` (F18) — это промпт для ТЕКСТОВОЙ
+# модели, которая выдаёт короткий запрос для Unsplash/ComfyUI. Раньше лежал
+# только в `rewriter/prompts/cover_prompt.txt` и не редактировался из
+# админки, хотя от него напрямую зависит, что за картинка приедет.
+_DEFAULT_COVER_SEARCH_PROMPT = """Подбери короткий запрос (3-8 слов, на английском) для поиска или генерации \
+фотографии-обложки к посту ниже.
+
+Правила:
+- Опиши КОНКРЕТНУЮ визуальную сцену или объект, ассоциирующийся с темой,
+  а не пересказывай заголовок (не "new tax law", а "empty office desk documents").
+- Никаких слов, намекающих на текст в кадре: без "sign", "poster", "banner",
+  "headline", "screen with text", "infographic", "chart".
+- Без имён людей, брендов и логотипов.
+- Верни только сам запрос одной строкой, без кавычек и пояснений.
+
+Пост:
+---
+{post_text}
+---"""
 
 
 class Settings(BaseSettings):
@@ -130,11 +210,40 @@ class Settings(BaseSettings):
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
-    # Промпт стиля "default" — редактируется прямо в /settings, а не в файле
-    # rewriter/prompts/default.txt (тот файл остаётся fallback-ом на случай,
-    # если это поле очистили пустым — см. RewriterClient.rewrite()). Другие
-    # стиль-профили (news/opinion/...) остаются файловыми, см. F15.
+    # Промпты рерайта — ВСЕ пять стилей (F15) редактируются прямо в /settings.
+    # Раньше поле было только у "default", а news/opinion/instruction/humor
+    # читались напрямую из файлов: источник со `style_profile="news"` молча
+    # игнорировал промпт, отредактированный владельцем в админке, и работал
+    # по жёстко зашитому тексту — из админки это было никак не видно.
+    # Пустое поле = откат на одноимённый файл `rewriter/prompts/*.txt`
+    # (см. `rewriter/client.py::resolve_rewrite_template`).
     rewrite_prompt_template: str = Field(_DEFAULT_REWRITE_PROMPT, alias="REWRITE_PROMPT_TEMPLATE")
+    rewrite_prompt_news: str = Field(
+        default_factory=lambda: _prompt_file_default("news"), alias="REWRITE_PROMPT_NEWS",
+    )
+    rewrite_prompt_opinion: str = Field(
+        default_factory=lambda: _prompt_file_default("opinion"), alias="REWRITE_PROMPT_OPINION",
+    )
+    rewrite_prompt_instruction: str = Field(
+        default_factory=lambda: _prompt_file_default("instruction"),
+        alias="REWRITE_PROMPT_INSTRUCTION",
+    )
+    rewrite_prompt_humor: str = Field(
+        default_factory=lambda: _prompt_file_default("humor"), alias="REWRITE_PROMPT_HUMOR",
+    )
+
+    # Анти-ИИ блок: приклеивается к ЛЮБОМУ стиль-промпту (см.
+    # `rewriter/client.py::build_rewrite_prompt`). Отдельным полем, а не
+    # правкой каждого из пяти шаблонов — правило одно на всех.
+    rewrite_humanize_enabled: bool = Field(True, alias="REWRITE_HUMANIZE_ENABLED")
+    rewrite_humanize_instructions: str = Field(
+        _DEFAULT_HUMANIZE_INSTRUCTIONS, alias="REWRITE_HUMANIZE_INSTRUCTIONS",
+    )
+    # Температура LLM при рерайте. Раньше была зашита как 0.8 прямо в вызове —
+    # единственный параметр качества рерайта, недоступный владельцу. Ниже 0.7
+    # текст заметно «сушится» и становится шаблоннее, выше 1.0 растёт риск
+    # искажения фактов, поэтому диапазон ограничен в settings_store.
+    rewrite_temperature: float = Field(0.8, alias="REWRITE_TEMPERATURE")
 
     # --- F16-доп.: переход по ссылке из поста для «настоящего» рерайта ---
     # Пост часто содержит только короткий тизер + ссылку на полную статью —
@@ -254,6 +363,17 @@ class Settings(BaseSettings):
     cover_image_prompt_template: str = Field(
         _DEFAULT_COVER_IMAGE_PROMPT, alias="COVER_IMAGE_PROMPT_TEMPLATE"
     )
+    # Размер картинки у стратегии "openai". Раньше был зашит как 1024x1024 —
+    # квадрат, хотя обложка поста в Telegram показывается широкой: квадрат
+    # обрезается по краям, и как раз композиционно важное уезжает из кадра.
+    cover_openai_image_size: str = Field("1792x1024", alias="COVER_OPENAI_IMAGE_SIZE")
+    # Промпт для ТЕКСТОВОЙ модели, подбирающей короткий запрос к Unsplash/
+    # ComfyUI. Раньше лежал только в файле cover_prompt.txt и не редактировался
+    # из админки, хотя именно он определяет, что за картинка приедет.
+    # Пусто = откат на файл `rewriter/prompts/cover_prompt.txt`.
+    cover_search_prompt_template: str = Field(
+        _DEFAULT_COVER_SEARCH_PROMPT, alias="COVER_SEARCH_PROMPT_TEMPLATE"
+    )
     # F18-доп.: N вариантов обложки на пост (отдельно от rewrite_variant_count
     # выше — можно, например, хотеть 3 текста и 1 обложку). Каждый вариант —
     # отдельный вызов генератора (см. scheduler/jobs.py). 1 = старое поведение.
@@ -268,6 +388,17 @@ class Settings(BaseSettings):
     comfyui_workflow_path: str = Field("", alias="COMFYUI_WORKFLOW_PATH")
     # ID узла (ключ в JSON workflow) CLIPTextEncode, куда подставляется промпт.
     comfyui_positive_node_id: str = Field("", alias="COMFYUI_POSITIVE_NODE_ID")
+    # ID узла негативного CLIPTextEncode. Пусто — негатив из workflow не
+    # трогается. Заполнить важно именно для обложек: без явного запрета
+    # модели упорно дорисовывают на «новостных» картинках надписи, подписи и
+    # псевдологотипы, а одного «no text» в позитивном промпте не хватает.
+    comfyui_negative_node_id: str = Field("", alias="COMFYUI_NEGATIVE_NODE_ID")
+    comfyui_negative_prompt: str = Field(
+        "text, words, letters, numbers, caption, subtitle, watermark, signature, "
+        "logo, brand, poster, banner, sign, label, ui, interface, infographic, "
+        "chart, diagram, blurry, low quality, deformed",
+        alias="COMFYUI_NEGATIVE_PROMPT",
+    )
     comfyui_poll_attempts: int = Field(60, alias="COMFYUI_POLL_ATTEMPTS")
     comfyui_poll_interval_seconds: float = Field(2.0, alias="COMFYUI_POLL_INTERVAL_SECONDS")
 

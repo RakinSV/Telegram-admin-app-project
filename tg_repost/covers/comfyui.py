@@ -59,6 +59,8 @@ class ComfyUIClient:
         self._base_url = settings.comfyui_base_url.rstrip("/")
         self._workflow_path = settings.comfyui_workflow_path
         self._node_id = settings.comfyui_positive_node_id
+        self._negative_node_id = settings.comfyui_negative_node_id
+        self._negative_prompt = settings.comfyui_negative_prompt
         self._poll_attempts = settings.comfyui_poll_attempts
         self._poll_interval = settings.comfyui_poll_interval_seconds
 
@@ -98,6 +100,25 @@ class ComfyUIClient:
                 self._node_id,
             )
             return None
+
+        # Негативный промпт — опционально. Без него модели дорисовывают на
+        # «новостных» картинках надписи и псевдологотипы, и одного «no text»
+        # в позитивном промпте не хватает. Ненайденный узел здесь НЕ фатален
+        # (в отличие от позитивного): генерация с негативом из самого
+        # workflow лучше, чем полный отказ от обложки — но об опечатке в id
+        # надо сказать, иначе настройка молча не работает.
+        if self._negative_node_id and self._negative_prompt.strip():
+            with_negative = inject_prompt_into_workflow(
+                workflow, self._negative_node_id, self._negative_prompt,
+            )
+            if with_negative is None:
+                logger.warning(
+                    "Узел '%s' не найден в workflow ComfyUI — негативный промпт "
+                    "не применён, проверь COMFYUI_NEGATIVE_NODE_ID",
+                    self._negative_node_id,
+                )
+            else:
+                workflow = with_negative
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

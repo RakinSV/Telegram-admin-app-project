@@ -54,6 +54,7 @@ class OpenAICompatibleImageClient:
             base_url=settings.openai_base_url, api_key=settings.openai_api_key,
         )
         self._model = settings.cover_openai_model
+        self._size = settings.cover_openai_image_size
 
     async def generate_image_bytes(self, prompt: str) -> bytes | None:
         """Сгенерировать картинку по промпту. None при любой ошибке — как и
@@ -62,7 +63,7 @@ class OpenAICompatibleImageClient:
             return None
         try:
             response = await self._client.images.generate(
-                model=self._model, prompt=prompt, size="1024x1024", n=1,
+                model=self._model, prompt=prompt, size=self._size, n=1,  # type: ignore[arg-type]
                 response_format="b64_json",
             )
         except Exception as exc:  # noqa: BLE001

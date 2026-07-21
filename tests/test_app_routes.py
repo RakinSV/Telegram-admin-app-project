@@ -184,10 +184,12 @@ def _covers_form(**overrides: str) -> dict:
     base = {
         "enable_auto_cover": "on",
         "cover_strategy": "unsplash",
+        "cover_openai_image_size": "1792x1024",
         "unsplash_api_url": "https://api.unsplash.com/photos/random",
         "comfyui_base_url": "",
         "comfyui_workflow_path": "",
         "comfyui_positive_node_id": "",
+        "comfyui_negative_node_id": "",
         "comfyui_poll_attempts": "10",
         "comfyui_poll_interval_seconds": "2.0",
     }

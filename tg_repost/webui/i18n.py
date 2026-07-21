@@ -1205,9 +1205,108 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.fetch_link_content_enabled.label": {
         "ru": "Переходить по ссылке в посте", "en": "Follow link in post",
     },
-    "settings.field.rewrite_prompt_template.label": {"ru": "Промпт рерайта", "en": "Rewrite prompt"},
     "settings.field.rewrite_variant_count.label": {
         "ru": "Вариантов текста на пост", "en": "Text variants per post",
+    },
+    "settings.field.rewrite_temperature.label": {"ru": "Температура", "en": "Temperature"},
+    "settings.field.rewrite_temperature.hint": {
+        "ru": "Насколько свободно модель формулирует. Ниже 0.7 текст сушится и "
+              "становится шаблонным, выше 1.0 растёт риск искажения фактов. "
+              "Разумный коридор — 0.7–1.0.",
+        "en": "How freely the model phrases things. Below 0.7 the text dries out "
+              "and turns formulaic; above 1.0 the risk of distorting facts grows. "
+              "Sensible range: 0.7–1.0.",
+    },
+    "settings.field.link_content_max_chars.label": {
+        "ru": "Лимит текста статьи, символов", "en": "Article text cap, chars",
+    },
+    "settings.field.link_content_max_chars.hint": {
+        "ru": "Сколько символов статьи по ссылке уходит в модель. Именно этот "
+              "лимит решает, увидит ли она материал целиком или только начало — "
+              "если рерайт пересказывает лишь первые абзацы, поднимай здесь. "
+              "Больше символов = дороже токены.",
+        "en": "How many characters of the linked article are passed to the model. "
+              "This cap decides whether it sees the whole piece or only the "
+              "beginning — raise it if rewrites only retell the opening "
+              "paragraphs. More characters = more tokens = higher cost.",
+    },
+    "settings.field.link_fetch_timeout_seconds.label": {
+        "ru": "Таймаут загрузки статьи, сек", "en": "Article fetch timeout, sec",
+    },
+    "settings.field.link_fetch_timeout_seconds.hint": {
+        "ru": "Сколько ждать ответа сайта. По истечении рерайт идёт по одному "
+              "посту, без текста статьи — молча, без ошибки.",
+        "en": "How long to wait for the site. On timeout the rewrite proceeds "
+              "from the post alone, without the article text — silently, no error.",
+    },
+    "settings.field.rewrite_humanize_enabled.label": {
+        "ru": "Убирать признаки ИИ-текста", "en": "Strip AI-text tells",
+    },
+    "settings.field.rewrite_humanize_enabled.hint": {
+        "ru": "Добавляет к КАЖДОМУ промпту рерайта (любого стиля) блок правил "
+              "ниже: рваный ритм фраз, без дежурных связок и шаблонных "
+              "конструкций, по которым текст обычно и опознаётся как машинный.",
+        "en": "Appends the rule block below to EVERY rewrite prompt (any style): "
+              "varied sentence rhythm, no filler connectives or boilerplate "
+              "constructions that usually give machine text away.",
+    },
+    "settings.field.rewrite_humanize_instructions.label": {
+        "ru": "Правила «не как нейросеть»", "en": "\"Not like an AI\" rules",
+    },
+    "settings.field.rewrite_humanize_instructions.hint": {
+        "ru": "Приклеивается в КОНЕЦ промпта — там модель соблюдает инструкции "
+              "охотнее. Действует только при включённой галочке выше. Один "
+              "список на все пять стилей.",
+        "en": "Appended to the END of the prompt — models follow instructions "
+              "placed there more reliably. Active only when the checkbox above "
+              "is on. One list shared by all five styles.",
+    },
+    "settings.field.rewrite_prompt_template.label": {
+        "ru": "Промпт: базовый (default)", "en": "Prompt: base (default)",
+    },
+    "settings.field.rewrite_prompt_template.hint": {
+        "ru": "Плейсхолдеры: {post_text} — исходный пост, {link_content} — текст "
+              "статьи по ссылке (пусто, если ссылки не было). Пустое поле = "
+              "откат на файл prompts/default.txt.",
+        "en": "Placeholders: {post_text} — the source post, {link_content} — the "
+              "linked article text (empty if there was no link). Blank field = "
+              "falls back to prompts/default.txt.",
+    },
+    "settings.field.rewrite_prompt_news.label": {
+        "ru": "Промпт: новость (news)", "en": "Prompt: news",
+    },
+    "settings.field.rewrite_prompt_news.hint": {
+        "ru": "Применяется к источникам со стиль-профилем «news». Те же "
+              "плейсхолдеры. Пустое поле = откат на файл prompts/news.txt.",
+        "en": "Applied to sources with the \"news\" style profile. Same "
+              "placeholders. Blank field = falls back to prompts/news.txt.",
+    },
+    "settings.field.rewrite_prompt_opinion.label": {
+        "ru": "Промпт: мнение (opinion)", "en": "Prompt: opinion",
+    },
+    "settings.field.rewrite_prompt_opinion.hint": {
+        "ru": "Применяется к источникам со стиль-профилем «opinion». Пустое "
+              "поле = откат на файл prompts/opinion.txt.",
+        "en": "Applied to sources with the \"opinion\" style profile. Blank "
+              "field = falls back to prompts/opinion.txt.",
+    },
+    "settings.field.rewrite_prompt_instruction.label": {
+        "ru": "Промпт: инструкция (instruction)", "en": "Prompt: instruction",
+    },
+    "settings.field.rewrite_prompt_instruction.hint": {
+        "ru": "Применяется к источникам со стиль-профилем «instruction». Пустое "
+              "поле = откат на файл prompts/instruction.txt.",
+        "en": "Applied to sources with the \"instruction\" style profile. Blank "
+              "field = falls back to prompts/instruction.txt.",
+    },
+    "settings.field.rewrite_prompt_humor.label": {
+        "ru": "Промпт: юмор (humor)", "en": "Prompt: humor",
+    },
+    "settings.field.rewrite_prompt_humor.hint": {
+        "ru": "Применяется к источникам со стиль-профилем «humor». Пустое поле "
+              "= откат на файл prompts/humor.txt.",
+        "en": "Applied to sources with the \"humor\" style profile. Blank field "
+              "= falls back to prompts/humor.txt.",
     },
     "settings.field.filter_stop_words.label": {"ru": "Стоп-слова", "en": "Stop words"},
     "settings.field.filter_required_words.label": {"ru": "Обязательные слова", "en": "Required words"},
@@ -1247,10 +1346,72 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.cover_image_prompt_template.label": {
         "ru": "Промпт генерации (openai-стратегия)", "en": "Generation prompt (openai strategy)",
     },
+    "settings.field.cover_image_prompt_template.hint": {
+        "ru": "Уходит прямо в генератор картинок. Плейсхолдер {post_text}. "
+              "Дефолт настроен на картинку БЕЗ текста и надписей и на "
+              "ассоциативную сцену по теме, а не буквальную иллюстрацию "
+              "заголовка — запрет текста повторён и в начале, и в конце "
+              "намеренно: одного упоминания модели стабильно не хватает.",
+        "en": "Goes straight to the image generator. Placeholder: {post_text}. "
+              "The default asks for an image with NO text or lettering and an "
+              "associative scene rather than a literal illustration of the "
+              "headline — the no-text rule is repeated at both the start and "
+              "the end on purpose: one mention is reliably not enough.",
+    },
+    "settings.field.cover_openai_image_size.label": {
+        "ru": "Размер картинки (openai-стратегия)", "en": "Image size (openai strategy)",
+    },
+    "settings.field.cover_openai_image_size.hint": {
+        "ru": "1792x1024 — широкая, как Telegram и показывает обложку поста. "
+              "Квадрат 1024x1024 обрезается по краям, из кадра уезжает как раз "
+              "композиционно важное. Провайдер может поддерживать не все размеры.",
+        "en": "1792x1024 is wide — the way Telegram actually displays a post "
+              "cover. A 1024x1024 square gets cropped at the edges, cutting off "
+              "exactly what matters compositionally. Not every provider "
+              "supports every size.",
+    },
+    "settings.field.cover_search_prompt_template.label": {
+        "ru": "Промпт подбора запроса (unsplash/comfyui)", "en": "Query-picking prompt (unsplash/comfyui)",
+    },
+    "settings.field.cover_search_prompt_template.hint": {
+        "ru": "Это промпт для ТЕКСТОВОЙ модели: она выдаёт короткий запрос, по "
+              "которому Unsplash ищет фото, а ComfyUI генерирует картинку. "
+              "Плейсхолдер {post_text}. Пустое поле = откат на файл "
+              "prompts/cover_prompt.txt.",
+        "en": "This is a prompt for the TEXT model: it produces the short query "
+              "Unsplash searches by and ComfyUI generates from. Placeholder: "
+              "{post_text}. Blank field = falls back to prompts/cover_prompt.txt.",
+    },
     "settings.field.unsplash_api_url.label": {"ru": "Unsplash API URL", "en": "Unsplash API URL"},
     "settings.field.comfyui_base_url.label": {"ru": "ComfyUI base URL", "en": "ComfyUI base URL"},
     "settings.field.comfyui_workflow_path.label": {"ru": "Путь к workflow JSON", "en": "Workflow JSON path"},
-    "settings.field.comfyui_positive_node_id.label": {"ru": "ID узла промпта", "en": "Prompt node ID"},
+    "settings.field.comfyui_positive_node_id.label": {
+        "ru": "ID узла позитивного промпта", "en": "Positive prompt node ID",
+    },
+    "settings.field.comfyui_negative_node_id.label": {
+        "ru": "ID узла негативного промпта", "en": "Negative prompt node ID",
+    },
+    "settings.field.comfyui_negative_node_id.hint": {
+        "ru": "Ключ узла негативного CLIPTextEncode в твоём workflow JSON. "
+              "Пусто — негатив из workflow не трогается. Заполнить стоит: без "
+              "явного запрета модели упорно дорисовывают на «новостных» "
+              "картинках надписи и псевдологотипы.",
+        "en": "The key of the negative CLIPTextEncode node in your workflow "
+              "JSON. Blank leaves the workflow's own negative untouched. Worth "
+              "filling in: without an explicit ban, models keep painting "
+              "captions and pseudo-logos onto \"news\" images.",
+    },
+    "settings.field.comfyui_negative_prompt.label": {
+        "ru": "Негативный промпт (ComfyUI)", "en": "Negative prompt (ComfyUI)",
+    },
+    "settings.field.comfyui_negative_prompt.hint": {
+        "ru": "Подставляется в узел выше. Дефолт уже перечисляет всё, что даёт "
+              "текст в кадре: text, letters, caption, watermark, logo, poster, "
+              "infographic и т.д.",
+        "en": "Injected into the node above. The default already lists "
+              "everything that yields text in frame: text, letters, caption, "
+              "watermark, logo, poster, infographic and so on.",
+    },
     "settings.field.comfyui_poll_attempts.label": {"ru": "Попыток опроса", "en": "Poll attempts"},
     "settings.field.comfyui_poll_interval_seconds.label": {"ru": "Интервал опроса, сек", "en": "Poll interval, sec"},
     "settings.field.smart_schedule_min_posts.label": {"ru": "Мин. постов для рекомендации", "en": "Min posts for a recommendation"},

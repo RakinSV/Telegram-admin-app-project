@@ -49,9 +49,15 @@ async def generate_cover(rewriter: RewriterClient, post_text: str) -> str | None
             prompt = settings.cover_image_prompt_template.format(post_text=post_text)
             image_bytes = await OpenAICompatibleImageClient().generate_image_bytes(prompt)
         else:
-            query = await rewriter.complete(
-                load_prompt("cover_prompt").format(post_text=post_text)
+            # Промпт подбора search-запроса тоже редактируется в /settings
+            # (раньше был доступен только правкой файла в репозитории, хотя
+            # именно он определяет, что за картинка приедет). Пусто = откат
+            # на файл, как было.
+            template = (
+                settings.cover_search_prompt_template.strip()
+                or load_prompt("cover_prompt")
             )
+            query = await rewriter.complete(template.format(post_text=post_text))
             query = query.strip().splitlines()[0] if query.strip() else ""
             if not query:
                 return None

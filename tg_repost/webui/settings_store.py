@@ -110,11 +110,30 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             # Живое поле — RewriterClient.rewrite() читает его из get_settings()
             # на каждый вызов, needs_resync не нужен (в отличие от base_url/
             # model выше, которые сидят в конструкторе клиента).
-            SettingField("fetch_link_content_enabled", "Переходить по ссылке в посте", "bool"),
-            SettingField("rewrite_prompt_template", "Промпт рерайта", "text"),
+            SettingField("rewrite_temperature", "Температура", "float"),
             # Живое поле — читается в scheduler/jobs.py на каждый тик, не
             # кэшируется ни в каком клиенте, needs_resync не нужен.
             SettingField("rewrite_variant_count", "Вариантов текста на пост", "int"),
+            # --- Переход по ссылке из поста ---
+            # Без этого рерайт неизбежно синонимайзит короткий тизер вместо
+            # пересказа по существу — лимит символов и таймаут раньше вообще
+            # не доходили до админки, хотя именно лимит определяет, сколько
+            # статьи реально увидит модель.
+            SettingField("fetch_link_content_enabled", "Переходить по ссылке в посте", "bool"),
+            SettingField("link_content_max_chars", "Лимит текста статьи, символов", "int"),
+            SettingField("link_fetch_timeout_seconds", "Таймаут загрузки статьи, сек", "float"),
+            # --- Анти-ИИ ---
+            SettingField("rewrite_humanize_enabled", "Убирать признаки ИИ-текста", "bool"),
+            SettingField("rewrite_humanize_instructions", "Правила «не как нейросеть»", "text"),
+            # --- Промпты всех пяти стиль-профилей (F15) ---
+            # Раньше редактировался только "default", остальные четыре молча
+            # читались из файлов — источник со style_profile="news" полностью
+            # игнорировал то, что владелец правил в админке.
+            SettingField("rewrite_prompt_template", "Промпт: базовый (default)", "text"),
+            SettingField("rewrite_prompt_news", "Промпт: новость (news)", "text"),
+            SettingField("rewrite_prompt_opinion", "Промпт: мнение (opinion)", "text"),
+            SettingField("rewrite_prompt_instruction", "Промпт: инструкция (instruction)", "text"),
+            SettingField("rewrite_prompt_humor", "Промпт: юмор (humor)", "text"),
         ),
         "Куда идут запросы на переписывание постов. Любой OpenAI-совместимый "
         "провайдер — не обязательно сам OpenAI (локальная Ollama, прокси и т.д.).",
@@ -228,12 +247,22 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "cover_strategy", "Стратегия", "str", choices=("unsplash", "comfyui", "openai"),
             ),
             SettingField("cover_variant_count", "Вариантов обложки на пост", "int"),
+            # Промпт подбора search-запроса (unsplash/comfyui) раньше жил
+            # только в файле cover_prompt.txt и не редактировался из админки,
+            # хотя именно он решает, что за картинка приедет.
+            SettingField("cover_search_prompt_template", "Промпт подбора запроса (unsplash/comfyui)", "text"),
             SettingField("cover_openai_model", "Модель (openai-стратегия)", "str"),
+            SettingField(
+                "cover_openai_image_size", "Размер картинки (openai-стратегия)", "str",
+                choices=("1792x1024", "1024x1024", "1024x1792", "1536x1024", "1024x1536"),
+            ),
             SettingField("cover_image_prompt_template", "Промпт генерации (openai-стратегия)", "text"),
             SettingField("unsplash_api_url", "Unsplash API URL", "str"),
             SettingField("comfyui_base_url", "ComfyUI base URL", "str"),
             SettingField("comfyui_workflow_path", "Путь к workflow JSON", "str"),
-            SettingField("comfyui_positive_node_id", "ID узла промпта", "str"),
+            SettingField("comfyui_positive_node_id", "ID узла позитивного промпта", "str"),
+            SettingField("comfyui_negative_node_id", "ID узла негативного промпта", "str"),
+            SettingField("comfyui_negative_prompt", "Негативный промпт (ComfyUI)", "text"),
             SettingField("comfyui_poll_attempts", "Попыток опроса", "int"),
             SettingField("comfyui_poll_interval_seconds", "Интервал опроса, сек", "float"),
         ),
@@ -243,7 +272,9 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "в API-формате и ID узла промпта — специфично для конкретной установки); "
         "openai — генерация через уже настроенный OpenAI-совместимый провайдер "
         "рерайта (см. группу «Рерайт» выше) — свой ключ не нужен, только "
-        "модель и промпт ниже.",
+        "модель и промпт ниже. Все промпты уже настроены на картинку БЕЗ "
+        "текста и надписей и на ассоциативную сцену по теме, а не буквальную "
+        "иллюстрацию заголовка.",
         secret_keys=("unsplash_access_key",),
     ),
     SettingsGroup(

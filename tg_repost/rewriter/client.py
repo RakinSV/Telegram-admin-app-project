@@ -63,18 +63,55 @@ def resolve_style_prompt(style: str | None) -> str:
     return "default"
 
 
+# Имя настройки с текстом промпта для каждого стиля (F15). Раньше поле было
+# только у "default", а остальные стили читались прямо из файлов — источник
+# со `style_profile="news"` молча игнорировал промпт, отредактированный в
+# админке. Теперь редактируются все пять; файл `prompts/<стиль>.txt` остаётся
+# запасным вариантом, если поле очистили пустым.
+_STYLE_SETTING_FIELDS = {
+    "default": "rewrite_prompt_template",
+    "news": "rewrite_prompt_news",
+    "opinion": "rewrite_prompt_opinion",
+    "instruction": "rewrite_prompt_instruction",
+    "humor": "rewrite_prompt_humor",
+}
+
+
 def resolve_rewrite_template(prompt_name: str) -> str:
     """Выбрать шаблон промпта для `RewriterClient.rewrite()`.
 
-    Стиль "default" читается из редактируемой в `/settings` настройки
-    `rewrite_prompt_template` (пользователь правит текст без git/передеплоя);
-    `default.txt` — запасной вариант только если поле очистили пустым.
-    Остальные стили (news/opinion/instruction/humor, F15) — по-прежнему
-    из файлов `prompts/*.txt`, как раньше.
+    Приоритет: настройка из `/settings` → одноимённый файл `prompts/*.txt`.
+    Стиль, которого нет ни в настройках, ни среди файлов, — не ошибка на
+    этом уровне: `resolve_style_prompt()` выше уже отфильтровал такие имена.
     """
-    if prompt_name == "default":
-        return get_settings().rewrite_prompt_template.strip() or load_prompt("default")
+    field = _STYLE_SETTING_FIELDS.get(prompt_name)
+    if field:
+        configured = str(getattr(get_settings(), field, "")).strip()
+        if configured:
+            return configured
     return load_prompt(prompt_name)
+
+
+def build_rewrite_prompt(
+    prompt_name: str, post_text: str, link_content: str = "",
+) -> str:
+    """Собрать финальный промпт: шаблон стиля + анти-ИИ блок.
+
+    Анти-ИИ блок (`rewrite_humanize_instructions`) добавляется ОДИН на все
+    стили и ПОСЛЕ шаблона — инструкции в конце промпта модель соблюдает
+    заметно охотнее, чем закопанные в середину, а держать пять копий одного
+    и того же правила в пяти шаблонах означало бы гарантированно разъехавшиеся
+    редакции.
+    """
+    template = resolve_rewrite_template(prompt_name)
+    prompt = template.format(post_text=post_text, link_content=link_content)
+
+    settings = get_settings()
+    if settings.rewrite_humanize_enabled:
+        humanize = settings.rewrite_humanize_instructions.strip()
+        if humanize:
+            prompt = f"{prompt}\n\n{humanize}"
+    return prompt
 
 
 class RewriterClient:
@@ -99,18 +136,22 @@ class RewriterClient:
         переход не удался, тогда рерайт идёт только по `post_text`, как
         раньше.
         """
-        template = resolve_rewrite_template(prompt_name)
-        prompt = template.format(post_text=post_text, link_content=link_content)
+        prompt = build_rewrite_prompt(prompt_name, post_text, link_content)
+        # Настройки читаются на КАЖДЫЙ вызов, а не кэшируются в __init__:
+        # температура и промпты правятся в /settings живьём, без пересборки
+        # клиента (в отличие от base_url/api_key/модели — те в конструкторе
+        # AsyncOpenAI, поэтому требуют resync, см. get_rewriter()).
+        temperature = get_settings().rewrite_temperature
 
         logger.debug(
-            "Запрос рерайта: model=%s, стиль=%s, длина=%d",
-            self._model, prompt_name, len(post_text),
+            "Запрос рерайта: model=%s, стиль=%s, длина=%d, ссылка=%s, t=%.2f",
+            self._model, prompt_name, len(post_text), bool(link_content), temperature,
         )
 
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.8,
+            temperature=temperature,
         )
 
         text = (response.choices[0].message.content or "").strip()
