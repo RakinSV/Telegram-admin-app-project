@@ -91,6 +91,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
         # должна ронять рерайт — тогда просто работаем по одному посту, как раньше.
         link_text = ""
         link_image_url: str | None = None
+        link_url: str | None = None
         if get_settings().fetch_link_content_enabled:
             # Перебираем кандидатов, а не берём первую попавшуюся ссылку:
             # первая может быть промо-ссылкой канала (отсеивается в
@@ -101,6 +102,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                 if link_content:
                     link_text = link_content.text
                     link_image_url = link_content.image_url
+                    link_url = link_content.url
                     break
 
         # F06-доп. — N вариантов текста (settings.rewrite_variant_count),
@@ -166,6 +168,11 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                 post.rewritten_text = rewrite_texts[0]
                 post.rewrite_tokens = sum(rewrite_tokens_list)
                 post.active_rewrite_variant_index = 0
+                # Что реально прочитано по ссылке — видно при модерации.
+                # Без этого слабый рерайт неотличим: «по полной статье и всё
+                # равно плохо» против «статью не открыли, переписан тизер».
+                post.link_source_url = link_url
+                post.link_content_chars = len(link_text) if link_text else 0
                 for idx, text in enumerate(rewrite_texts):
                     session.add(PostRewriteVariant(
                         post_id=post_id, variant_index=idx, text=text,

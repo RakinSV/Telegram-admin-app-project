@@ -7,6 +7,25 @@
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
+{# Что модель реально прочитала по ссылке. Без этой строки слабый рерайт
+   неотличим: «работала по полной статье и всё равно вышло плохо» (чинить
+   промпт) против «статью не открыли, переписан один тизер» (чинить доступ
+   к сайту). У постов до появления полей — link_content_chars = None, тогда
+   блок не показывается: «неизвестно» честнее выдуманного «не читалась». #}
+{% if post.link_content_chars is not none %}
+<p class="muted" style="font-size:12px; margin-top:-6px;">
+  {% if post.link_content_chars %}
+    <span class="badge ok">{{ t('moderation_detail.link_read', chars=post.link_content_chars) }}</span>
+    {% if post.link_source_url %}
+    <a href="{{ post.link_source_url }}" target="_blank" rel="noopener noreferrer nofollow">{{ post.link_source_url|truncate(70) }}</a>
+    {% endif %}
+  {% else %}
+    <span class="badge err">{{ t('moderation_detail.link_not_read') }}</span>
+    {{ t('moderation_detail.link_not_read_hint') }}
+  {% endif %}
+</p>
+{% endif %}
+
 <div class="card">
   <form method="post" action="/moderation/{{ post.id }}/edit">
     <textarea name="rewritten_text" rows="14">{{ post.rewritten_text or post.original_text or '' }}</textarea>

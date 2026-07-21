@@ -725,6 +725,45 @@ def test_telethon_sessions_rejects_empty_session_string():
     assert r.status_code == 400
 
 
+def test_moderation_detail_shows_whether_linked_article_was_read():
+    """Владелец должен видеть, работала ли модель по полной статье или по
+    одному тизеру — иначе слабый рерайт невозможно диагностировать: чинить
+    промпт или чинить доступ к сайту, из текста поста это не следует."""
+    from tg_repost.db.models import PostKind, PostStatus
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        read = Post(
+            kind=PostKind.SOURCE, original_text="o", rewritten_text="r",
+            status=PostStatus.PENDING_APPROVAL,
+            link_source_url="https://example.com/article", link_content_chars=4200,
+        )
+        not_read = Post(
+            kind=PostKind.SOURCE, original_text="o", rewritten_text="r",
+            status=PostStatus.PENDING_APPROVAL, link_content_chars=0,
+        )
+        legacy = Post(  # рерайчен до появления полей — «неизвестно»
+            kind=PostKind.SOURCE, original_text="o", rewritten_text="r",
+            status=PostStatus.PENDING_APPROVAL,
+        )
+        session.add_all([read, not_read, legacy])
+        session.flush()
+        read_id, not_read_id, legacy_id = read.id, not_read.id, legacy.id
+
+    r = client.get(f"/moderation/{read_id}")
+    assert "4200" in r.text
+    assert "https://example.com/article" in r.text
+
+    r = client.get(f"/moderation/{not_read_id}")
+    assert "не прочитана" in r.text
+
+    # Старым постам не приписываем «не читалась» — этого мы не знаем.
+    r = client.get(f"/moderation/{legacy_id}")
+    assert "не прочитана" not in r.text
+    assert "прочитана" not in r.text
+
+
 def test_moderation_detail_hides_target_routing_for_already_posted_post():
     """Регресс-тест (аудит ведения групп, раунд 2): `/moderation/{id}`
     доступен по прямой ссылке для ЛЮБОГО поста, не только для ожидающих

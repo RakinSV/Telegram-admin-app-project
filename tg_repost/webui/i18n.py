@@ -495,6 +495,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "moderation.col_text": {"ru": "Текст", "en": "Text"},
     "moderation.col_created": {"ru": "Создан", "en": "Created"},
     "moderation_detail.title": {"ru": "Пост на модерации", "en": "Post under review"},
+    "moderation_detail.link_read": {
+        "ru": "статья по ссылке прочитана: {chars} символов",
+        "en": "linked article read: {chars} characters",
+    },
+    "moderation_detail.link_not_read": {
+        "ru": "статья по ссылке не прочитана",
+        "en": "linked article not read",
+    },
+    "moderation_detail.link_not_read_hint": {
+        "ru": "Рерайт сделан по одному тексту поста. Если он выглядит слабо — "
+              "причина скорее здесь, а не в промпте: в посте не было ссылки, "
+              "либо сайт не отдал текст (пейвол, JS-рендеринг, таймаут).",
+        "en": "The rewrite used only the post text. If it looks weak, the cause "
+              "is likely here rather than in the prompt: the post had no link, "
+              "or the site returned no text (paywall, JS rendering, timeout).",
+    },
     "moderation_detail.source_link": {"ru": "Источник", "en": "Source"},
     "moderation_detail.save_text": {"ru": "Сохранить текст", "en": "Save text"},
     "moderation_detail.approve": {"ru": "✅ Одобрить", "en": "✅ Approve"},

@@ -80,7 +80,11 @@ async def test_skips_channel_promo_link_and_fetches_the_article(monkeypatch):
 
     assert asked == ["https://example.com/article"]
     assert rewriter.calls[0]["link_content"] == "ПОЛНЫЙ ТЕКСТ СТАТЬИ"
-    assert _fetched(post_id).status == PostStatus.REWRITTEN
+    post = _fetched(post_id)
+    assert post.status == PostStatus.REWRITTEN
+    # Диагностика для модерации: что именно прочитано.
+    assert post.link_source_url == "https://example.com/article"
+    assert post.link_content_chars == len("ПОЛНЫЙ ТЕКСТ СТАТЬИ")
 
 
 @pytest.mark.asyncio
@@ -121,7 +125,12 @@ async def test_rewrites_without_article_when_every_candidate_fails(monkeypatch):
     await jobs.rewrite_new_posts(rewriter, batch=5)
 
     assert rewriter.calls[0]["link_content"] == ""
-    assert _fetched(post_id).status == PostStatus.REWRITTEN
+    post = _fetched(post_id)
+    assert post.status == PostStatus.REWRITTEN
+    # 0, а не NULL: «пробовали и не смогли» — это ЗНАНИЕ, его и показываем
+    # при модерации. NULL остаётся у постов, рерайченных до появления полей.
+    assert post.link_content_chars == 0
+    assert post.link_source_url is None
 
 
 @pytest.mark.asyncio

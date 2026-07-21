@@ -268,6 +268,15 @@ class Post(Base):
     rewrite_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rewrite_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Что именно прочитала модель по ссылке из поста (F16-доп.). Без этого
+    # владелец, глядя на слабый рерайт, не мог отличить «модель работала по
+    # полной статье и всё равно вышло плохо» от «статью не удалось открыть, и
+    # переписан один короткий тизер» — а это диаметрально разные починки
+    # (править промпт против чинить доступ к сайту). NULL = переход не
+    # выполнялся или ни одна ссылка не открылась.
+    link_source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    link_content_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # ID сообщения модерации (чтобы потом убрать кнопки) и опубликованного поста.
     moderation_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     posted_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
