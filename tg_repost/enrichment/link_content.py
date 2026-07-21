@@ -45,6 +45,19 @@ _URL_TRAILING_PUNCT = ").,!?;:»\""
 
 _MAX_DOWNLOAD_BYTES = 3_000_000
 _MAX_REDIRECTS = 3
+# Сколько ссылок из одного поста пробовать, пока не найдётся текст статьи.
+# Не больше: один пост со списком ссылок иначе съел бы таймауты за всю очередь.
+_MAX_URL_CANDIDATES = 3
+# Хосты, за которыми статьи заведомо нет. Telegram — потому что масса каналов
+# ставит свою промо-ссылку («подпишись на нас») ПЕРВОЙ, до самой новости.
+# Соцсети/видео — отдают пустой JS-каркас, текста в HTML нет.
+# Сокращатели ссылок сюда НЕ входят намеренно: они редиректят на статью, а
+# редиректы уже разрешаются (с повторной SSRF-проверкой на каждом хопе).
+_NON_ARTICLE_HOSTS = frozenset({
+    "t.me", "telegram.me", "telegram.dog", "telegram.org", "telesco.pe",
+    "twitter.com", "x.com", "instagram.com", "facebook.com", "fb.com",
+    "youtube.com", "youtu.be", "tiktok.com", "vk.com", "ok.ru",
+})
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -72,11 +85,48 @@ class LinkContent:
 
 
 def extract_first_url(text: str) -> str | None:
-    """Первая http(s)-ссылка в тексте поста, либо None."""
+    """Первая http(s)-ссылка в тексте поста, либо None.
+
+    Сырая «первая ссылка», без отсева. Для выбора ссылки НА СТАТЬЮ используй
+    `extract_article_urls()` — см. там про промо-ссылки в начале поста.
+    """
     match = _URL_RE.search(text or "")
     if not match:
         return None
     return match.group(0).rstrip(_URL_TRAILING_PUNCT)
+
+
+def extract_article_urls(text: str, limit: int = _MAX_URL_CANDIDATES) -> list[str]:
+    """Ссылки-кандидаты на полную статью, в порядке появления в посте.
+
+    Отсеиваются хосты, за которыми статьи заведомо нет: сам Telegram
+    (`t.me` и родня) и соцсети, отдающие пустой JS-каркас вместо текста.
+    Причина конкретная: масса каналов ставит СВОЮ промо-ссылку («подпишись
+    на нас, t.me/...») ПЕРВОЙ строкой, до собственно новости. «Взять первую
+    ссылку» в такой ситуации означает скачать страницу Telegram вместо
+    статьи — обогащение молча не срабатывает вообще никогда, а рерайт при
+    этом выглядит как синонимайз тизера, и по логам причина не видна
+    (переход-то формально «был»).
+
+    Возвращается СПИСОК, а не одна ссылка: первый кандидат может оказаться
+    битым, закрытым пейволом или просто не отдать текста — тогда вызывающий
+    код пробует следующий (`limit` ограничивает число сетевых попыток на
+    пост, чтобы один мусорный пост не съел таймауты за всю очередь).
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for match in _URL_RE.finditer(text or ""):
+        url = match.group(0).rstrip(_URL_TRAILING_PUNCT)
+        host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+        if not host or host in _NON_ARTICLE_HOSTS:
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        result.append(url)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _is_public_host(host: str) -> bool:

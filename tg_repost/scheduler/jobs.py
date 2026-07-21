@@ -22,7 +22,7 @@ from tg_repost.db.session import session_scope
 from tg_repost.enrichment.enricher import enrich_post, enrichment_enabled_for
 from tg_repost.enrichment.link_content import (
     download_link_image,
-    extract_first_url,
+    extract_article_urls,
     fetch_link_content,
 )
 from tg_repost.logging_conf import get_logger
@@ -92,12 +92,16 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
         link_text = ""
         link_image_url: str | None = None
         if get_settings().fetch_link_content_enabled:
-            url = extract_first_url(original)
-            if url:
+            # Перебираем кандидатов, а не берём первую попавшуюся ссылку:
+            # первая может быть промо-ссылкой канала (отсеивается в
+            # extract_article_urls), битой или закрытой пейволом — тогда
+            # шанс есть у следующей. Число попыток ограничено там же.
+            for url in extract_article_urls(original):
                 link_content = await fetch_link_content(url)
                 if link_content:
                     link_text = link_content.text
                     link_image_url = link_content.image_url
+                    break
 
         # F06-доп. — N вариантов текста (settings.rewrite_variant_count),
         # владелец выбирает лучший при модерации (бот/веб-админка). Каждый

@@ -6,11 +6,15 @@ import socket
 
 from bs4 import BeautifulSoup
 
+import pytest
+
 from tg_repost.enrichment.link_content import (
+    _MAX_URL_CANDIDATES,
     _extract_image,
     _extract_main_text,
     _is_public_host,
     _is_safe_url,
+    extract_article_urls,
     extract_first_url,
 )
 
@@ -35,6 +39,53 @@ def test_extract_first_url_empty_text():
 
 def test_extract_first_url_ignores_non_http_scheme():
     assert extract_first_url("tg://resolve?domain=x") is None
+
+
+# --- выбор ссылки НА СТАТЬЮ (отсев промо-ссылок канала) ---
+
+
+def test_article_urls_skip_leading_telegram_promo_link():
+    """Ключевая регрессия: масса каналов ставит свою промо-ссылку («подпишись
+    на нас, t.me/...») ПЕРВОЙ строкой. «Взять первую ссылку» означало скачать
+    страницу Telegram вместо статьи — обогащение молча не срабатывало никогда,
+    а рерайт при этом выглядел как синонимайз тизера."""
+    text = "Подпишись https://t.me/mychannel\n\nНовость. Подробнее: https://example.com/article"
+    assert extract_first_url(text) == "https://t.me/mychannel"  # старое поведение
+    assert extract_article_urls(text) == ["https://example.com/article"]
+
+
+@pytest.mark.parametrize("host", [
+    "t.me", "telegram.me", "telegram.org", "www.t.me",
+    "twitter.com", "x.com", "youtube.com", "youtu.be", "vk.com", "instagram.com",
+])
+def test_article_urls_reject_hosts_without_articles(host):
+    assert extract_article_urls(f"смотри https://{host}/something") == []
+
+
+def test_article_urls_keep_order_and_drop_duplicates():
+    text = "https://example.com/a и снова https://example.com/a, ещё https://example.com/b"
+    assert extract_article_urls(text) == ["https://example.com/a", "https://example.com/b"]
+
+
+def test_article_urls_capped_to_limit():
+    # Один пост со списком ссылок не должен съедать таймауты за всю очередь.
+    text = " ".join(f"https://s{i}.example.com/x" for i in range(10))
+    assert len(extract_article_urls(text)) == _MAX_URL_CANDIDATES
+
+
+def test_article_urls_strip_trailing_punctuation():
+    assert extract_article_urls("(см. https://example.com/b).") == ["https://example.com/b"]
+
+
+def test_article_urls_empty_when_no_links():
+    assert extract_article_urls("просто текст") == []
+    assert extract_article_urls("") == []
+
+
+def test_article_urls_shorteners_are_not_filtered():
+    # Сокращатели редиректят на статью, а редиректы разрешаются (с повторной
+    # SSRF-проверкой на каждом хопе) — отсеивать их было бы потерей материала.
+    assert extract_article_urls("https://bit.ly/abc") == ["https://bit.ly/abc"]
 
 
 def test_is_public_host_rejects_loopback(monkeypatch):
