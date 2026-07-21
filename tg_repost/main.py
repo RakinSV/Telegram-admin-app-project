@@ -79,7 +79,24 @@ async def run() -> None:
 
     # --- Telethon listener / бот / планировщик — только если хватает секретов ---
     if settings.is_minimally_configured:
-        await start_components(settings)
+        # Падение старта Telegram-части НЕ должно ронять веб-админку. Раньше
+        # исключение отсюда долетало до run() и убивало весь процесс: при
+        # недоступности Telegram (провайдер режет, не поднялся прокси, сервер
+        # только что перезагрузился) контейнер уходил в crash-loop, а вместе с
+        # ним пропадала и админка — то есть ровно то место, где эту проблему и
+        # чинят: прокси, сессия, токены (найдено на реальном деплое —
+        # ConnectionError: Connection to Telegram failed 5 time(s)).
+        #
+        # Веб остаётся жив, состояние компонентов видно на /components, там же
+        # кнопка повторного запуска — после правки настроек прокси.
+        try:
+            await start_components(settings)
+        except Exception:
+            logger.exception(
+                "Не удалось запустить Telegram-компоненты — веб-админка "
+                "работает, проверь прокси/сессию на http://%s:%d/components",
+                WEBUI_HOST, WEBUI_PORT,
+            )
     else:
         logger.warning(
             "Минимальная конфигурация не завершена (TG_API_ID/HASH, "
