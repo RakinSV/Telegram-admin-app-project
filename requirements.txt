@@ -37,3 +37,4 @@ sse-starlette==3.4.5          # живые логи (Server-Sent Events)
 # --- Guardian: бот-модератор группового чата (guardian/) ---
 aiogram==3.29.0                # FSM для многошаговой верификации при вступлении
 aiohttp-socks==0.10.1           # SOCKS5-прокси для Bot API (GUARDIAN_BOT_API_PROXY_URL)
+feedparser>=6.0.11

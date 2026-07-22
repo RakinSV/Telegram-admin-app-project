@@ -337,6 +337,50 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Channels that Telethon reads and parses for new posts.",
     },
     "sources.add_placeholder": {"ru": "@channel или ссылка", "en": "@channel or link"},
+    "sources.list_title": {"ru": "Все источники", "en": "All sources"},
+    "sources.rss_title": {"ru": "RSS-ленты", "en": "RSS feeds"},
+    "sources.rss_desc": {
+        "ru": "Записи ленты попадают в ту же очередь, что и посты из каналов: "
+              "работают фильтры, стиль-профиль источника, переход по ссылке за "
+              "полным текстом статьи и формат публикации. Настраивается всё там "
+              "же — на странице источника.",
+        "en": "Feed entries land in the same queue as channel posts: filters, "
+              "the source style profile, following the link for the full "
+              "article text and the publication format all apply. Everything is "
+              "configured on the same source page.",
+    },
+    "sources.rss_placeholder": {
+        "ru": "https://example.com/feed/\nhttps://another.site/rss.xml",
+        "en": "https://example.com/feed/\nhttps://another.site/rss.xml",
+    },
+    "sources.rss_hint": {
+        "ru": "Можно несколько сразу — по одной на строку или через запятую. "
+              "Повторное добавление той же ленты дубля не создаст. При первом "
+              "опросе берутся только несколько свежих записей, архив не "
+              "выгружается — иначе лента с тысячей записей забьёт очередь.",
+        "en": "Several at once are fine — one per line or comma-separated. "
+              "Adding the same feed twice creates no duplicate. The first poll "
+              "takes only a few recent entries and skips the archive, otherwise "
+              "a feed with a thousand items would flood the queue.",
+    },
+    "sources.rss_add": {"ru": "Добавить ленты", "en": "Add feeds"},
+    "sources.rss_presets_title": {
+        "ru": "Готовые наборы (адреса проверены, дубли не создаются):",
+        "en": "Ready-made sets (URLs verified, no duplicates created):",
+    },
+    "sources.rss_preset.security_vulns": {
+        "ru": "Уязвимости и эксплойты", "en": "Vulnerabilities and exploits",
+    },
+    "sources.rss_preset.security_news_en": {
+        "ru": "ИБ-новости (EN)", "en": "Security news (EN)",
+    },
+    "sources.rss_preset.security_news_ru": {
+        "ru": "ИБ-новости (RU)", "en": "Security news (RU)",
+    },
+    "sources.error_bad_feed_url": {
+        "ru": "Адрес ленты должен начинаться с http:// или https:// — не подошло: {urls}",
+        "en": "A feed URL must start with http:// or https:// — rejected: {urls}",
+    },
     "sources.add_bulk_hint": {
         "ru": "Можно вставить сразу несколько — через запятую и/или по одному "
         "на строку. Подключение к Telegram после добавления может занять "
@@ -1421,6 +1465,49 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.max_auto_deletes_per_hour.label": {"ru": "Потолок авто-удалений в час", "en": "Auto-delete cap/hour"},
     "settings.field.default_style_profile.label": {"ru": "Профиль по умолчанию", "en": "Default profile"},
     "settings.field.enable_source_enrichment.label": {"ru": "Включён глобально", "en": "Enabled globally"},
+    "settings.group.rss.title": {
+        "ru": "RSS-ленты как источник", "en": "RSS feeds as a source",
+    },
+    "settings.group.rss.desc": {
+        "ru": "Ленты добавляются на странице «Источники». Записи попадают в ту "
+              "же очередь, что и посты из каналов, и проходят весь тот же путь: "
+              "фильтры, стиль-профиль, переход по ссылке за полным текстом "
+              "статьи, формат публикации. Опрос не зависит от Telegram — при "
+              "недоступном Telethon ленты продолжают наполнять очередь.",
+        "en": "Feeds are added on the Sources page. Entries land in the same "
+              "queue as channel posts and follow the same path: filters, style "
+              "profile, following the link for the full article, publication "
+              "format. Polling does not depend on Telegram — if Telethon is "
+              "down, feeds keep filling the queue.",
+    },
+    "settings.field.rss_enabled.label": {
+        "ru": "Опрос лент включён", "en": "Feed polling enabled",
+    },
+    "settings.field.rss_poll_interval_minutes.label": {
+        "ru": "Интервал опроса, мин", "en": "Poll interval, min",
+    },
+    "settings.field.rss_max_items_per_poll.label": {
+        "ru": "Записей за опрос, максимум", "en": "Max items per poll",
+    },
+    "settings.field.rss_max_items_per_poll.hint": {
+        "ru": "Потолок на ОДНУ ленту за один опрос — страховка от ленты, которая "
+              "разом выкатила сотню записей или сломалась и отдаёт всё подряд.",
+        "en": "A cap per feed per poll — insurance against a feed that dumps a "
+              "hundred entries at once or breaks and returns everything.",
+    },
+    "settings.field.rss_first_poll_items.label": {
+        "ru": "Записей при первом опросе ленты", "en": "Items on a feed's first poll",
+    },
+    "settings.field.rss_first_poll_items.hint": {
+        "ru": "В архиве ленты бывают тысячи записей (у MSRC — больше пяти тысяч). "
+              "Завести их все постами значит забить очередь модерации и счёт за "
+              "рерайт, поэтому при первом опросе берутся только свежие, "
+              "остальное считается историей.",
+        "en": "A feed archive can hold thousands of entries (MSRC has over five "
+              "thousand). Turning them all into posts would flood the moderation "
+              "queue and the rewrite bill, so the first poll takes only recent "
+              "ones and treats the rest as history.",
+    },
     "settings.group.telegraph.title": {
         "ru": "Статьи на Telegraph (лонгриды)", "en": "Telegraph articles (longreads)",
     },

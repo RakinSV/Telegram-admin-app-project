@@ -128,6 +128,15 @@ class Source(Base):
     __tablename__ = "sources"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Откуда берём материал: "telegram" (по умолчанию, NULL у старых строк)
+    # или "rss". Всё, что ниже по течению — стиль, цели, добор источников,
+    # формат публикации — работает одинаково для обоих: разница только в
+    # том, кто кладёт пост в очередь (listener или rss/poller).
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # Для telegram — @username канала. Для rss — URL ленты: колонка уже
+    # UNIQUE + NOT NULL, а лента и опознаётся своим адресом, так что
+    # заводить второе поле-идентификатор значило бы держать две копии одного
+    # ключа с риском их расхождения. Человеческое имя — в channel_title.
     channel_username: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     channel_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # ID канала из Telegram (заполняется listener-ом при первом резолве).

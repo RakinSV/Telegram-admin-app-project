@@ -44,6 +44,7 @@ from tg_repost.export import export_posts_csv, export_posts_json
 from tg_repost.logging_conf import get_logger
 from tg_repost.tools.backup import restore_backup, run_backup
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
+from tg_repost.rss import presets as rss_presets
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
@@ -113,9 +114,71 @@ def build_crud_router() -> APIRouter:
         sources = sources_repo.list_sources()
         return _templates.TemplateResponse(request, "sources.html", {
             "sources": sources, "truncated": len(sources) >= _LIST_LIMIT,
+            "rss_presets": rss_presets.PRESET_GROUPS,
         })
 
     _MAX_BULK_SOURCES = 100
+
+    @router.post("/sources/rss")
+    async def sources_create_rss(request: Request, feeds: str = Form(...)) -> Response:
+        """Добавить RSS-ленты. Тот же разделитель, что у каналов: перенос
+        строки и/или запятая — привычка уже выработана на форме каналов."""
+        raw = [c.strip() for c in re.split(r"[\n,]+", feeds) if c.strip()]
+        if not raw:
+            return RedirectResponse(url="/sources", status_code=303)
+        if len(raw) > _MAX_BULK_SOURCES:
+            return _templates.TemplateResponse(
+                request, "sources.html",
+                {
+                    "sources": sources_repo.list_sources(),
+                    "truncated": False,
+                    "rss_presets": rss_presets.PRESET_GROUPS,
+                    "error": i18n.t("sources.error_too_many", limit=_MAX_BULK_SOURCES),
+                },
+                status_code=400,
+            )
+
+        added, skipped, bad = 0, 0, []
+        for url in raw:
+            try:
+                _source, created = sources_repo.add_rss_source(url)
+            except ValueError:
+                bad.append(url)
+                continue
+            added += created
+            skipped += not created
+
+        if bad:
+            return _templates.TemplateResponse(
+                request, "sources.html",
+                {
+                    "sources": sources_repo.list_sources(),
+                    "truncated": False,
+                    "rss_presets": rss_presets.PRESET_GROUPS,
+                    "error": i18n.t("sources.error_bad_feed_url", urls=", ".join(bad[:5])),
+                },
+                status_code=400,
+            )
+        audit.record_audit(
+            "rss_sources_add", detail=f"добавлено {added}, уже было {skipped}",
+        )
+        return RedirectResponse(url="/sources", status_code=303)
+
+    @router.post("/sources/rss/preset/{group_key}")
+    async def sources_add_rss_preset(request: Request, group_key: str) -> Response:
+        """Добавить готовый набор проверенных лент одной кнопкой."""
+        del request
+        group = rss_presets.PRESET_GROUPS.get(group_key)
+        if group is None:
+            raise HTTPException(status_code=404, detail="Нет такого набора лент")
+        added = 0
+        for preset in group:
+            _source, created = sources_repo.add_rss_source(preset.url, preset.title)
+            added += created
+        audit.record_audit(
+            "rss_preset_add", target=group_key, detail=f"добавлено {added} из {len(group)}",
+        )
+        return RedirectResponse(url="/sources", status_code=303)
 
     @router.post("/sources")
     async def sources_create(request: Request, channel: str = Form(...)) -> Response:
@@ -130,6 +193,7 @@ def build_crud_router() -> APIRouter:
                 request, "sources.html",
                 {
                     "sources": sources_repo.list_sources(),
+                    "rss_presets": rss_presets.PRESET_GROUPS,
                     "truncated": False,
                     "error": i18n.t("sources.error_too_many", max=_MAX_BULK_SOURCES),
                 },

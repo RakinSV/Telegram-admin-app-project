@@ -33,6 +33,7 @@ from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
 from tg_repost.scheduler.posting import parse_slot, publish_slot
 from tg_repost.scheduler.smart_schedule import auto_apply_slots_job
+from tg_repost.rss.poller import poll_rss_sources
 from tg_repost.scheduler.stats import collect_stats
 from tg_repost.telegram.listener import build_client, build_extra_clients, start_listeners
 from tg_repost.telegram.moderation_bot import build_application
@@ -185,6 +186,15 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         scheduler, "smart_schedule_auto_apply", settings.smart_schedule_auto_apply,
         auto_apply_slots_job, [],
         IntervalTrigger(hours=24),
+    )
+    # RSS-опрос не зависит ни от Telethon, ни от бота: ленты берутся обычным
+    # HTTP. Поэтому джоба живёт наравне с остальными, но её работоспособность
+    # не завязана на доступность Telegram — при отвалившемся Telethon ленты
+    # продолжают наполнять очередь.
+    _resync_optional_job(
+        scheduler, "poll_rss_sources", settings.rss_enabled,
+        poll_rss_sources, [],
+        IntervalTrigger(minutes=max(1, settings.rss_poll_interval_minutes)),
     )
 
 

@@ -224,6 +224,20 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "set-source-style).",
     ),
     SettingsGroup(
+        "rss", "RSS-ленты как источник",
+        (
+            SettingField("rss_enabled", "Опрос лент включён", "bool", needs_resync=True),
+            SettingField("rss_poll_interval_minutes", "Интервал опроса, мин", "int", needs_resync=True),
+            SettingField("rss_max_items_per_poll", "Записей за опрос, максимум", "int"),
+            SettingField("rss_first_poll_items", "Записей при первом опросе ленты", "int"),
+        ),
+        "Ленты добавляются на странице «Источники». Записи попадают в ту же "
+        "очередь, что и посты из каналов, и проходят весь тот же путь: "
+        "фильтры, стиль-профиль, переход по ссылке за полным текстом статьи, "
+        "формат публикации. Опрос не зависит от Telegram — при недоступном "
+        "Telethon ленты продолжают наполнять очередь.",
+    ),
+    SettingsGroup(
         "telegraph", "Статьи на Telegraph (лонгриды)",
         (
             SettingField("telegraph_enabled", "Включены", "bool"),

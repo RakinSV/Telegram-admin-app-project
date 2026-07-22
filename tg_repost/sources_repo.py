@@ -77,6 +77,39 @@ def set_source_style(source_id: int, style: str) -> bool:
         return True
 
 
+def add_rss_source(feed_url: str, title: str = "") -> tuple[Source | None, bool]:
+    """Завести RSS-источник. Возвращает (источник, создан_ли).
+
+    URL ленты кладётся в `channel_username`: колонка уже UNIQUE, а лента и
+    опознаётся своим адресом — так повторное добавление той же ленты просто
+    вернёт существующую строку вместо дубля.
+    """
+    url = (feed_url or "").strip()
+    if not url.startswith(("http://", "https://")):
+        raise ValueError(f"Адрес ленты должен начинаться с http(s)://: {feed_url!r}")
+
+    with session_scope() as session:
+        existing = (
+            session.query(Source).filter(Source.channel_username == url).one_or_none()
+        )
+        if existing is not None:
+            # Лента уже есть: могли добавить её раньше руками, а теперь она
+            # приехала из набора — тогда проставим человеческое имя.
+            if title and not existing.channel_title:
+                existing.channel_title = title.strip()
+            return existing, False
+
+        source = Source(
+            channel_username=url,
+            channel_title=title.strip() or None,
+            kind="rss",
+            is_active=True,
+        )
+        session.add(source)
+        session.flush()
+        return source, True
+
+
 def set_source_post_format(source_id: int, post_format: str) -> bool:
     """Формат публикации источника: 'post' (обычный) | 'article' (Telegraph).
 

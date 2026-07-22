@@ -15,6 +15,33 @@
   </form>
 </div>
 
+<h2>{{ t('sources.rss_title') }}</h2>
+<p class="muted">{{ t('sources.rss_desc') }}</p>
+<div class="card">
+  <form method="post" action="/sources/rss">
+    <textarea name="feeds" rows="3" style="width:100%; box-sizing:border-box;"
+              placeholder="{{ t('sources.rss_placeholder') }}" required></textarea>
+    <p class="muted" style="margin: 4px 0 10px; font-size: 13px;">{{ t('sources.rss_hint') }}</p>
+    <button type="submit">{{ t('sources.rss_add') }}</button>
+  </form>
+</div>
+
+{# Готовые наборы: адреса проверены запросом, мёртвых в списке нет.
+   Повторное нажатие безопасно — лента опознаётся по URL и не дублируется. #}
+<div class="card">
+  <p style="margin-top:0;">{{ t('sources.rss_presets_title') }}</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    {% for key, feeds in rss_presets.items() %}
+    <form method="post" action="/sources/rss/preset/{{ key }}">
+      <button type="submit" class="secondary">
+        {{ t('sources.rss_preset.' ~ key) }} ({{ feeds|length }})
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+</div>
+
+<h2>{{ t('sources.list_title') }}</h2>
 <div class="card">
   <table>
     <tr>
@@ -26,7 +53,17 @@
     <tr>
       <td>{{ s.id }}</td>
       <td><span class="badge {{ 'ok' if s.is_active else 'muted' }}">{{ t('common.yes') if s.is_active else t('common.no') }}</span></td>
-      <td><a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a>{% if s.channel_title %} <span class="muted">({{ s.channel_title }})</span>{% endif %}</td>
+      {# У RSS в channel_username лежит URL ленты, а не @username —
+         добавлять «@» к адресу нельзя. #}
+      <td>
+        {% if s.kind == 'rss' %}
+        <span class="badge">RSS</span>
+        <a href="/sources/{{ s.id }}">{{ s.channel_title or s.channel_username }}</a>
+        {% if s.channel_title %}<div class="muted" style="font-size:11px;">{{ s.channel_username }}</div>{% endif %}
+        {% else %}
+        <a href="/sources/{{ s.id }}">@{{ s.channel_username }}</a>{% if s.channel_title %} <span class="muted">({{ s.channel_title }})</span>{% endif %}
+        {% endif %}
+      </td>
       <td>{{ s.style_profile or 'default' }}</td>
       <td>{{ {True: 'on', False: 'off', None: t('common.enrich_global')}[s.enrich_sources] }}</td>
       <td>{% if s.target_chat_ids %}{{ t('sources.targets_count', n=s.target_chat_ids.split(',')|length) }}{% else %}<span class="muted">{{ t('common.all') }}</span>{% endif %}</td>
