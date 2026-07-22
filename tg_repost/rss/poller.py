@@ -108,10 +108,36 @@ async def poll_one_source(
     return created
 
 
+def pending_queue_size() -> int:
+    """Сколько постов ждут обработки (ещё не дошли до модерации)."""
+    with session_scope() as session:
+        return (
+            session.query(Post)
+            .filter(Post.status.in_((PostStatus.NEW, PostStatus.REWRITING)))
+            .count()
+        )
+
+
 async def poll_rss_sources() -> int:
     """Опросить все активные RSS-источники. Возвращает число новых постов."""
-    if not get_settings().rss_enabled:
+    settings = get_settings()
+    if not settings.rss_enabled:
         return 0
+
+    # Предохранитель: приток из лент легко обгоняет обработку (пост = вызовы
+    # модели + генерация обложек), и без остановки очередь растёт бесконечно
+    # вместе со счётом за API. Записи никуда не денутся — ленты отдают их и
+    # на следующем опросе, когда очередь разгребётся.
+    limit = settings.rss_max_queue_backlog
+    if limit > 0:
+        backlog = pending_queue_size()
+        if backlog >= limit:
+            logger.warning(
+                "Опрос лент пропущен: в очереди %d необработанных постов (потолок %d). "
+                "Разгреби модерацию или подними потолок в настройках RSS.",
+                backlog, limit,
+            )
+            return 0
 
     with session_scope() as session:
         sources = [

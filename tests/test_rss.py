@@ -316,3 +316,55 @@ async def test_feed_fetch_refuses_private_addresses(monkeypatch):
 
     assert await fetch_feed("http://127.0.0.1:8000/internal") == []
     assert await fetch_feed("http://169.254.169.254/latest/meta-data/") == []
+
+
+@pytest.mark.asyncio
+async def test_polling_pauses_while_the_queue_is_already_full(monkeypatch):
+    """Найдено на живом стенде: 102 записи заведено за час, обработано за тот
+    же час — ноль. Приток из двух десятков лент обгоняет обработку, и без
+    потолка очередь и счёт за API растут бесконечно."""
+    settings_store.save_setting("rss_enabled", True, "bool")
+    settings_store.save_setting("rss_max_queue_backlog", 2, "int")
+    _add_feed()
+
+    with session_scope() as s:
+        for i in range(3):
+            s.add(Post(original_text=f"в очереди {i}", status=PostStatus.NEW))
+
+    async def _must_not_be_called(url):
+        raise AssertionError("при полной очереди ленты не опрашиваются")
+
+    monkeypatch.setattr(rss_poller, "fetch_feed", _must_not_be_called)
+    assert await rss_poller.poll_rss_sources() == 0
+
+
+@pytest.mark.asyncio
+async def test_polling_resumes_once_the_queue_drains(monkeypatch):
+    settings_store.save_setting("rss_enabled", True, "bool")
+    settings_store.save_setting("rss_max_queue_backlog", 10, "int")
+    settings_store.save_setting("rss_first_poll_items", 10, "int")
+    _add_feed()
+
+    async def _fake(url):
+        return parse_feed(RSS_SAMPLE)
+
+    monkeypatch.setattr(rss_poller, "fetch_feed", _fake)
+    assert await rss_poller.poll_rss_sources() == 2
+
+
+@pytest.mark.asyncio
+async def test_zero_disables_the_cap(monkeypatch):
+    settings_store.save_setting("rss_enabled", True, "bool")
+    settings_store.save_setting("rss_max_queue_backlog", 0, "int")
+    settings_store.save_setting("rss_first_poll_items", 10, "int")
+    _add_feed()
+
+    with session_scope() as s:
+        for i in range(50):
+            s.add(Post(original_text=f"в очереди {i}", status=PostStatus.NEW))
+
+    async def _fake(url):
+        return parse_feed(RSS_SAMPLE)
+
+    monkeypatch.setattr(rss_poller, "fetch_feed", _fake)
+    assert await rss_poller.poll_rss_sources() == 2

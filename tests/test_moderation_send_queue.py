@@ -130,3 +130,30 @@ async def test_manual_retry_gives_the_post_a_full_attempt_budget():
 
     moderation_bot.forget_send_failures(post_id)
     assert post_id not in moderation_bot._send_failures
+
+
+async def test_network_timeout_never_kills_a_healthy_post():
+    """Найдено на живом стенде: за время недоступности сети в failed уехал
+    71 совершенно здоровый пост с причиной «Отправка на модерацию: Timed out».
+    Таймаут — не отказ по посту: при обрыве связи не проходит ВООБЩЕ ничего,
+    значит очередь никто не загораживает и списывать посты не за что."""
+    from telegram.error import TimedOut
+
+    post_id = _make_post()
+    app = _app(send_effect=TimedOut())
+
+    for _ in range(moderation_bot._MAX_SEND_ATTEMPTS * 3):
+        await moderation_bot.send_pending_for_approval(app)
+
+    assert _status(post_id) == PostStatus.REWRITTEN, "пост обязан дождаться сети"
+    assert post_id not in moderation_bot._send_failures, "бюджет попыток не тратится"
+
+
+async def test_network_error_and_flood_wait_are_also_transient():
+    from telegram.error import NetworkError, RetryAfter
+
+    assert moderation_bot.is_transient_send_error(NetworkError("боль"))
+    assert moderation_bot.is_transient_send_error(RetryAfter(30))
+    assert not moderation_bot.is_transient_send_error(
+        RuntimeError("Message caption is too long"),
+    ), "отказ по самому посту обязан считаться в бюджет — иначе очередь встанет"

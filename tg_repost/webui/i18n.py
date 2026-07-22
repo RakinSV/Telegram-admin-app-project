@@ -1533,6 +1533,23 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "A cap per feed per poll — insurance against a feed that dumps a "
               "hundred entries at once or breaks and returns everything.",
     },
+    "settings.field.rss_max_queue_backlog.label": {
+        "ru": "Потолок очереди (пауза опроса)", "en": "Queue cap (pauses polling)",
+    },
+    "settings.field.rss_max_queue_backlog.hint": {
+        "ru": "Опрос лент приостанавливается, пока необработанных постов "
+              "больше этого числа. Лент бывает два десятка, и приток легко "
+              "обгоняет обработку (пост = вызовы модели и генерация обложек) "
+              "— без потолка очередь и счёт за API растут бесконечно. "
+              "Записи не теряются: ленты отдадут их на следующем опросе. "
+              "0 — выключить предохранитель.",
+        "en": "Feed polling pauses while more than this many posts are still "
+              "unprocessed. With a couple of dozen feeds the intake easily "
+              "outruns processing (each post means model calls plus cover "
+              "generation) — without a cap the queue and the API bill grow "
+              "without bound. Nothing is lost: feeds serve those entries again "
+              "on the next poll. 0 disables the cap.",
+    },
     "settings.field.rss_first_poll_items.label": {
         "ru": "Записей при первом опросе ленты", "en": "Items on a feed's first poll",
     },

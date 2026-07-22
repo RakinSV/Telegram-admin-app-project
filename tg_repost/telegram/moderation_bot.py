@@ -17,6 +17,7 @@ from telegram import (
     InputMediaPhoto,
     Update,
 )
+from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -57,6 +58,19 @@ _MIN_BODY_LEN = 200
 # и при уходе поста в failed, поэтому расти неограниченно не может.
 _MAX_SEND_ATTEMPTS = 3
 _send_failures: dict[int, int] = {}
+
+# Сбои, которые НЕ означают «этот пост непригоден»: сеть, таймаут, флуд-лимит.
+# Считать их в бюджет попыток нельзя — при обрыве связи не проходит ВООБЩЕ
+# ничего, значит очередь никто не загораживает, и списывать посты в failed
+# бессмысленно и вредно. Найдено на живом стенде: за время недоступности
+# провайдера в failed уехал 71 совершенно здоровый пост с причиной
+# «Отправка на модерацию: Timed out».
+_TRANSIENT_SEND_ERRORS = (TimedOut, NetworkError, RetryAfter, asyncio.TimeoutError, TimeoutError)
+
+
+def is_transient_send_error(exc: BaseException) -> bool:
+    """Временный ли это сбой отправки (сеть/таймаут), а не отказ по посту."""
+    return isinstance(exc, _TRANSIENT_SEND_ERRORS)
 
 
 def forget_send_failures(post_id: int) -> None:
@@ -267,6 +281,10 @@ async def send_pending_for_approval(application: Application) -> None:
             # BOT_API_PROXY_URL (см. retry.py::retry_async про ту же находку).
             reason = sanitize_proxy_error(str(exc))
             logger.error("Не удалось отправить пост %s на модерацию: %s", post_id, reason)
+            if is_transient_send_error(exc):
+                # Сеть/таймаут — пробуем снова на следующем тике, бюджет
+                # попыток не тратим: пост тут ни при чём.
+                continue
             attempts = _send_failures.get(post_id, 0) + 1
             if attempts < _MAX_SEND_ATTEMPTS:
                 _send_failures[post_id] = attempts

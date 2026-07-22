@@ -232,6 +232,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("rss_poll_interval_minutes", "Интервал опроса, мин", "int", needs_resync=True),
             SettingField("rss_max_items_per_poll", "Записей за опрос, максимум", "int"),
             SettingField("rss_first_poll_items", "Записей при первом опросе ленты", "int"),
+            SettingField("rss_max_queue_backlog", "Потолок очереди (пауза опроса)", "int"),
         ),
         "Ленты добавляются на странице «Источники». Записи попадают в ту же "
         "очередь, что и посты из каналов, и проходят весь тот же путь: "
