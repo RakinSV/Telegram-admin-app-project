@@ -146,3 +146,62 @@ async def test_post_without_media_is_unaffected(monkeypatch):
     await jobs.rewrite_new_posts(_FakeRewriter(), batch=5)
 
     assert _covers(post_id) == ["/media/сгенерировано-1.png"]
+
+
+# --- пустой ответ модели ---
+
+
+class _EmptyRewriter:
+    """Модель, вернувшая пустоту: отказ или сбой на стороне провайдера."""
+
+    def __init__(self, text: str = "   ") -> None:
+        self.text = text
+        self.calls = 0
+
+    async def rewrite(self, post_text, prompt_name="default", link_content=""):
+        self.calls += 1
+        return RewriteResult(text=self.text, prompt_tokens=1, completion_tokens=0)
+
+
+@pytest.mark.asyncio
+async def test_empty_model_answer_is_not_accepted_as_a_rewrite(monkeypatch):
+    """Найдено на аудите: пустой ответ проходил как валидный вариант — пост
+    получал статус rewritten с текстом из пробелов, на модерации показывался
+    оригинал (фолбэк в превью), и владелец одобрял пустоту."""
+    settings_store.save_setting("cover_replace_source_media", False, "bool")
+    _fake_generator(monkeypatch)
+    post_id = _post_with_media(None)
+
+    await jobs.rewrite_new_posts(_EmptyRewriter(), batch=5)
+
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        assert post.status == PostStatus.FAILED
+        assert not (post.rewritten_text or "").strip()
+        assert "пуст" in (post.status_reason or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_one_empty_variant_does_not_sink_the_whole_post(monkeypatch):
+    """Пустой вариант отбрасывается, но если хоть один непустой есть — пост
+    едет дальше (то же правило, что и для упавших вариантов)."""
+    settings_store.save_setting("cover_replace_source_media", False, "bool")
+    settings_store.save_setting("rewrite_variant_count", 2, "int")
+    _fake_generator(monkeypatch)
+    post_id = _post_with_media(None)
+
+    class _Flaky:
+        def __init__(self) -> None:
+            self.n = 0
+
+        async def rewrite(self, post_text, prompt_name="default", link_content=""):
+            self.n += 1
+            text = "" if self.n == 1 else "нормальный рерайт"
+            return RewriteResult(text=text, prompt_tokens=1, completion_tokens=1)
+
+    await jobs.rewrite_new_posts(_Flaky(), batch=5)
+
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        assert post.status == PostStatus.REWRITTEN
+        assert post.rewritten_text == "нормальный рерайт"

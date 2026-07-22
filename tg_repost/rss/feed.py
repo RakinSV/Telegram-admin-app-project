@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import feedparser  # type: ignore[import-untyped]  # библиотека без аннотаций
 import httpx
 
+from tg_repost.enrichment.link_content import safe_get_stream
 from tg_repost.logging_conf import get_logger
 
 logger = get_logger(__name__)
@@ -108,12 +109,20 @@ async def fetch_feed(url: str) -> list[FeedItem]:
     недоступная лента не должна ронять опрос остальных."""
     headers = {"User-Agent": _USER_AGENT, "Accept": _ACCEPT}
     try:
-        async with httpx.AsyncClient(
-            timeout=30.0, headers=headers, follow_redirects=True,
-        ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            raw = response.content[:_MAX_FEED_BYTES]
+        # Через `safe_get_stream`, а не голым `client.get(follow_redirects=True)`:
+        # адрес ленты задаёт владелец, но КУДА она редиректит — уже нет, а
+        # ответ по редиректу попадает в очередь модерации как текст поста.
+        # Тот же гард, что у перехода по ссылкам из постов, — не хотим
+        # держать в проекте единственный HTTP-клиент без проверки адреса.
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+            response = await safe_get_stream(client, url)
+            if response is None:
+                return []
+            try:
+                response.raise_for_status()
+                raw = (await response.aread())[:_MAX_FEED_BYTES]
+            finally:
+                await response.aclose()
     except Exception as exc:  # noqa: BLE001
         logger.warning("Лента недоступна (%s): %s", url, exc)
         return []

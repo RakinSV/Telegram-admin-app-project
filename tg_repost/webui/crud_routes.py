@@ -49,6 +49,7 @@ from tg_repost.rss.poller import SOURCE_KIND_RSS, poll_one_source
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
+from tg_repost.telegram.moderation_bot import forget_send_failures
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
 from tg_repost.webui import audit, i18n, log_broadcast, settings_store
 from tg_repost.webui.auth import require_login
@@ -601,6 +602,10 @@ def build_crud_router() -> APIRouter:
                 return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
             post.set_status(PostStatus.NEW)
             post.status_reason = None
+        # Иначе пост, уже израсходовавший часть попыток отправки на модерацию,
+        # после ручного ретрая получил бы не полный бюджет, а остаток — и мог
+        # снова уйти в failed с первой же неудачи.
+        forget_send_failures(post_id)
         audit.record_audit("post_retry", target=f"#{post_id}")
         logger.info("Пост %s возвращён в очередь рерайта вручную", post_id)
         return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)

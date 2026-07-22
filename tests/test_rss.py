@@ -305,3 +305,14 @@ def test_listener_keeps_sources_added_before_rss_existed():
         )
 
     assert "legacy_channel" in _load_active_source_entities()
+
+
+@pytest.mark.asyncio
+async def test_feed_fetch_refuses_private_addresses(monkeypatch):
+    """Адрес ленты задаёт владелец, но КУДА она редиректит — уже нет, а ответ
+    попадает в очередь модерации как текст поста. Это был единственный
+    HTTP-клиент в проекте без проверки адреса (найдено на аудите)."""
+    from tg_repost.rss.feed import fetch_feed
+
+    assert await fetch_feed("http://127.0.0.1:8000/internal") == []
+    assert await fetch_feed("http://169.254.169.254/latest/meta-data/") == []

@@ -9,7 +9,7 @@ Telegram-пост часто содержит только короткий ти
 SSRF-защита: пост — недоверенный внешний ввод, ссылка в нём может указывать
 куда угодно, включая внутреннюю сеть/localhost. Резолвим хост ДО КАЖДОГО
 запроса (включая редиректы — httpx НЕ настроен следовать за ними
-автоматически, см. `_safe_get_stream`, иначе публичный URL мог бы 302-
+автоматически, см. `safe_get_stream`, иначе публичный URL мог бы 302-
 редиректнуть на приватный адрес уже ПОСЛЕ прохождения проверки — найдено
 security-ревью) и отклоняем приватные/loopback/link-local/резервные адреса.
 Не полная защита от DNS rebinding (httpx резолвит заново в момент реального
@@ -176,7 +176,7 @@ async def _is_safe_url_async(url: str) -> bool:
     return await asyncio.to_thread(_is_safe_url, url)
 
 
-async def _safe_get_stream(
+async def safe_get_stream(
     client: httpx.AsyncClient, url: str,
 ) -> httpx.Response | None:
     """GET с РУЧНЫМ ограниченным следованием за редиректами, заново
@@ -242,7 +242,7 @@ async def fetch_link_content(url: str) -> LinkContent | None:
         async with httpx.AsyncClient(
             timeout=settings.link_fetch_timeout_seconds, headers=headers,
         ) as client:
-            response = await _safe_get_stream(client, url)
+            response = await safe_get_stream(client, url)
             if response is None:
                 return None
             try:
@@ -287,7 +287,7 @@ async def download_link_image(image_url: str) -> tuple[bytes, str] | None:
         async with httpx.AsyncClient(
             timeout=10.0, headers={"User-Agent": _USER_AGENT},
         ) as client:
-            response = await _safe_get_stream(client, image_url)
+            response = await safe_get_stream(client, image_url)
             if response is None:
                 return None
             try:

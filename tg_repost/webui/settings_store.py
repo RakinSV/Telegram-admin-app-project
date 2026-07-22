@@ -400,6 +400,7 @@ SECRET_LABELS: dict[str, str] = {
     "telethon_proxy_url": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
     "bot_api_proxy_url": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
     "guardian_bot_token": "Guardian Bot Token",
+    "telegraph_access_token": "Telegraph Access Token",
 }
 
 # Что это и где взять — показывается на /secrets рядом с полем, чтобы не
@@ -450,6 +451,13 @@ SECRET_HINTS: dict[str, str] = {
         "сохранения его нужно перезапустить (`docker compose restart "
         "guardian`), чтобы он подхватил токен — живого применения без "
         "рестарта для этого поля нет."
+    ),
+    "telegraph_access_token": (
+        "Заполняется САМА при первой публикации статьи: Telegraph выдаёт "
+        "токен без регистрации. Руками сюда что-то вписывают только чтобы "
+        "перенести уже существующий аккаунт с другой инсталляции. Потеряв "
+        "токен, теряешь возможность править уже опубликованные статьи — "
+        "сами страницы остаются доступны по своим адресам."
     ),
 }
 

@@ -59,6 +59,16 @@ _MAX_SEND_ATTEMPTS = 3
 _send_failures: dict[int, int] = {}
 
 
+def forget_send_failures(post_id: int) -> None:
+    """Забыть накопленные неудачные попытки отправки поста.
+
+    Зовётся при ручном ретрае из админки: пост возвращают в очередь именно
+    потому, что причина сбоя устранена, и бюджет попыток должен начаться
+    заново, а не продолжиться с остатка.
+    """
+    _send_failures.pop(post_id, None)
+
+
 def _tg_len(text: str) -> int:
     """Длина строки так, как её считает Telegram, — в UTF-16 code units.
 

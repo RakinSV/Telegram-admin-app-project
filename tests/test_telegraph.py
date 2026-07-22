@@ -217,3 +217,26 @@ def test_full_article_roundtrip_produces_expected_tag_sequence():
     assert title == "Новый инструмент"
     assert [n["tag"] for n in nodes] == ["p", "h3", "pre", "ul", "blockquote"]
     _encode_content(nodes)  # не должно бросить: статья в лимит помещается
+
+
+@pytest.mark.asyncio
+async def test_empty_model_answer_does_not_create_an_empty_page(monkeypatch):
+    """Найдено на аудите: пустой ответ модели не проверялся — создавалась
+    ПУСТАЯ страница Telegraph, а в канал уходил тизер со ссылкой на неё.
+    После публикации это уже не исправить."""
+    from tg_repost.rewriter.client import RewriteResult
+    from tg_repost.telegraph import article as article_mod
+    from tg_repost.telegraph.article import publish_article
+    from tg_repost.telegraph.client import TelegraphError
+
+    class _Empty:
+        async def rewrite_with_prompt(self, prompt):
+            return RewriteResult(text="\n  \n", prompt_tokens=1, completion_tokens=0)
+
+    async def _must_not_be_called(title, nodes):
+        raise AssertionError("страница не должна создаваться на пустом тексте")
+
+    monkeypatch.setattr(article_mod, "create_page", _must_not_be_called)
+
+    with pytest.raises(TelegraphError, match="пуст"):
+        await publish_article(_Empty(), "оригинал")

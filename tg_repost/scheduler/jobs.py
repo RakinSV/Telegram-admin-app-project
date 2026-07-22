@@ -169,6 +169,16 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                 last_exc = exc
                 logger.warning("Вариант рерайта поста %s не удался: %s", post_id, exc)
                 continue
+            # Пустой ответ модели — это НЕ успех, хотя исключения и не было:
+            # модель могла отказаться отвечать или вернуть только пробелы.
+            # Раньше такой «вариант» проходил дальше, пост получал статус
+            # rewritten с пустым текстом, на модерации показывался оригинал
+            # (фолбэк в превью) — и владелец одобрял пустоту, узнавая о
+            # проблеме только когда публикация падала.
+            if not result.text.strip():
+                last_exc = last_exc or ValueError("модель вернула пустой текст")
+                logger.warning("Вариант рерайта поста %s пуст — отбрасываю", post_id)
+                continue
             rewrite_texts.append(result.text)
             rewrite_tokens_list.append(result.total_tokens)
 

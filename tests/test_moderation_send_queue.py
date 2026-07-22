@@ -116,3 +116,17 @@ async def test_broken_post_stops_blocking_the_ones_behind_it():
 
     assert _status(broken_id) == PostStatus.FAILED
     assert _status(good_id) == PostStatus.PENDING_APPROVAL
+
+
+async def test_manual_retry_gives_the_post_a_full_attempt_budget():
+    """Найдено на аудите: счётчик неудачных отправок жил в памяти и НЕ
+    сбрасывался ручным ретраем — пост, потративший часть попыток, уходил в
+    failed с первой же неудачи после возврата в очередь."""
+    post_id = _make_post()
+    app = _app(send_effect=RuntimeError("Message caption is too long"))
+
+    await moderation_bot.send_pending_for_approval(app)
+    assert moderation_bot._send_failures.get(post_id) == 1
+
+    moderation_bot.forget_send_failures(post_id)
+    assert post_id not in moderation_bot._send_failures

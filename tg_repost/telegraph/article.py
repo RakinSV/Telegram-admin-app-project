@@ -10,7 +10,7 @@ from __future__ import annotations
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, build_rewrite_prompt
-from tg_repost.telegraph.client import create_page
+from tg_repost.telegraph.client import TelegraphError, create_page
 from tg_repost.telegraph.nodes import extract_title, image_node, markdown_to_nodes
 
 logger = get_logger(__name__)
@@ -60,6 +60,12 @@ async def publish_article(
     settings = get_settings()
     prompt = build_rewrite_prompt(ARTICLE_PROMPT, original_text, link_content)
     result = await rewriter.rewrite_with_prompt(prompt)
+
+    # Пустой ответ модели (отказ, сбой на стороне провайдера) — не повод
+    # создавать страницу: в канал ушёл бы тизер со ссылкой на ПУСТУЮ статью,
+    # а исправить это после публикации уже нельзя.
+    if not result.text.strip():
+        raise TelegraphError("модель вернула пустой текст статьи")
 
     title, body = extract_title(result.text)
     if not title:

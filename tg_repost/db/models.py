@@ -11,6 +11,18 @@
 
 Переходы проверяются в `PostStatus.can_transition` — статус нельзя менять
 произвольно, только по разрешённым рёбрам графа.
+
+ИЗВЕСТНОЕ РАСХОЖДЕНИЕ СХЕМЫ (выявлено сверкой миграций с моделями на полном
+аудите). Ранние миграции создают служебные колонки (`created_at`/`updated_at`/
+`added_at`/`captured_at`, `posts.original_text`) как NULLABLE, тогда как
+модели объявляют их обязательными: `Mapped[datetime]` без `| None` — это
+`nullable=False`. На практике NULL там не появляется, потому что все вставки
+идут через ORM с `default=`, а восстановление из бэкапа файловое (целиком
+подменяет .db, не вставляет строки). Практическое следствие одно: тесты
+создают схему из моделей и потому работают на схеме СТРОЖЕ продовой.
+Исправление требует rebuild ~18 таблиц (в SQLite нет ALTER COLUMN) — цена
+выше пользы для системы одного владельца, поэтому расхождение принято
+осознанно, а не забыто. Новые таблицы объявлять согласованно.
 """
 
 from __future__ import annotations
@@ -266,7 +278,12 @@ class Post(Base):
     # ID сообщения в канале-источнике (для ссылки на оригинал и анти-дубля).
     # NULL для AD/DIGEST.
     source_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    source_link: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # index=True не декоративный: по нему идёт дедупликация RSS-записей
+    # (`rss/poller.py::_known_guids` — WHERE source_link IN (...) на каждом
+    # опросе каждой ленты). В миграции 0021 индекс есть, а в модели не был —
+    # то есть тесты, создающие схему из моделей, проверяли дедуп на схеме БЕЗ
+    # индекса, отличной от продовой (найдено сверкой схем на аудите).
+    source_link: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
 
     original_text: Mapped[str] = mapped_column(Text, default="")
     rewritten_text: Mapped[str | None] = mapped_column(Text, nullable=True)

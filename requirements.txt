@@ -1,5 +1,9 @@
 # --- Telegram ---
 telethon==1.36.0              # чтение каналов (юзер-сессия)
+# Транзитивная зависимость telethon -> rsa -> pyasn1. В 0.6.3 три известные
+# уязвимости (PYSEC-2026-3455/3456/3457), закрыты в 0.6.4 — сам telethon
+# верхнюю границу не поднимает, поэтому пин здесь.
+pyasn1>=0.6.4
 python-telegram-bot==21.6     # постинг и модерация (Bot API), async
 
 # --- БД ---
@@ -37,4 +41,6 @@ sse-starlette==3.4.5          # живые логи (Server-Sent Events)
 # --- Guardian: бот-модератор группового чата (guardian/) ---
 aiogram==3.29.0                # FSM для многошаговой верификации при вступлении
 aiohttp-socks==0.10.1           # SOCKS5-прокси для Bot API (GUARDIAN_BOT_API_PROXY_URL)
-feedparser>=6.0.11
+
+# --- RSS как входящий источник ---
+feedparser==6.0.12            # разбор RSS/Atom-лент (tg_repost/rss/)
