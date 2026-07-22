@@ -213,3 +213,46 @@ def test_sync_jobs_recreates_slot_jobs_on_change():
     _sync_jobs(scheduler, settings)
     slot_ids = {j.id for j in scheduler.get_jobs() if j.id.startswith("slot_")}
     assert slot_ids == {"slot_1800"}
+
+
+def test_rss_job_is_scheduled_to_run_immediately():
+    """Включив опрос, пользователь ждёт проверки лент, а не первых записей
+    через интервал (15 минут по умолчанию) — именно так выглядела жалоба
+    «добавил RSS, ничего не прилетает»."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from tg_repost.webui.supervisor import _resync_optional_job
+
+    scheduler = AsyncIOScheduler()
+
+    async def _noop() -> None:
+        return None
+
+    _resync_optional_job(
+        scheduler, "poll_rss_sources", True, _noop, [],
+        IntervalTrigger(minutes=15), run_now=True,
+    )
+    job = scheduler.get_job("poll_rss_sources")
+    assert job is not None
+    assert job.next_run_time is not None
+
+
+def test_other_optional_jobs_keep_waiting_a_full_interval():
+    """Прогонять сбор статистики/дайджест на каждом сохранении настроек —
+    сюрприз, а не польза: run_now по умолчанию выключен."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from tg_repost.webui.supervisor import _resync_optional_job
+
+    scheduler = AsyncIOScheduler()
+
+    async def _noop() -> None:
+        return None
+
+    _resync_optional_job(
+        scheduler, "collect_stats", True, _noop, [], IntervalTrigger(minutes=60),
+    )
+    job = scheduler.get_job("collect_stats")
+    assert job is not None

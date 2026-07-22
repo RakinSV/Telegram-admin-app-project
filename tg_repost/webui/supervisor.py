@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -73,7 +74,8 @@ def get_components() -> RunningComponents:
 
 
 def _resync_optional_job(
-    scheduler: AsyncIOScheduler, job_id: str, enabled: bool, func: object, args: list, trigger: object
+    scheduler: AsyncIOScheduler, job_id: str, enabled: bool, func: object, args: list,
+    trigger: object, *, run_now: bool = False,
 ) -> None:
     """Удалить-и-создать-заново джобу по флагу `enabled` (идемпотентно).
 
@@ -82,12 +84,18 @@ def _resync_optional_job(
     "джоба держит ссылку на старый tele_client/application после рестарта"
     — после restart_telethon_listener()/restart_moderation_bot() этот же
     путь пересоздаёт зависимые джобы со свежими ссылками.
+
+    `run_now` — не ждать целый интервал до первого запуска. По умолчанию
+    выключено: для сбора статистики или дайджеста лишний прогон на каждом
+    сохранении настроек — сюрприз, а не польза.
     """
     if scheduler.get_job(job_id) is not None:
         scheduler.remove_job(job_id)
-    if enabled:
-        scheduler.add_job(func, trigger=trigger, args=args, max_instances=1,
-                           coalesce=True, id=job_id)
+    if not enabled:
+        return
+    extra = {"next_run_time": datetime.now(timezone.utc)} if run_now else {}
+    scheduler.add_job(func, trigger=trigger, args=args, max_instances=1,
+                      coalesce=True, id=job_id, **extra)
 
 
 def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
@@ -191,10 +199,15 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     # HTTP. Поэтому джоба живёт наравне с остальными, но её работоспособность
     # не завязана на доступность Telegram — при отвалившемся Telethon ленты
     # продолжают наполнять очередь.
+    # run_now: включив опрос, пользователь ждёт, что ленты проверятся, а не
+    # что первые записи появятся через интервал (по умолчанию 15 минут) —
+    # именно так выглядела жалоба «добавил RSS, ничего не прилетает». Лишний
+    # прогон безвреден: записи дедуплицируются по guid.
     _resync_optional_job(
         scheduler, "poll_rss_sources", settings.rss_enabled,
         poll_rss_sources, [],
         IntervalTrigger(minutes=max(1, settings.rss_poll_interval_minutes)),
+        run_now=True,
     )
 
 
