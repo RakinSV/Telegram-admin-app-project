@@ -330,6 +330,33 @@ class Settings(BaseSettings):
     # Профиль по умолчанию, если у источника не задан свой (имя файла промпта).
     default_style_profile: str = Field("default", alias="DEFAULT_STYLE_PROFILE")
 
+    # --- Статьи на Telegraph (лонгриды) ---
+    # Пост в канале ограничен 4096 символами, подпись к картинке — 1024, и
+    # код-блоки в них не отрендерить (parse_mode выключен, см. publisher.py).
+    # Статья на telegra.ph — 64 КБ, с <pre>/<code> и картинками между
+    # абзацами, Telegram открывает её через Instant View прямо в приложении.
+    # Формат выбирается ПО ИСТОЧНИКУ (Source.post_format), этот флаг —
+    # глобальный рубильник: выключен, значит формат «статья» игнорируется и
+    # всё публикуется обычными постами.
+    telegraph_enabled: bool = Field(False, alias="TELEGRAPH_ENABLED")
+    telegraph_author_name: str = Field("", alias="TELEGRAPH_AUTHOR_NAME")
+    telegraph_author_url: str = Field("", alias="TELEGRAPH_AUTHOR_URL")
+    # Выдаётся автоматически при первой публикации (createAccount не требует
+    # ни ключа, ни регистрации) и сохраняется в шифрованные секреты. Нужен
+    # только для правки уже опубликованных статей — сами страницы остаются
+    # доступны по своим URL в любом случае.
+    telegraph_access_token: str = Field("", alias="TELEGRAPH_ACCESS_TOKEN")
+    # Промпт статьи: отдельный от пяти «постовых» стилей — у него другой
+    # объём и своя разметка. Пусто = откат на prompts/article.txt.
+    article_prompt_template: str = Field(
+        default_factory=lambda: _prompt_file_default("article"),
+        alias="ARTICLE_PROMPT_TEMPLATE",
+    )
+    # Сколько символов тизера уходит в канал под ссылку на статью. 900 — с
+    # запасом под лимит подписи к картинке (1024), чтобы тизер с обложкой
+    # гарантированно уехал одним сообщением.
+    article_teaser_max_chars: int = Field(900, alias="ARTICLE_TEASER_MAX_CHARS")
+
     # --- F16: поиск дополнительных источников ---
     enable_source_enrichment: bool = Field(False, alias="ENABLE_SOURCE_ENRICHMENT")
     # Какой поисковик опрашивать (см. enrichment/search.py::get_search_client).
@@ -532,6 +559,10 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "telethon_proxy_url",
     "bot_api_proxy_url",
     "guardian_bot_token",
+    # Не вводится руками: выдаётся автоматически при первой публикации
+    # статьи (`telegraph/client.py::get_or_create_token`) и сохраняется сюда.
+    # Секрет, потому что даёт право править все опубликованные статьи.
+    "telegraph_access_token",
 )
 
 

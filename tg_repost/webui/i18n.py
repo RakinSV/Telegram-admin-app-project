@@ -377,6 +377,30 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The prompt text for each style is edited in "
               "<a href=\"/settings#rewrite\">Settings → Rewrite</a>.",
     },
+    "source_detail.format_label": {"ru": "Формат публикации", "en": "Publication format"},
+    "source_detail.format_post": {
+        "ru": "пост в ленте (до 4096 символов)", "en": "feed post (up to 4096 chars)",
+    },
+    "source_detail.format_article": {
+        "ru": "статья на Telegraph + тизер со ссылкой",
+        "en": "Telegraph article + teaser with a link",
+    },
+    "source_detail.format_hint": {
+        "ru": "Статья снимает потолок в 900 символов: лонгрид до 64 КБ с "
+              "код-блоками и картинками между абзацами уходит на telegra.ph, "
+              "в канал — короткий тизер, Telegram открывает статью через "
+              "Instant View. Требует общей галочки в "
+              "<a href=\"/settings#telegraph\">Настройках → Статьи на Telegraph</a>.",
+        "en": "Article mode lifts the 900-character ceiling: a longread of up "
+              "to 64 KB with code blocks and inline images goes to telegra.ph "
+              "and the channel gets a short teaser, which Telegram opens via "
+              "Instant View. Requires the global switch in "
+              "<a href=\"/settings#telegraph\">Settings → Telegraph articles</a>.",
+    },
+    "source_detail.error_invalid_format": {
+        "ru": "Формат публикации должен быть «пост» или «статья».",
+        "en": "Publication format must be either post or article.",
+    },
     "source_detail.enrich_label": {"ru": "Добор источников", "en": "Source enrichment"},
     "source_detail.enrich_default": {"ru": "по глобальной настройке", "en": "use global setting"},
     "source_detail.enrich_on": {"ru": "включён", "en": "on"},
@@ -1397,6 +1421,78 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.max_auto_deletes_per_hour.label": {"ru": "Потолок авто-удалений в час", "en": "Auto-delete cap/hour"},
     "settings.field.default_style_profile.label": {"ru": "Профиль по умолчанию", "en": "Default profile"},
     "settings.field.enable_source_enrichment.label": {"ru": "Включён глобально", "en": "Enabled globally"},
+    "settings.group.telegraph.title": {
+        "ru": "Статьи на Telegraph (лонгриды)", "en": "Telegraph articles (longreads)",
+    },
+    "settings.group.telegraph.desc": {
+        "ru": "Пост в канале ограничен 4096 символами, подпись к картинке — "
+              "1024, и код-блоки в них не отрендерить. Статья на telegra.ph — "
+              "64 КБ, с подсветкой кода и картинками между абзацами, Telegram "
+              "открывает её через Instant View прямо в приложении. Ключ и "
+              "регистрация не нужны: аккаунт заводится сам при первой "
+              "публикации. Формат выбирается У КАЖДОГО ИСТОЧНИКА (страница "
+              "источника → «Формат публикации»), эта галочка — общий рубильник.",
+        "en": "A channel post is capped at 4096 characters, a media caption at "
+              "1024, and neither renders code blocks. A telegra.ph article "
+              "holds 64 KB with code highlighting and inline images, and "
+              "Telegram opens it via Instant View inside the app. No key or "
+              "signup needed: the account is created on first publish. The "
+              "format is chosen PER SOURCE (source page → Publication format); "
+              "this checkbox is the global switch.",
+    },
+    "settings.field.telegraph_enabled.label": {"ru": "Включены", "en": "Enabled"},
+    "settings.field.telegraph_author_name.label": {
+        "ru": "Автор (подпись под статьёй)", "en": "Author (byline)",
+    },
+    "settings.field.telegraph_author_url.label": {
+        "ru": "Ссылка автора (например, канал)", "en": "Author link (e.g. your channel)",
+    },
+    "settings.field.telegraph_author_url.hint": {
+        "ru": "Кликабельна под заголовком статьи — единственное легальное "
+              "место, где можно привести читателя обратно в канал.",
+        "en": "Clickable under the article title — the one legitimate spot to "
+              "lead a reader back to your channel.",
+    },
+    "settings.field.article_teaser_max_chars.label": {
+        "ru": "Длина тизера в канале, символов", "en": "Teaser length in channel, chars",
+    },
+    "settings.field.article_teaser_max_chars.hint": {
+        "ru": "Тизер — то, что видно в ленте под ссылкой на статью. 900 — с "
+              "запасом под лимит подписи к картинке (1024), чтобы тизер с "
+              "обложкой уехал одним сообщением. Ссылка в этот лимит входит и "
+              "режется последней.",
+        "en": "The teaser is what shows in the feed above the article link. "
+              "900 leaves room under the 1024 caption cap so a teaser with a "
+              "cover goes out as a single message. The link counts toward this "
+              "limit and is never the part that gets cut.",
+    },
+    "settings.field.article_prompt_template.label": {
+        "ru": "Промпт статьи", "en": "Article prompt",
+    },
+    "settings.field.article_prompt_template.hint": {
+        "ru": "Отдельный от пяти «постовых» стилей: у статьи нет потолка в 900 "
+              "символов и своя разметка (## подзаголовки, ``` для кода). "
+              "Плейсхолдеры те же: {post_text}, {link_content}. Пустое поле = "
+              "откат на файл prompts/article.txt.",
+        "en": "Separate from the five post styles: an article has no 900-char "
+              "ceiling and its own markup (## subheadings, ``` for code). Same "
+              "placeholders: {post_text}, {link_content}. Blank field = falls "
+              "back to prompts/article.txt.",
+    },
+    "secrets.field.telegraph_access_token.label": {
+        "ru": "Telegraph access token", "en": "Telegraph access token",
+    },
+    "secrets.field.telegraph_access_token.hint": {
+        "ru": "Руками вводить не нужно: выдаётся автоматически при первой "
+              "публикации статьи (регистрация в Telegraph не требуется). "
+              "Нужен, чтобы уже опубликованные статьи можно было ПРАВИТЬ — "
+              "потеряв его, страницы не теряешь, но редактировать их больше "
+              "не сможешь.",
+        "en": "No need to enter it by hand: issued automatically on the first "
+              "article publish (Telegraph needs no signup). It exists so that "
+              "already published articles stay EDITABLE — lose it and the "
+              "pages remain online but can no longer be changed.",
+    },
     "settings.field.search_provider.label": {"ru": "Поисковик", "en": "Search provider"},
     "settings.field.search_provider.hint": {
         "ru": "searxng — свой сервис в Docker: бесплатен без оговорок (ни ключа, "

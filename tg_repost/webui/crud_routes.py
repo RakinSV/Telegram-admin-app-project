@@ -242,6 +242,16 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
         sources_repo.set_source_enrich(source_id, enrich_mode)
+
+        # Формат публикации: обычный пост или лонгрид на Telegraph.
+        post_format = str(form.get("post_format", "post")).strip().lower()
+        if post_format not in ("post", "article"):
+            return _templates.TemplateResponse(
+                request, "source_detail.html",
+                _source_detail_context(source, i18n.t("source_detail.error_invalid_format")),
+                status_code=400,
+            )
+        sources_repo.set_source_post_format(source_id, post_format)
         # Чекбоксы шлют список выбранных chat_id; пусто — публикация во все
         # активные цели (target_chat_ids=None). Собираем в тот же CSV-формат,
         # что и раньше — set_source_targets валидирует, что всё числовое.

@@ -224,6 +224,24 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "set-source-style).",
     ),
     SettingsGroup(
+        "telegraph", "Статьи на Telegraph (лонгриды)",
+        (
+            SettingField("telegraph_enabled", "Включены", "bool"),
+            SettingField("telegraph_author_name", "Автор (подпись под статьёй)", "str"),
+            SettingField("telegraph_author_url", "Ссылка автора (например, канал)", "str"),
+            SettingField("article_teaser_max_chars", "Длина тизера в канале, символов", "int"),
+            SettingField("article_prompt_template", "Промпт статьи", "text"),
+        ),
+        "Пост в канале ограничен 4096 символами, подпись к картинке — 1024, "
+        "и код-блоки в них не отрендерить. Статья на telegra.ph — 64 КБ, с "
+        "подсветкой кода и картинками между абзацами, Telegram открывает её "
+        "через Instant View прямо в приложении. Ключ и регистрация не нужны: "
+        "аккаунт заводится сам при первой публикации. Формат выбирается У "
+        "КАЖДОГО ИСТОЧНИКА (страница источника → «Формат публикации»), эта "
+        "галочка — общий рубильник.",
+        secret_keys=("telegraph_access_token",),
+    ),
+    SettingsGroup(
         "enrichment", "Добор источников — F16",
         (
             SettingField("enable_source_enrichment", "Включён глобально", "bool"),

@@ -39,6 +39,18 @@
       <div class="hint">{{ t('source_detail.style_hint') | safe }}</div>
     </div>
     <div class="field-row">
+      <label for="post_format">{{ t('source_detail.format_label') }}</label>
+      <select id="post_format" name="post_format">
+        <option value="post" {{ 'selected' if source.post_format != 'article' else '' }}>
+          {{ t('source_detail.format_post') }}
+        </option>
+        <option value="article" {{ 'selected' if source.post_format == 'article' else '' }}>
+          {{ t('source_detail.format_article') }}
+        </option>
+      </select>
+      <div class="hint">{{ t('source_detail.format_hint') | safe }}</div>
+    </div>
+    <div class="field-row">
       <label for="enrich_mode">{{ t('source_detail.enrich_label') }}</label>
       <select id="enrich_mode" name="enrich_mode">
         <option value="default" {{ 'selected' if source.enrich_sources is none else '' }}>{{ t('source_detail.enrich_default') }}</option>

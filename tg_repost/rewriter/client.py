@@ -41,6 +41,11 @@ _STYLE_SETTING_FIELDS = {
 # из двух списков, снова появился бы в UI с нередактируемым промптом.
 KNOWN_STYLES = tuple(_STYLE_SETTING_FIELDS)
 
+# Промпты, которые НЕ являются стиль-профилями и потому в KNOWN_STYLES не
+# входят (иначе «article» появился бы в выпадающем списке стилей источника,
+# хотя это другая ось: стиль — как писать, формат — куда публиковать).
+_EXTRA_PROMPT_FIELDS = {"article": "article_prompt_template"}
+
 
 @dataclass
 class RewriteResult:
@@ -87,7 +92,7 @@ def resolve_rewrite_template(prompt_name: str) -> str:
     Стиль, которого нет ни в настройках, ни среди файлов, — не ошибка на
     этом уровне: `resolve_style_prompt()` выше уже отфильтровал такие имена.
     """
-    field = _STYLE_SETTING_FIELDS.get(prompt_name)
+    field = _STYLE_SETTING_FIELDS.get(prompt_name) or _EXTRA_PROMPT_FIELDS.get(prompt_name)
     if field:
         configured = str(getattr(get_settings(), field, "")).strip()
         if configured:
@@ -170,6 +175,25 @@ class RewriterClient:
             text=text,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+        )
+
+    async def rewrite_with_prompt(self, prompt: str) -> RewriteResult:
+        """Рерайт по УЖЕ собранному промпту (формат «статья», см.
+        `telegraph/article.py`). Отдельный метод, потому что `rewrite()`
+        собирает промпт сам из стиль-профиля, а у статьи свой шаблон и
+        сборка происходит на стороне вызывающего."""
+        temperature = get_settings().rewrite_temperature
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        usage = response.usage
+        return RewriteResult(
+            text=text,
+            prompt_tokens=usage.prompt_tokens if usage else 0,
+            completion_tokens=usage.completion_tokens if usage else 0,
         )
 
     async def complete(self, prompt: str, *, temperature: float = 0.3) -> str:

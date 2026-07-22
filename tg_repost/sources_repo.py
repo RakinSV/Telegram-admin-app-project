@@ -77,6 +77,23 @@ def set_source_style(source_id: int, style: str) -> bool:
         return True
 
 
+def set_source_post_format(source_id: int, post_format: str) -> bool:
+    """Формат публикации источника: 'post' (обычный) | 'article' (Telegraph).
+
+    'post' пишется как NULL — это дефолт, и хранить его строкой значило бы
+    отличать «явно выбрал обычный пост» от «никогда не трогал», хотя ведут
+    себя они одинаково.
+    """
+    if post_format not in ("post", "article"):
+        raise ValueError(f"Неизвестный формат публикации: {post_format}")
+    with session_scope() as session:
+        source = session.get(Source, source_id)
+        if source is None:
+            return False
+        source.post_format = "article" if post_format == "article" else None
+        return True
+
+
 def set_source_enrich(source_id: int, mode: str) -> bool:
     """F16 — добор источников: mode = 'on' | 'off' | 'default'."""
     mapping: dict[str, bool | None] = {"on": True, "off": False, "default": None}

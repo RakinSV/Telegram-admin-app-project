@@ -27,6 +27,8 @@ from tg_repost.enrichment.link_content import (
 )
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, resolve_style_prompt
+from tg_repost.telegraph.article import publish_article
+from tg_repost.telegraph.client import TelegraphError
 from tg_repost.telegram.moderation_bot import send_pending_for_approval
 from tg_repost.telegram.publisher import publish_post
 
@@ -82,6 +84,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             style = post.source.style_profile if post.source else None
             enrich = enrichment_enabled_for(post.source)
             has_media = bool(post.media_path)
+            post_format = (post.source.post_format if post.source else None) or "post"
 
         prompt_name = resolve_style_prompt(style)
 
@@ -104,6 +107,45 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                     link_image_url = link_content.image_url
                     link_url = link_content.url
                     break
+
+        # Формат «статья»: рерайт пишет лонгрид, он уезжает на Telegraph, а в
+        # канал идёт тизер со ссылкой. Ветка отдельная и ДО генерации
+        # вариантов: у статьи один текст (варианты выбирают между короткими
+        # формулировками поста, а не между версиями лонгрида) и свой промпт.
+        if post_format == "article" and get_settings().telegraph_enabled:
+            try:
+                teaser, article_url, full_text = await publish_article(
+                    rewriter, original, link_text, link_image_url,
+                )
+            except TelegraphError as exc:
+                # Страницы нет — значит и ссылки в посте нет, публиковать
+                # нечего. Помечаем FAILED с внятной причиной, но текст
+                # СОХРАНЯЕМ: работа LLM уже оплачена, владелец увидит её при
+                # модерации и решит сам.
+                logger.error("Статья для поста %s не опубликована: %s", post_id, exc)
+                with session_scope() as session:
+                    post = session.get(Post, post_id)
+                    if post:
+                        post.set_status(PostStatus.FAILED, reason=f"Telegraph: {exc}")
+                continue
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Рерайт статьи для поста %s провален: %s", post_id, exc)
+                with session_scope() as session:
+                    post = session.get(Post, post_id)
+                    if post:
+                        post.set_status(PostStatus.FAILED, reason=f"ошибка статьи: {exc}")
+                continue
+
+            with session_scope() as session:
+                post = session.get(Post, post_id)
+                if post:
+                    post.rewritten_text = teaser
+                    post.telegraph_url = article_url
+                    post.link_source_url = link_url
+                    post.link_content_chars = len(link_text) if link_text else 0
+                    post.set_status(PostStatus.REWRITTEN)
+            logger.info("Пост %s — статья: %s", post_id, article_url)
+            continue
 
         # F06-доп. — N вариантов текста (settings.rewrite_variant_count),
         # владелец выбирает лучший при модерации (бот/веб-админка). Каждый

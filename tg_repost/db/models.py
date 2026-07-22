@@ -141,6 +141,12 @@ class Source(Base):
     # F16: «галочка добора знаний» на источник. NULL — следовать глобальной
     # настройке ENABLE_SOURCE_ENRICHMENT, True/False — переопределить.
     enrich_sources: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Формат публикации: "post" — обычный пост в ленте (как было всегда),
+    # "article" — полная статья на Telegraph, а в канал уходит тизер со
+    # ссылкой. Выбор именно на источнике: у одного канала посты-новости,
+    # у другого — лонгриды с кодом, и один глобальный флаг тут не работает.
+    # NULL/пусто = "post".
+    post_format: Mapped[str | None] = mapped_column(String(16), nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     posts: Mapped[list["Post"]] = relationship(back_populates="source")
@@ -276,6 +282,11 @@ class Post(Base):
     # выполнялся или ни одна ссылка не открылась.
     link_source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     link_content_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # URL статьи на Telegraph, если пост публиковался в формате «статья».
+    # NULL — обычный пост. Хранится, чтобы показать ссылку при модерации и
+    # чтобы повторная публикация не создавала вторую копию страницы.
+    telegraph_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # ID сообщения модерации (чтобы потом убрать кнопки) и опубликованного поста.
     moderation_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
