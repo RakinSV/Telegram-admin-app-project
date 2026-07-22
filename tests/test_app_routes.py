@@ -1235,3 +1235,92 @@ def test_targets_toggle_guardian_syncs_protected_chat_ids():
     with guardian_session_scope() as session:
         session.query(BotConfig).delete()
     invalidate_settings_cache()
+
+
+def test_adding_rss_feeds_turns_polling_on_automatically():
+    """Найдено вживую: ленты добавлены кнопкой набора, а `rss_enabled` остался
+    выключенным — расписание молчало, на модерацию не приходило ничего, и
+    причину было видно только в /settings. Добавить ленту и не хотеть её
+    опрашивать — сценарий, которого не существует."""
+    from tg_repost.config import get_settings, invalidate_settings_cache
+    from tg_repost.webui import settings_store
+
+    client = _client()
+    _bootstrap(client)
+    settings_store.save_setting("rss_enabled", False, "bool")
+    invalidate_settings_cache()
+
+    r = client.post("/sources/rss", data={"feeds": "https://example.com/auto-on.xml"})
+    assert r.status_code in (200, 303)
+
+    invalidate_settings_cache()
+    assert get_settings().rss_enabled is True
+
+
+def test_stuck_post_can_be_returned_to_the_queue():
+    """Пост, упавший на таймауте модели, раньше оставался в failed навсегда:
+    перезапустить его из админки было нечем."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, original_text="упавший", status=PostStatus.NEW,
+        )
+        session.add(post)
+        session.flush()
+        post.set_status(PostStatus.REWRITING)
+        post.set_status(PostStatus.FAILED, reason="ошибка рерайта: Request timed out.")
+        post_id = post.id
+
+    r = client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
+    assert r.status_code == 303
+
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        assert post.status == PostStatus.NEW
+        assert post.status_reason is None, "устаревшая причина не должна висеть после ретрая"
+
+
+def test_post_stuck_in_rewriting_can_also_be_retried():
+    """Процесс перезапустился посреди рерайта — пост завис в `rewriting`, и
+    пайплайн его больше не видит (разбирается только new)."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        post = Post(kind=PostKind.SOURCE, original_text="завис", status=PostStatus.NEW)
+        session.add(post)
+        session.flush()
+        post.set_status(PostStatus.REWRITING)
+        post_id = post.id
+
+    client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
+    with session_scope() as session:
+        assert session.get(Post, post_id).status == PostStatus.NEW
+
+
+def test_retry_does_nothing_for_a_healthy_post():
+    """Кнопки на здоровом посте нет, но роут не должен позволять сбросить
+    уже одобренный/опубликованный пост в начало очереди."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, original_text="норм", rewritten_text="норм",
+            status=PostStatus.PENDING_APPROVAL,
+        )
+        session.add(post)
+        session.flush()
+        post_id = post.id
+
+    client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
+    with session_scope() as session:
+        assert session.get(Post, post_id).status == PostStatus.PENDING_APPROVAL

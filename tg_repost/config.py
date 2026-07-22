@@ -240,6 +240,12 @@ class Settings(BaseSettings):
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
+    # Рерайт по полной статье — длинный промпт, и на медленной/локальной
+    # модели он не укладывался в дефолтный таймаут клиента: пост уходил в
+    # failed с «Request timed out» ещё до модерации. Держим явным и
+    # настраиваемым, а не полагаемся на дефолт библиотеки.
+    openai_timeout_seconds: float = Field(180.0, alias="OPENAI_TIMEOUT_SECONDS")
+    openai_max_retries: int = Field(2, alias="OPENAI_MAX_RETRIES")
     # Промпты рерайта — ВСЕ пять стилей (F15) редактируются прямо в /settings.
     # Раньше поле было только у "default", а news/opinion/instruction/humor
     # читались напрямую из файлов: источник со `style_profile="news"` молча
@@ -473,6 +479,13 @@ class Settings(BaseSettings):
     # выше — можно, например, хотеть 3 текста и 1 обложку). Каждый вариант —
     # отдельный вызов генератора (см. scheduler/jobs.py). 1 = старое поведение.
     cover_variant_count: int = Field(1, alias="COVER_VARIANT_COUNT")
+    # Генерировать обложку, даже если у исходного поста была своя картинка.
+    # Раньше при своём медиа генерация не запускалась вообще, и на модерацию
+    # приходила чужая картинка (обычно с текстом и watermark'ами) вместо
+    # нашей — жалоба «картинки оригинальные прилетают, а не что генерируем».
+    # Оригинал при этом не пропадает: он остаётся ПОСЛЕДНИМ вариантом, и его
+    # видно кнопками ◀▶ при модерации.
+    cover_replace_source_media: bool = Field(True, alias="COVER_REPLACE_SOURCE_MEDIA")
     unsplash_access_key: str = Field("", alias="UNSPLASH_ACCESS_KEY")
     unsplash_api_url: str = Field(
         "https://api.unsplash.com/photos/random", alias="UNSPLASH_API_URL"

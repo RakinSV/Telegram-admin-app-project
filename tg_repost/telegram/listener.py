@@ -43,6 +43,7 @@ from tg_repost.filtering import check_keywords
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import get_rewriter
 from tg_repost.rss.poller import SOURCE_KIND_RSS
+from tg_repost.telegram.message_text import expand_hidden_links
 from tg_repost.text_sanitize import strip_bidi_control_chars
 
 logger = get_logger(__name__)
@@ -261,7 +262,10 @@ async def _process_message(client: TelegramClient, chat: Any, message: Any) -> N
     бэкфилл — из `client.iter_messages()`, дальше путь идентичный (включая
     антибан-джиттер F17 — бэкфилл не должен идти быстрее живого потока)."""
     settings = get_settings()
-    text = message.message or ""
+    # Не `message.message`: там только видимые символы, а ссылка, оформленная
+    # гиперссылкой на слове («Github», «исходники»), живёт отдельно в
+    # entities — и терялась ещё до рерайта, см. message_text.py.
+    text = expand_hidden_links(message.message or "", getattr(message, "entities", None))
 
     # F17 — джиттер: случайная пауза, чтобы не обрабатывать пачку мгновенно.
     await jitter_sleep(

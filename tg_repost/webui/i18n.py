@@ -600,6 +600,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "moderation_detail.source_link": {"ru": "Источник", "en": "Source"},
     "moderation_detail.save_text": {"ru": "Сохранить текст", "en": "Save text"},
     "moderation_detail.approve": {"ru": "✅ Одобрить", "en": "✅ Approve"},
+    "moderation_detail.retry": {"ru": "↻ Повторить рерайт", "en": "↻ Retry rewrite"},
+    "moderation_detail.retry_desc": {
+        "ru": "Пост застрял и сам из этого состояния не выйдет. Кнопка вернёт "
+              "его в начало очереди — рерайт и обложка сделаются заново.",
+        "en": "The post is stuck and will not leave this state on its own. This "
+              "button sends it back to the start of the queue — the rewrite and "
+              "cover are redone from scratch.",
+    },
     "moderation_detail.reject": {"ru": "❌ Отклонить", "en": "❌ Reject"},
     "moderation_detail.back_link": {"ru": "← К очереди модерации", "en": "← Back to moderation queue"},
     "moderation_detail.rewrite_variants_title": {
@@ -1354,6 +1362,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.mtproto_proxy_port.label": {"ru": "MTProto port", "en": "MTProto port"},
     "settings.field.openai_base_url.label": {"ru": "Base URL", "en": "Base URL"},
     "settings.field.openai_model.label": {"ru": "Модель", "en": "Model"},
+    "settings.field.openai_timeout_seconds.label": {
+        "ru": "Таймаут запроса, сек", "en": "Request timeout, sec",
+    },
+    "settings.field.openai_timeout_seconds.hint": {
+        "ru": "Рерайт по полной статье — длинный запрос. Если посты уходят в "
+              "«ошибка рерайта: Request timed out» — поднимай.",
+        "en": "Rewriting from a full article is a long request. If posts end up "
+              "as \"rewrite error: Request timed out\", raise this.",
+    },
+    "settings.field.openai_max_retries.label": {
+        "ru": "Повторов запроса при сбое", "en": "Request retries on failure",
+    },
     "settings.field.fetch_link_content_enabled.label": {
         "ru": "Переходить по ссылке в посте", "en": "Follow link in post",
     },
@@ -1650,6 +1670,21 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.cover_strategy.label": {"ru": "Стратегия", "en": "Strategy"},
     "settings.field.cover_variant_count.label": {
         "ru": "Вариантов обложки на пост", "en": "Cover variants per post",
+    },
+    "settings.field.cover_replace_source_media.label": {
+        "ru": "Своя обложка вместо картинки оригинала",
+        "en": "Own cover instead of the source image",
+    },
+    "settings.field.cover_replace_source_media.hint": {
+        "ru": "Выключено — если у исходного поста была своя картинка, она и "
+              "уйдёт на модерацию (обычно с текстом и watermark'ами). "
+              "Включено — генерируем свою обложку и для таких постов, а "
+              "оригинал остаётся последним вариантом: вернуться к нему можно "
+              "кнопками ◀▶ при модерации.",
+        "en": "Off — if the source post had its own image, that image goes to "
+              "moderation (usually with text and watermarks). On — we generate "
+              "our own cover for those posts too, and the original stays as the "
+              "last variant, reachable with the ◀▶ buttons during moderation.",
     },
     "settings.field.cover_openai_model.label": {
         "ru": "Модель (openai-стратегия)", "en": "Model (openai strategy)",

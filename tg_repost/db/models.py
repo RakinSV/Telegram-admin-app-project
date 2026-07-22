@@ -83,7 +83,12 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
             PostStatus.REWRITING,
         }
     ),
-    PostStatus.REWRITING: frozenset({PostStatus.REWRITTEN, PostStatus.FAILED}),
+    # NEW из rewriting — ручное восстановление поста, зависшего в обработке
+    # (процесс упал/перезапустился посреди рерайта): сам он оттуда уже не
+    # выйдет, пайплайн разбирает только NEW.
+    PostStatus.REWRITING: frozenset(
+        {PostStatus.REWRITTEN, PostStatus.FAILED, PostStatus.NEW}
+    ),
     # failed из rewritten — это «текст готов, но доставить его на модерацию не
     # удалось» (Telegram стабильно отвергает подпись/медиа). Без этого перехода
     # такой пост оставался в rewritten навсегда и загораживал очередь отправки,
@@ -96,8 +101,13 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
         {PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.REWRITTEN}
     ),
     PostStatus.APPROVED: frozenset({PostStatus.POSTED, PostStatus.FAILED}),
-    # failed можно вернуть в обработку (ретрай) — на rewriting.
-    PostStatus.FAILED: frozenset({PostStatus.REWRITING, PostStatus.APPROVED}),
+    # failed можно вернуть в обработку (ретрай): на rewriting (доработать
+    # с текущим текстом) или в самое начало, на new — кнопкой «Повторить» в
+    # админке, когда причина сбоя уже неактуальна (таймаут модели, разовый
+    # сбой сети). Без этого упавший пост не воскрешался вообще ничем.
+    PostStatus.FAILED: frozenset(
+        {PostStatus.REWRITING, PostStatus.APPROVED, PostStatus.NEW}
+    ),
 }
 
 

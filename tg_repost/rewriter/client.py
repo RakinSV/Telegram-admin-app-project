@@ -142,6 +142,12 @@ class RewriterClient:
         self._client = AsyncOpenAI(
             base_url=settings.openai_base_url,
             api_key=settings.openai_api_key,
+            # Явный таймаут вместо дефолтного: рерайт по ПОЛНОЙ статье (F16)
+            # — это длинный промпт, и на медленной модели запрос упирался в
+            # дефолт, пост уходил в failed с «Request timed out» (найдено на
+            # RSS-лентах Ubuntu USN). Значение правится в /settings.
+            timeout=settings.openai_timeout_seconds,
+            max_retries=settings.openai_max_retries,
         )
         self._model = settings.openai_model
         self._embedding_model = settings.openai_embedding_model

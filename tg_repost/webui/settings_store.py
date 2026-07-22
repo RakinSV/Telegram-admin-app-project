@@ -107,6 +107,8 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             # провайдер повисла в БД, рерайт продолжал падать со старой).
             SettingField("openai_base_url", "Base URL", "str", needs_resync=True),
             SettingField("openai_model", "Модель", "str", needs_resync=True),
+            SettingField("openai_timeout_seconds", "Таймаут запроса, сек", "float", needs_resync=True),
+            SettingField("openai_max_retries", "Повторов запроса при сбое", "int", needs_resync=True),
             # Живое поле — RewriterClient.rewrite() читает его из get_settings()
             # на каждый вызов, needs_resync не нужен (в отличие от base_url/
             # model выше, которые сидят в конструкторе клиента).
@@ -290,6 +292,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
                 "cover_strategy", "Стратегия", "str", choices=("unsplash", "comfyui", "openai"),
             ),
             SettingField("cover_variant_count", "Вариантов обложки на пост", "int"),
+            SettingField("cover_replace_source_media", "Своя обложка вместо картинки оригинала", "bool"),
             # Промпт подбора search-запроса (unsplash/comfyui) раньше жил
             # только в файле cover_prompt.txt и не редактировался из админки,
             # хотя именно он решает, что за картинка приедет.

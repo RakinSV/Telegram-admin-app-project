@@ -50,7 +50,7 @@ from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
-from tg_repost.webui import audit, i18n, log_broadcast
+from tg_repost.webui import audit, i18n, log_broadcast, settings_store
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs, restart_telethon_listener
 
@@ -163,7 +163,24 @@ def build_crud_router() -> APIRouter:
         audit.record_audit(
             "rss_sources_add", detail=f"добавлено {added}, уже было {skipped}",
         )
+        await _enable_rss_polling_if_needed(added)
         return RedirectResponse(url="/sources", status_code=303)
+
+    async def _enable_rss_polling_if_needed(added: int) -> None:
+        """Включить опрос лент, если пользователь только что завёл первые.
+
+        Найдено вживую: ленты добавлены кнопкой набора, а `rss_enabled` остался
+        выключенным — расписание молчит, на модерацию не приходит ничего, и
+        причину видно только в /settings. Добавить ленту и НЕ хотеть её
+        опрашивать — сценарий, которого не существует; выключить обратно можно
+        там же, в настройках.
+        """
+        if added <= 0 or get_settings().rss_enabled:
+            return
+        settings_store.save_setting("rss_enabled", True, "bool")
+        audit.record_audit("rss_enabled_auto", detail="включён опрос лент при добавлении источника")
+        logger.info("Опрос RSS включён автоматически: добавлены первые ленты")
+        await resync_scheduler_jobs()
 
     @router.post("/sources/rss/preset/{group_key}")
     async def sources_add_rss_preset(request: Request, group_key: str) -> Response:
@@ -179,6 +196,7 @@ def build_crud_router() -> APIRouter:
         audit.record_audit(
             "rss_preset_add", target=group_key, detail=f"добавлено {added} из {len(group)}",
         )
+        await _enable_rss_polling_if_needed(added)
         return RedirectResponse(url="/sources", status_code=303)
 
     @router.post("/sources")
@@ -564,6 +582,27 @@ def build_crud_router() -> APIRouter:
         del request
         if moderation_repo.edit_post_text(post_id, rewritten_text):
             audit.record_audit("post_edit", target=f"#{post_id}")
+        return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+
+    @router.post("/moderation/{post_id}/retry")
+    async def moderation_retry(request: Request, post_id: int) -> Response:
+        """Вернуть застрявший пост в начало очереди.
+
+        Без этого пост, споткнувшийся о таймаут модели или разовый сбой сети,
+        оставался в `failed` навсегда: перезапустить его из админки было
+        нечем, хотя причина («Request timed out») давно неактуальна. То же и
+        с `rewriting` — если процесс перезапустился посреди рерайта, пост
+        зависал в нём и пайплайн его больше не видел (разбирается только NEW).
+        """
+        del request
+        with session_scope() as session:
+            post = session.get(Post, post_id)
+            if post is None or post.status not in (PostStatus.FAILED, PostStatus.REWRITING):
+                return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
+            post.set_status(PostStatus.NEW)
+            post.status_reason = None
+        audit.record_audit("post_retry", target=f"#{post_id}")
+        logger.info("Пост %s возвращён в очередь рерайта вручную", post_id)
         return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
 
     @router.post("/moderation/{post_id}/select-rewrite/{variant_index}")

@@ -83,7 +83,8 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             original = post.original_text
             style = post.source.style_profile if post.source else None
             enrich = enrichment_enabled_for(post.source)
-            has_media = bool(post.media_path)
+            source_media_path = post.media_path
+            has_media = bool(source_media_path)
             post_format = (post.source.post_format if post.source else None) or "post"
 
         prompt_name = resolve_style_prompt(style)
@@ -188,21 +189,31 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             if block:
                 rewrite_texts = [f"{t}\n{block}" for t in rewrite_texts]
 
-        # Обложка, только если у поста ещё нет своего медиа: сперва пробуем
-        # реальную картинку статьи по ссылке (F16-доп.) — она информативнее
-        # универсальной AI/стоковой, идёт вариантом №1; F18 авто-обложка
-        # добирает остальные N-1 (или все N, если картинки по ссылке не было).
-        cover_count = max(1, min(get_settings().cover_variant_count, _MAX_VARIANTS))
+        # Обложки: сперва реальная картинка статьи по ссылке (F16-доп.) — она
+        # информативнее универсальной AI/стоковой, идёт вариантом №1; F18
+        # авто-обложка добирает остальные N-1.
+        #
+        # Своё медиа у поста больше не отменяет генерацию (настройка
+        # `cover_replace_source_media`): раньше отменяло, и на модерацию
+        # приходила чужая картинка — как правило с текстом и watermark'ами,
+        # то есть ровно то, чего мы в обложках избегаем. Оригинал не теряется,
+        # а становится ПОСЛЕДНИМ вариантом: вернуться к нему можно кнопками
+        # ◀▶ прямо при модерации.
+        settings = get_settings()
+        cover_count = max(1, min(settings.cover_variant_count, _MAX_VARIANTS))
+        generate_over_media = settings.cover_replace_source_media
         cover_paths: list[str] = []
-        if not has_media and link_image_url:
-            link_cover = await _save_link_image(post_id, link_image_url)
-            if link_cover:
-                cover_paths.append(link_cover)
-        if not has_media:
+        if not has_media or generate_over_media:
+            if link_image_url:
+                link_cover = await _save_link_image(post_id, link_image_url)
+                if link_cover:
+                    cover_paths.append(link_cover)
             for _ in range(max(0, cover_count - len(cover_paths))):
                 cover_path = await generate_cover(rewriter, original)
                 if cover_path:
                     cover_paths.append(cover_path)
+        if has_media and cover_paths and source_media_path:
+            cover_paths.append(source_media_path)
 
         with session_scope() as session:
             post = session.get(Post, post_id)

@@ -7,6 +7,19 @@
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
+{# Застрявший пост: failed (сбой рерайта/отправки) или rewriting, брошенный
+   перезапустившимся процессом. Сам он оттуда не выйдет — пайплайн разбирает
+   только new, поэтому нужна ручная кнопка. #}
+{% if post.status.value in ('failed', 'rewriting') %}
+<div class="card" style="border-color: var(--warn);">
+  {% if post.status_reason %}<p style="margin-top:0;">{{ post.status_reason }}</p>{% endif %}
+  <p class="muted" style="font-size:13px;">{{ t('moderation_detail.retry_desc') }}</p>
+  <form method="post" action="/moderation/{{ post.id }}/retry">
+    <button type="submit">{{ t('moderation_detail.retry') }}</button>
+  </form>
+</div>
+{% endif %}
+
 {# Что модель реально прочитала по ссылке. Без этой строки слабый рерайт
    неотличим: «работала по полной статье и всё равно вышло плохо» (чинить
    промпт) против «статью не открыли, переписан один тизер» (чинить доступ
