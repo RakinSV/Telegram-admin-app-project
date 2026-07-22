@@ -587,20 +587,30 @@ def build_crud_router() -> APIRouter:
 
     @router.post("/moderation/{post_id}/retry")
     async def moderation_retry(request: Request, post_id: int) -> Response:
-        """Вернуть застрявший пост в начало очереди.
+        """Вернуть застрявший пост в обработку — с того места, где он упал.
 
         Без этого пост, споткнувшийся о таймаут модели или разовый сбой сети,
         оставался в `failed` навсегда: перезапустить его из админки было
         нечем, хотя причина («Request timed out») давно неактуальна. То же и
         с `rewriting` — если процесс перезапустился посреди рерайта, пост
         зависал в нём и пайплайн его больше не видел (разбирается только NEW).
+
+        Если рерайт уже готов и сорвалась ТОЛЬКО доставка, пост возвращается
+        сразу в `rewritten`: текст и обложки на месте, работа модели уже
+        оплачена, и гнать его на полный проход значило бы заплатить второй
+        раз за тот же результат.
         """
         del request
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post is None or post.status not in (PostStatus.FAILED, PostStatus.REWRITING):
                 return RedirectResponse(url=f"/moderation/{post_id}", status_code=303)
-            post.set_status(PostStatus.NEW)
+            resume_at = (
+                PostStatus.REWRITTEN
+                if post.status == PostStatus.FAILED and (post.rewritten_text or "").strip()
+                else PostStatus.NEW
+            )
+            post.set_status(resume_at)
             post.status_reason = None
         # Иначе пост, уже израсходовавший часть попыток отправки на модерацию,
         # после ручного ретрая получил бы не полный бюджет, а остаток — и мог

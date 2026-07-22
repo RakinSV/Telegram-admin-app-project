@@ -1324,3 +1324,49 @@ def test_retry_does_nothing_for_a_healthy_post():
     client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
     with session_scope() as session:
         assert session.get(Post, post_id).status == PostStatus.PENDING_APPROVAL
+
+
+def test_retry_resumes_delivery_without_paying_for_the_rewrite_again():
+    """Пост, у которого рерайт готов и сорвалась только доставка, обязан
+    вернуться сразу в rewritten: текст и обложки уже оплачены, полный проход
+    заставил бы заплатить второй раз за тот же результат."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        post = Post(kind=PostKind.SOURCE, original_text="ориг", status=PostStatus.NEW)
+        session.add(post)
+        session.flush()
+        post.set_status(PostStatus.REWRITING)
+        post.rewritten_text = "готовый рерайт"
+        post.set_status(PostStatus.REWRITTEN)
+        post.set_status(PostStatus.FAILED, reason="Отправка на модерацию: Timed out")
+        post_id = post.id
+
+    client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        assert post.status == PostStatus.REWRITTEN
+        assert post.rewritten_text == "готовый рерайт", "текст не должен теряться"
+
+
+def test_retry_redoes_everything_when_there_is_no_text_yet():
+    """А вот пост, упавший ДО получения текста, честно идёт на полный проход."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        post = Post(kind=PostKind.SOURCE, original_text="ориг", status=PostStatus.NEW)
+        session.add(post)
+        session.flush()
+        post.set_status(PostStatus.REWRITING)
+        post.set_status(PostStatus.FAILED, reason="ошибка рерайта: Connection error.")
+        post_id = post.id
+
+    client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
+    with session_scope() as session:
+        assert session.get(Post, post_id).status == PostStatus.NEW

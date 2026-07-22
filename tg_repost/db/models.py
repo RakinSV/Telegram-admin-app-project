@@ -113,12 +113,14 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
         {PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.REWRITTEN}
     ),
     PostStatus.APPROVED: frozenset({PostStatus.POSTED, PostStatus.FAILED}),
-    # failed можно вернуть в обработку (ретрай): на rewriting (доработать
-    # с текущим текстом) или в самое начало, на new — кнопкой «Повторить» в
-    # админке, когда причина сбоя уже неактуальна (таймаут модели, разовый
-    # сбой сети). Без этого упавший пост не воскрешался вообще ничем.
+    # failed можно вернуть в обработку (ретрай) кнопкой «Повторить» в админке,
+    # когда причина сбоя уже неактуальна (таймаут модели, разовый сбой сети).
+    # Куда именно — зависит от того, докуда пост дошёл: если рерайт готов и
+    # сорвалась только доставка, он возвращается сразу в `rewritten`, и
+    # заново платить за модель и обложки не нужно; если текста нет — в `new`,
+    # на полный проход. Без этих рёбер упавший пост не воскрешался ничем.
     PostStatus.FAILED: frozenset(
-        {PostStatus.REWRITING, PostStatus.APPROVED, PostStatus.NEW}
+        {PostStatus.REWRITING, PostStatus.APPROVED, PostStatus.NEW, PostStatus.REWRITTEN}
     ),
 }
 
