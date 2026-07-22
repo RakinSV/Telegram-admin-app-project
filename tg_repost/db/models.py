@@ -84,7 +84,14 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
         }
     ),
     PostStatus.REWRITING: frozenset({PostStatus.REWRITTEN, PostStatus.FAILED}),
-    PostStatus.REWRITTEN: frozenset({PostStatus.PENDING_APPROVAL, PostStatus.APPROVED}),
+    # failed из rewritten — это «текст готов, но доставить его на модерацию не
+    # удалось» (Telegram стабильно отвергает подпись/медиа). Без этого перехода
+    # такой пост оставался в rewritten навсегда и загораживал очередь отправки,
+    # см. moderation_bot.send_pending_for_approval. Ретрай — через failed →
+    # rewriting, как и у остальных сбоев.
+    PostStatus.REWRITTEN: frozenset(
+        {PostStatus.PENDING_APPROVAL, PostStatus.APPROVED, PostStatus.FAILED}
+    ),
     PostStatus.PENDING_APPROVAL: frozenset(
         {PostStatus.APPROVED, PostStatus.REJECTED, PostStatus.REWRITTEN}
     ),

@@ -67,10 +67,50 @@ def _create_post(source_id: int, item: FeedItem) -> bool:
     return result.passed
 
 
+async def poll_one_source(
+    source_id: int, feed_url: str, title: str | None = None, *, limit: int | None = None,
+) -> int:
+    """Опросить одну ленту. Возвращает число новых постов.
+
+    Флаг `rss_enabled` здесь СОЗНАТЕЛЬНО не проверяется: это низкоуровневый
+    шаг, и его же зовёт кнопка «Собрать сейчас» в админке — кнопка, которая
+    молча ничего не делает из-за неотмеченной галочки, хуже, чем её
+    отсутствие. Расписание проверяет флаг само (см. `poll_rss_sources`).
+    """
+    settings = get_settings()
+    items = await fetch_feed(feed_url)
+    if not items:
+        return 0
+
+    # Первый опрос новой ленты: в архиве могут лежать тысячи записей
+    # (у MSRC — больше пяти тысяч), и завести их все постами значит
+    # намертво забить очередь модерации и счёт за рерайт. Берём только
+    # несколько свежих, остальное считаем историей.
+    first_run = not _has_any_post(source_id)
+    if limit is None:
+        limit = settings.rss_first_poll_items if first_run else settings.rss_max_items_per_poll
+
+    known = _known_guids(source_id, [i.guid for i in items])
+    fresh = [i for i in items if i.guid not in known][:max(0, limit)]
+
+    if first_run and len(items) > len(fresh):
+        logger.info(
+            "Лента «%s» опрошена впервые: беру %d свежих из %d, остальное — история",
+            title or feed_url, len(fresh), len(items),
+        )
+
+    created = sum(1 for item in fresh if _create_post(source_id, item))
+    if fresh:
+        logger.info(
+            "RSS «%s»: %d новых записей, в очередь попало %d",
+            title or feed_url, len(fresh), created,
+        )
+    return created
+
+
 async def poll_rss_sources() -> int:
     """Опросить все активные RSS-источники. Возвращает число новых постов."""
-    settings = get_settings()
-    if not settings.rss_enabled:
+    if not get_settings().rss_enabled:
         return 0
 
     with session_scope() as session:
@@ -80,39 +120,5 @@ async def poll_rss_sources() -> int:
             .filter(Source.kind == SOURCE_KIND_RSS, Source.is_active.is_(True))
             .all()
         ]
-    if not sources:
-        return 0
 
-    created_total = 0
-    for source_id, feed_url, title in sources:
-        items = await fetch_feed(feed_url)
-        if not items:
-            continue
-
-        # Первый опрос новой ленты: в архиве могут лежать тысячи записей
-        # (у MSRC — больше пяти тысяч), и завести их все постами значит
-        # намертво забить очередь модерации и счёт за рерайт. Берём только
-        # несколько свежих, остальное считаем историей.
-        first_run = not _has_any_post(source_id)
-        limit = (
-            settings.rss_first_poll_items if first_run else settings.rss_max_items_per_poll
-        )
-
-        known = _known_guids(source_id, [i.guid for i in items])
-        fresh = [i for i in items if i.guid not in known][:max(0, limit)]
-
-        if first_run and len(items) > len(fresh):
-            logger.info(
-                "Лента «%s» опрошена впервые: беру %d свежих из %d, остальное — история",
-                title or feed_url, len(fresh), len(items),
-            )
-
-        created = sum(1 for item in fresh if _create_post(source_id, item))
-        created_total += created
-        if fresh:
-            logger.info(
-                "RSS «%s»: %d новых записей, в очередь попало %d",
-                title or feed_url, len(fresh), created,
-            )
-
-    return created_total
+    return sum([await poll_one_source(sid, url, title) for sid, url, title in sources])

@@ -9,10 +9,12 @@ from tg_repost.db.models import Post, PostCoverVariant, PostKind, PostRewriteVar
 from tg_repost.db.session import session_scope
 from tg_repost.telegram.moderation_bot import (
     _CAPTION_LEN,
+    _clip,
     _cycle_cover,
     _cycle_rewrite,
     _format_preview,
     _keyboard,
+    _tg_len,
 )
 
 
@@ -73,8 +75,43 @@ def test_format_preview_caption_mode_is_shorter():
     text_mode = _format_preview(post, for_caption=False)
     caption_mode = _format_preview(post, for_caption=True)
     assert len(caption_mode) < len(text_mode)
-    assert len(caption_mode) <= _CAPTION_LEN + 100  # с запасом на обвязку (заголовок/многоточие)
+    assert _tg_len(caption_mode) <= _CAPTION_LEN
     _clean(post.id)
+
+
+def test_format_preview_counts_header_and_tail_against_the_limit():
+    """Найдено вживую: тело резалось по лимиту, а шапка/источник/список целей
+    добавлялись СВЕРХУ — подпись стабильно вылезала за 1024, Telegram отвечал
+    «Message caption is too long», и пост навсегда застревал в `rewritten`."""
+    post = _make_post(
+        rewritten_text="я" * 5000,
+        source_link="https://example.com/" + "s" * 200,
+    )
+    caption = _format_preview(
+        post, for_caption=True, target_labels=[f"Группа номер {i}" for i in range(40)],
+    )
+    assert _tg_len(caption) <= _CAPTION_LEN
+    assert "Пост #" in caption          # шапка на месте
+    assert "я" in caption               # и текст поста тоже, а не одна обвязка
+    _clean(post.id)
+
+
+def test_format_preview_measures_emoji_the_way_telegram_does():
+    """Telegram считает лимит в UTF-16, а эмодзи вне BMP — это ДВЕ единицы:
+    подпись из 1000 «питоновских» символов эмодзи весит 2000 и не проходит."""
+    post = _make_post(rewritten_text="🔥" * 2000)
+    caption = _format_preview(post, for_caption=True)
+    assert _tg_len(caption) <= _CAPTION_LEN
+    assert len(caption) < _CAPTION_LEN  # питоновских символов заметно меньше
+    _clean(post.id)
+
+
+def test_clip_never_splits_a_surrogate_pair():
+    """Обрыв ровно посередине эмодзи дал бы битую строку (UnicodeDecodeError
+    или «мусорный» символ в подписи)."""
+    clipped = _clip("🔥🔥🔥", 3)  # 3 единицы = полтора эмодзи
+    assert clipped == "🔥"
+    assert _tg_len(clipped) <= 3
 
 
 # --- _cycle_rewrite ---

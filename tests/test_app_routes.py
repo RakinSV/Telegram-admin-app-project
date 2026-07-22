@@ -700,6 +700,35 @@ def test_source_backfill_success_redirects_with_count():
         components.tele_client = None  # не протекать в остальные тесты файла
 
 
+def test_source_backfill_on_rss_polls_the_feed_instead_of_telethon():
+    """Скриншот пользователя: «Собрать» на RSS-источнике давало Internal
+    Server Error — роут гнал URL ленты в Telethon `get_entity`. RSS — это
+    HTTP, и кнопка должна опрашивать ленту, причём без запущенных
+    Telegram-компонентов (они ленте не нужны)."""
+    from unittest.mock import AsyncMock
+
+    from tg_repost import sources_repo
+
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_rss_source("https://example.com/rss-backfill.xml", "Лента")
+
+    with pytest.MonkeyPatch.context() as mp:
+        poll = AsyncMock(return_value=4)
+        mp.setattr("tg_repost.webui.crud_routes.poll_one_source", poll)
+        r = client.post(
+            f"/sources/{src.id}/backfill", data={"limit": "10"}, follow_redirects=False,
+        )
+
+    assert r.status_code == 303, "RSS-источник больше не должен падать в 500"
+    assert r.headers["location"] == f"/sources/{src.id}?backfilled=4"
+    assert poll.await_args.args[1] == "https://example.com/rss-backfill.xml"
+
+    r = client.get(f"/sources/{src.id}?backfilled=4")
+    assert "Новых записей в очередь: 4" in r.text
+    assert "Опросить ленту" in r.text, "формулировки должны быть про ленту, а не про канал"
+
+
 def test_best_times_apply_without_data_redirects_with_applied_zero():
     """F19 доделка: кнопка «Применить сейчас» на /stats/best-times не должна
     падать, если данных недостаточно — просто редиректит без изменений.

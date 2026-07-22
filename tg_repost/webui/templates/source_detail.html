@@ -1,21 +1,27 @@
 {% extends "base.html" %}
-{% block title %}@{{ source.channel_username }} — tg_repost admin{% endblock %}
+{# У RSS в channel_username лежит URL ленты, а не @-имя канала: подставлять
+   перед ним «@» — мусор в заголовке и в подсказках. #}
+{% set is_rss = source.kind == 'rss' %}
+{% set source_name = source.channel_username if is_rss else '@' ~ source.channel_username %}
+{% block title %}{{ source_name }} — tg_repost admin{% endblock %}
 {% block content %}
-<h1>@{{ source.channel_username }}</h1>
+<h1 style="overflow-wrap:anywhere;">{{ source_name }}</h1>
 <p class="muted">{{ source.channel_title or '' }}</p>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if backfilled is not none %}
 <div class="card" style="border-color: var(--ok);">
-  {{ t('source_detail.backfill_success', count=backfilled) }}
+  {{ t('source_detail.backfill_success_rss' if is_rss else 'source_detail.backfill_success', count=backfilled) }}
 </div>
 {% endif %}
 
 <div class="card">
-  <h2 style="margin-top:0;">{{ t('source_detail.backfill_title') }}</h2>
-  <p class="muted" style="font-size:13px;">{{ t('source_detail.backfill_desc', channel=source.channel_username) | safe }}</p>
+  <h2 style="margin-top:0;">{{ t('source_detail.backfill_title_rss' if is_rss else 'source_detail.backfill_title') }}</h2>
+  <p class="muted" style="font-size:13px;">
+    {{ t('source_detail.backfill_desc_rss') if is_rss else t('source_detail.backfill_desc', channel=source.channel_username) | safe }}
+  </p>
   <form method="post" action="/sources/{{ source.id }}/backfill" class="inline-form">
-    <input type="number" name="limit" value="50" min="1" max="200" placeholder="{{ t('source_detail.backfill_limit_placeholder') }}" style="max-width:140px;">
+    <input type="number" name="limit" value="{{ 10 if is_rss else 50 }}" min="1" max="200" placeholder="{{ t('source_detail.backfill_limit_placeholder_rss' if is_rss else 'source_detail.backfill_limit_placeholder') }}" style="max-width:140px;">
     <button type="submit">{{ t('source_detail.backfill_submit') }}</button>
   </form>
 </div>

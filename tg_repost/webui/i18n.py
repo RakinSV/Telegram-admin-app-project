@@ -483,7 +483,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "&lt;container&gt; python -m tg_repost.cli backfill-source "
         "@{channel} --limit N</code>.",
     },
+    "source_detail.backfill_title_rss": {"ru": "Опросить ленту", "en": "Poll the feed"},
+    "source_detail.backfill_desc_rss": {
+        "ru": "Лента опрашивается по расписанию (Настройки → RSS). Кнопка "
+        "делает внеочередной опрос прямо сейчас и заводит новые записи в "
+        "очередь модерации — уже виденные записи не задваиваются. Работает "
+        "независимо от галочки «Опрос лент включён».",
+        "en": "The feed is polled on a schedule (Settings → RSS). This button "
+        "runs an extra poll right now and queues new entries for moderation — "
+        "entries already seen are not duplicated. Works regardless of the "
+        "\"feed polling enabled\" checkbox.",
+    },
     "source_detail.backfill_limit_placeholder": {"ru": "Сколько сообщений", "en": "How many messages"},
+    "source_detail.backfill_limit_placeholder_rss": {"ru": "Сколько записей", "en": "How many entries"},
+    "source_detail.backfill_success_rss": {
+        "ru": "✅ Новых записей в очередь: {count} (уже виденные пропущены — "
+        "это штатно, см. очередь модерации).",
+        "en": "✅ Queued {count} new entries (already-seen ones were skipped — "
+        "that's expected, see the moderation queue).",
+    },
     "source_detail.backfill_submit": {"ru": "Собрать", "en": "Collect"},
     "source_detail.backfill_success": {
         "ru": "✅ Обработано сообщений: {count} (часть могла отфильтроваться/"

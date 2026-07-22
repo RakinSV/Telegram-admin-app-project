@@ -45,6 +45,7 @@ from tg_repost.logging_conf import get_logger
 from tg_repost.tools.backup import restore_backup, run_backup
 from tg_repost.rewriter.client import KNOWN_STYLES, prompt_exists
 from tg_repost.rss import presets as rss_presets
+from tg_repost.rss.poller import SOURCE_KIND_RSS, poll_one_source
 from tg_repost.scheduler.growth import build_growth_report
 from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_recommended_slots
 from tg_repost.scheduler.stats import compute_stats_summary
@@ -377,19 +378,27 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
 
-        client = get_components().tele_client
-        if client is None:
-            return _templates.TemplateResponse(
-                request, "source_detail.html",
-                _source_detail_context(
-                    source, i18n.t("source_detail.error_backfill_not_running"),
-                ),
-                status_code=400,
+        # RSS-лента — это HTTP, а не Telegram: гнать её через Telethon значит
+        # отдать `get_entity("https://…/rss.xml")` и получить 500 (найдено
+        # вживую). Для неё «собрать» — это внеочередной опрос ленты.
+        if source.kind == SOURCE_KIND_RSS:
+            count = await poll_one_source(
+                source.id, source.channel_username, source.channel_title, limit=limit,
             )
+        else:
+            client = get_components().tele_client
+            if client is None:
+                return _templates.TemplateResponse(
+                    request, "source_detail.html",
+                    _source_detail_context(
+                        source, i18n.t("source_detail.error_backfill_not_running"),
+                    ),
+                    status_code=400,
+                )
 
-        from tg_repost.telegram.listener import backfill_source
+            from tg_repost.telegram.listener import backfill_source
 
-        count = await backfill_source(client, source, limit)
+            count = await backfill_source(client, source, limit)
         audit.record_audit(
             "source_backfill", target=f"#{source_id}",
             detail=f"@{source.channel_username} limit={limit} processed={count}",

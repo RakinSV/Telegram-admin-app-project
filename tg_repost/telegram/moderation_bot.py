@@ -46,6 +46,42 @@ _PREVIEW_LEN = 3500
 # Telegram-лимит подписи к фото — 1024 символа, короче лимита текста
 # сообщения (4096) выше. Оставляем запас под многоточие/эмодзи-приписки.
 _CAPTION_LEN = 1000
+# Сколько текста поста показываем даже когда обвязка (шапка, ссылка на
+# источник, список целевых групп) съела почти весь лимит: превью без текста
+# бессмысленно, лучше урезать саму обвязку.
+_MIN_BODY_LEN = 200
+# Сколько раз пробуем отправить пост на модерацию, прежде чем признать
+# отправку невозможной (см. send_pending_for_approval). Счётчик живёт в
+# памяти процесса: после рестарта попытки начинаются заново — это осознанно,
+# рестарт как раз и есть повод перепроверить. Словарь чистится и при успехе,
+# и при уходе поста в failed, поэтому расти неограниченно не может.
+_MAX_SEND_ATTEMPTS = 3
+_send_failures: dict[int, int] = {}
+
+
+def _tg_len(text: str) -> int:
+    """Длина строки так, как её считает Telegram, — в UTF-16 code units.
+
+    Эмодзи вне BMP занимают ДВЕ единицы, поэтому подпись из 1000 «питоновских»
+    символов с эмодзи спокойно перебирает лимит в 1024 и API отвечает
+    `Message caption is too long`. Считать `len()` тут недостаточно.
+    """
+    return len(text.encode("utf-16-le")) // 2
+
+
+def _clip(text: str, budget: int) -> str:
+    """Обрезать до `budget` единиц в мере Telegram, не разорвав эмодзи."""
+    if budget <= 0:
+        return ""
+    if _tg_len(text) <= budget:
+        return text
+    raw = text.encode("utf-16-le")[: budget * 2]
+    while raw:
+        try:
+            return raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            raw = raw[:-2]  # отрезали половину суррогатной пары — сдаём назад
+    return ""
 
 # Статусы ChatMember, при которых бот реально состоит в чате (F08-доп.) —
 # остальные ("left", "kicked", "restricted" без прав) значат, что бота
@@ -121,10 +157,21 @@ def _format_preview(
         targets_line = "\n⚠️ Публиковать некуда — нет активных целевых групп"
     else:
         targets_line = ""
-    body = text[:limit]
-    if len(text) > limit:
-        body += "…"
-    return f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n{body}{src}{targets_line}"
+
+    # Лимит Telegram считается по ВСЕМУ сообщению, а не по одному телу поста.
+    # Раньше тело резалось по `limit`, а шапка, ссылка-источник и список
+    # целевых групп добавлялись сверху — и подпись стабильно вылезала за 1024
+    # («Message caption is too long», пост навсегда застревал в `rewritten`).
+    header = f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n"
+    tail = f"{src}{targets_line}"
+    # Обвязка сама может съесть весь лимит (целевых групп бывает много) —
+    # тогда режем её, а не превью поста.
+    tail = _clip(tail, limit - _tg_len(header) - _MIN_BODY_LEN)
+    budget = limit - _tg_len(header) - _tg_len(tail)
+    body = _clip(text, budget)
+    if body != text:
+        body = _clip(body, budget - 1) + "…"
+    return f"{header}{body}{tail}"
 
 
 async def send_pending_for_approval(application: Application) -> None:
@@ -135,6 +182,14 @@ async def send_pending_for_approval(application: Application) -> None:
     обложка — шлём её как фото с подписью (не текстом с пометкой "есть
     медиа", как раньше), иначе кнопки ◀▶ переключения вариантов обложки
     (F06/F18-доп.) нечего было бы показывать во время модерации.
+
+    Пачка ограничена и берётся от старых к новым, поэтому пост, который
+    Telegram отвергает СТАБИЛЬНО (битый файл обложки, неподъёмный текст),
+    занимал бы место в пачке вечно и загораживал всю очередь за собой —
+    найдено вживую: десяток таких постов, и на модерацию не приходило вообще
+    ничего. После `_MAX_SEND_ATTEMPTS` неудач пост уходит в `failed` с
+    причиной: очередь едет дальше, а поломка видна в админке, а не только
+    в логах.
     """
     settings = get_settings()
     bot = application.bot
@@ -200,12 +255,26 @@ async def send_pending_for_approval(application: Application) -> None:
         except Exception as exc:  # noqa: BLE001
             # sanitize_proxy_error — на случай сбоя подключения через
             # BOT_API_PROXY_URL (см. retry.py::retry_async про ту же находку).
+            reason = sanitize_proxy_error(str(exc))
+            logger.error("Не удалось отправить пост %s на модерацию: %s", post_id, reason)
+            attempts = _send_failures.get(post_id, 0) + 1
+            if attempts < _MAX_SEND_ATTEMPTS:
+                _send_failures[post_id] = attempts
+                continue
+            _send_failures.pop(post_id, None)
+            with session_scope() as session:
+                post = session.get(Post, post_id)
+                if post and post.status == PostStatus.REWRITTEN:
+                    post.set_status(
+                        PostStatus.FAILED, reason=f"Отправка на модерацию: {reason}",
+                    )
             logger.error(
-                "Не удалось отправить пост %s на модерацию: %s",
-                post_id, sanitize_proxy_error(str(exc)),
+                "Пост %s помечен failed после %s неудачных отправок — очередь не блокируется",
+                post_id, attempts,
             )
             continue
 
+        _send_failures.pop(post_id, None)
         with session_scope() as session:
             post = session.get(Post, post_id)
             if post and post.status == PostStatus.REWRITTEN:
