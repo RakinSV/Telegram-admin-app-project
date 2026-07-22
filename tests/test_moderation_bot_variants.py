@@ -5,6 +5,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostCoverVariant, PostKind, PostRewriteVariant, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.telegram.moderation_bot import (
@@ -233,3 +234,57 @@ async def test_cycle_cover_missing_file_logs_and_does_not_edit(tmp_path):
 
     query.edit_message_media.assert_not_called()
     _clean(post.id)
+
+
+# --- устойчивость обработчика нажатий ---
+
+
+async def test_stale_query_ack_does_not_cancel_the_action():
+    """Найдено в логах стенда: Telegram даёт ~15 секунд на подтверждение
+    нажатия, и если бот был занят, `answer()` падал с «Query is too old».
+    Исключение выносило ВЕСЬ обработчик — кнопка выглядела нерабочей, хотя
+    нажатие дошло. Подтверждение — косметика (гасит «часики»), действие
+    обязано выполниться в любом случае."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from telegram.error import BadRequest
+
+    from tg_repost.telegram import moderation_bot
+
+    post = _make_post(rewritten_text="текст")
+    query = AsyncMock()
+    query.data = f"reject:{post.id}"
+    query.answer.side_effect = BadRequest("Query is too old")
+    query.message = SimpleNamespace(photo=None)
+
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=get_settings().tg_owner_user_id),
+    )
+    await moderation_bot._on_callback(update, AsyncMock())
+
+    with session_scope() as session:
+        assert session.get(Post, post.id).status == PostStatus.REJECTED, (
+            "действие должно выполниться, несмотря на протухшее подтверждение"
+        )
+    _clean(post.id)
+
+
+async def test_unparseable_callback_data_is_logged_not_swallowed(caplog):
+    """Кнопка с битым callback_data раньше уходила в тишину — жалобу «не
+    работает» было нечем проверить."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from tg_repost.telegram import moderation_bot
+
+    query = AsyncMock()
+    query.data = "approve:мусор"
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=get_settings().tg_owner_user_id),
+    )
+    with caplog.at_level("WARNING"):
+        await moderation_bot._on_callback(update, AsyncMock())
+    assert any("нечитаемым callback_data" in r.message for r in caplog.records)

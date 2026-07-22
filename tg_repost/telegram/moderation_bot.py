@@ -337,13 +337,30 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.answer("Доступ запрещён", show_alert=True)
         return
 
-    await query.answer()
+    # Подтверждение нажатия — косметика (гасит «часики» на кнопке), и его
+    # неудача НЕ должна отменять само действие. Раньше отменяла: Telegram
+    # даёт на ответ ~15 секунд, и если бот был занят, `answer()` падал с
+    # «Query is too old», исключение выносило весь обработчик — кнопка
+    # выглядела нерабочей, хотя нажатие дошло (найдено в логах стенда).
+    try:
+        await query.answer()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Не удалось подтвердить нажатие (%s) — выполняю действие всё равно: %s",
+            query.data, sanitize_proxy_error(str(exc)),
+        )
 
     action, _, raw_id = query.data.partition(":")
     try:
         post_id = int(raw_id)
     except ValueError:
+        logger.warning("Нажата кнопка с нечитаемым callback_data: %r", query.data)
         return
+
+    # Каждое нажатие — в лог. Без этого действие владельца не оставляло следов
+    # ни при успехе, ни при тихом выходе, и жалобу «кнопка не работает» было
+    # нечем проверить: в логах ровно ничего.
+    logger.info("Кнопка модерации: %s пост %s", action, post_id)
 
     if action == "approve":
         await _approve(query, context, post_id)
@@ -440,6 +457,10 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
     кнопки ◀▶). direction — +1 (▶) или -1 (◀), с зацикливанием."""
     variants = post_variants_repo.list_rewrite_variants(post_id)
     if len(variants) <= 1:
+        logger.info(
+            "Переключение текста поста %s пропущено: вариантов всего %d",
+            post_id, len(variants),
+        )
         return
 
     with session_scope() as session:
@@ -449,6 +470,10 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
         current = post.active_rewrite_variant_index or 0
     new_index = (current + direction) % len(variants)
     if not post_variants_repo.select_rewrite_variant(post_id, new_index):
+        logger.warning(
+            "Вариант текста %d поста %s не выбрался — переключение отменено",
+            new_index, post_id,
+        )
         return
 
     target_labels = resolve_target_labels_for_post(post_id)
@@ -480,6 +505,10 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
     не только подпись."""
     cover_variants = post_variants_repo.list_cover_variants(post_id)
     if len(cover_variants) <= 1:
+        logger.info(
+            "Переключение обложки поста %s пропущено: вариантов всего %d",
+            post_id, len(cover_variants),
+        )
         return
 
     with session_scope() as session:
@@ -503,6 +532,10 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
         return
 
     if not post_variants_repo.select_cover_variant(post_id, new_index):
+        logger.warning(
+            "Вариант обложки %d поста %s не выбрался — переключение отменено",
+            new_index, post_id,
+        )
         return
 
     target_labels = resolve_target_labels_for_post(post_id)
