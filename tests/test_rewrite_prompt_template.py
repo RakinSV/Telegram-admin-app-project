@@ -193,17 +193,37 @@ def test_prompt_requires_keeping_repo_links(style):
     как разрешение выбросить и исходную ссылку тоже."""
     template = resolve_rewrite_template(style)
     assert "GitHub" in template
-    assert "сохрани" in template
+    assert "СОХРАНИ" in template
 
 
 @pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
-def test_link_rules_do_not_contradict_each_other(style):
-    """Запрет на новые ссылки и требование сохранить репозиторий должны
-    стоять рядом: разнесённые по разным блокам, они читаются как конфликт."""
+def test_prompt_strips_channel_promo_links(style):
+    """Ссылка «подпишись на нас» из чужого поста — бесплатная реклама
+    канала-источника в своём канале. Раньше правило её не запрещало, и
+    сохранится она или нет решала модель."""
     template = resolve_rewrite_template(style)
+    assert "t.me" in template
+    assert "УБЕРИ" in template
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_link_rules_are_one_contiguous_block(style):
+    """Три правила про ссылки должны читаться как один список: разнесённые
+    по разным местам промпта, «сохрани репозиторий» и «убери остальные»
+    выглядят как противоречие."""
+    template = resolve_rewrite_template(style)
+    keep = template.index("СОХРАНИ")
+    strip = template.index("УБЕРИ")
     forbid = template.index("Не добавляй ссылок")
-    keep = template.index("GitHub")
-    assert 0 < keep - forbid < 200
+    assert keep < strip < forbid, "порядок правил: сохранить → убрать → не добавлять"
+    assert forbid - keep < 600, "правила разъехались по промпту"
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_link_block_says_it_has_no_other_exceptions(style):
+    """Без явного «других исключений нет» модель охотно придумывает свои —
+    например, оставляет ссылку на первоисточник «для честности»."""
+    assert "других исключений нет" in resolve_rewrite_template(style)
 
 
 def test_github_link_survives_article_url_filter():
