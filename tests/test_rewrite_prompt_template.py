@@ -186,6 +186,35 @@ def test_prompt_forbids_preamble_in_output(style):
     assert "ТОЛЬКО текст поста" in template
 
 
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_prompt_requires_keeping_repo_links(style):
+    """Для поста про инструмент ссылка на репозиторий и есть весь смысл.
+    Правило «не добавляй ссылок» без парного «эти — сохрани» модель читает
+    как разрешение выбросить и исходную ссылку тоже."""
+    template = resolve_rewrite_template(style)
+    assert "GitHub" in template
+    assert "сохрани" in template
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_link_rules_do_not_contradict_each_other(style):
+    """Запрет на новые ссылки и требование сохранить репозиторий должны
+    стоять рядом: разнесённые по разным блокам, они читаются как конфликт."""
+    template = resolve_rewrite_template(style)
+    forbid = template.index("Не добавляй ссылок")
+    keep = template.index("GitHub")
+    assert 0 < keep - forbid < 200
+
+
+def test_github_link_survives_article_url_filter():
+    """Смежная проверка: ссылка на репозиторий не должна отсеиваться как
+    «за этим хостом статьи нет» — README вполне читается и обогащает рерайт."""
+    from tg_repost.enrichment.link_content import extract_article_urls
+
+    post = "Новый инструмент: https://github.com/user/repo\nПодпишись https://t.me/ch"
+    assert extract_article_urls(post) == ["https://github.com/user/repo"]
+
+
 def test_humanize_block_lists_concrete_ai_tells_not_vague_advice():
     """«Пиши живее» модель игнорирует. Работают конкретные запрещённые
     обороты, по которым текст и опознаётся как машинный."""
