@@ -29,7 +29,13 @@ from telegram.ext import (
     filters,
 )
 
-from tg_repost import discovered_chats_repo, invites_repo, post_variants_repo, targets_repo
+from tg_repost import (
+    discovered_chats_repo,
+    invites_repo,
+    languages,
+    post_variants_repo,
+    targets_repo,
+)
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
@@ -120,6 +126,7 @@ def _keyboard(
     rewrite_index: int = 0,
     cover_count: int = 1,
     cover_index: int = 0,
+    rewrite_language: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Клавиатура модерации. F06/F18-доп.: если у поста больше одного
     варианта текста/обложки — добавляются строки ◀/▶ для переключения
@@ -136,7 +143,12 @@ def _keyboard(
         rows.append([
             InlineKeyboardButton("◀", callback_data=f"rwprev:{post_id}"),
             InlineKeyboardButton(
-                f"📝 Текст {rewrite_index + 1}/{rewrite_count}", callback_data=f"noop:{post_id}",
+                # Язык в подписи обязателен, когда вариантов несколько: у поста,
+                # уходящего в разноязычные группы, соседние варианты отличаются
+                # именно языком, и без пометки «Текст 2/4» ничего не говорит.
+                f"📝 {languages.label(rewrite_language)} {rewrite_index + 1}/{rewrite_count}"
+                if rewrite_language else f"📝 Текст {rewrite_index + 1}/{rewrite_count}",
+                callback_data=f"noop:{post_id}",
             ),
             InlineKeyboardButton("▶", callback_data=f"rwnext:{post_id}"),
         ])
@@ -244,6 +256,7 @@ async def send_pending_for_approval(application: Application) -> None:
                 post_id,
                 rewrite_count=rewrite_count, rewrite_index=post.active_rewrite_variant_index or 0,
                 cover_count=cover_count, cover_index=post.active_cover_variant_index or 0,
+                rewrite_language=post_variants_repo.active_rewrite_language(post_id),
             )
 
             # Файл читаем ЗДЕСЬ (пока сессия открыта, `post` не detach-нут) —
@@ -448,6 +461,7 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
             post_id,
             rewrite_count=len(variants), rewrite_index=new_index,
             cover_count=len(cover_variants) or 1, cover_index=post.active_cover_variant_index or 0,
+            rewrite_language=variants[new_index].language,
         )
         preview = _format_preview(
             post, for_caption=bool(query.message and query.message.photo),
@@ -502,6 +516,7 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
             rewrite_count=len(rewrite_variants) or 1,
             rewrite_index=post.active_rewrite_variant_index or 0,
             cover_count=len(cover_variants), cover_index=new_index,
+            rewrite_language=post_variants_repo.active_rewrite_language(post_id),
         )
         preview = _format_preview(post, for_caption=True, target_labels=target_labels)
 
@@ -559,6 +574,7 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             post_id,
             rewrite_count=rewrite_count, rewrite_index=rewrite_index or 0,
             cover_count=cover_count, cover_index=cover_index or 0,
+            rewrite_language=post_variants_repo.active_rewrite_language(post_id),
         ),
     )
 

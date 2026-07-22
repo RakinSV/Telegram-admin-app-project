@@ -52,7 +52,7 @@ def _clean():
 
 
 class _FakeRewriter:
-    async def rewrite(self, post_text, prompt_name="default", link_content=""):
+    async def rewrite(self, post_text, prompt_name="default", link_content="", language=None):
         return RewriteResult(text="рерайт", prompt_tokens=1, completion_tokens=1)
 
 
@@ -158,7 +158,7 @@ class _EmptyRewriter:
         self.text = text
         self.calls = 0
 
-    async def rewrite(self, post_text, prompt_name="default", link_content=""):
+    async def rewrite(self, post_text, prompt_name="default", link_content="", language=None):
         self.calls += 1
         return RewriteResult(text=self.text, prompt_tokens=1, completion_tokens=0)
 
@@ -194,7 +194,7 @@ async def test_one_empty_variant_does_not_sink_the_whole_post(monkeypatch):
         def __init__(self) -> None:
             self.n = 0
 
-        async def rewrite(self, post_text, prompt_name="default", link_content=""):
+        async def rewrite(self, post_text, prompt_name="default", link_content="", language=None):
             self.n += 1
             text = "" if self.n == 1 else "нормальный рерайт"
             return RewriteResult(text=text, prompt_tokens=1, completion_tokens=1)

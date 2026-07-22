@@ -559,6 +559,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "be able to post until you grant that in the channel's settings",
     },
     "targets.col_guardian": {"ru": "Guardian", "en": "Guardian"},
+    "targets.col_language": {"ru": "Язык", "en": "Language"},
+    "targets.language_hint": {
+        "ru": "Язык публикации выбирается у КАЖДОЙ группы: по нему делается "
+              "рерайт, а не по языку исходника. Если один источник направлен "
+              "в группы с разными языками, на каждый пост делается по рерайту "
+              "на каждый язык, и в группу уходит текст её языка. Смена языка "
+              "действует на будущие посты; уже отрерайченные можно вернуть в "
+              "очередь кнопкой «Повторить» на странице поста.",
+        "en": "Publication language is chosen per group: the rewrite follows "
+              "it, not the source's language. If one source feeds groups with "
+              "different languages, each post is rewritten once per language, "
+              "and every group receives the text in its own. Changing the "
+              "language affects future posts; already-rewritten ones can be "
+              "sent back to the queue with the \"Retry\" button on the post page.",
+    },
     "targets.guardian_enable": {"ru": "Включить Guardian", "en": "Enable Guardian"},
     "targets.guardian_disable": {"ru": "Выключить Guardian", "en": "Disable Guardian"},
     "targets.guardian_cannot_moderate": {

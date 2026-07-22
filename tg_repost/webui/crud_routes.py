@@ -40,6 +40,7 @@ from tg_repost.ads import revenue_repo as ads_revenue_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus, parse_chat_ids_csv
 from tg_repost.db.session import session_scope
+from tg_repost import languages
 from tg_repost.export import export_posts_csv, export_posts_json
 from tg_repost.logging_conf import get_logger
 from tg_repost.tools.backup import restore_backup, run_backup
@@ -73,6 +74,10 @@ _templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 _templates.env.globals["t"] = i18n.t
 _templates.env.globals["current_lang"] = i18n.get_current_lang
 _templates.env.globals["humanize_action"] = i18n.humanize_action
+# Название языка по коду — нужно и в галерее вариантов на модерации,
+# и в списке целей: держать перевод кодов в шаблонах значило бы
+# размазать справочник языков по HTML.
+_templates.env.globals["language_label"] = languages.label
 
 
 def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
@@ -441,6 +446,7 @@ def build_crud_router() -> APIRouter:
         return _templates.TemplateResponse(request, "targets.html", {
             "targets": targets, "truncated": len(targets) >= _LIST_LIMIT, "error": None,
             "discovered": discovered_chats_repo.list_pending_discovered_chats(),
+            "languages": languages.LANGUAGES,
         })
 
     @router.post("/targets")
@@ -453,6 +459,7 @@ def build_crud_router() -> APIRouter:
             return _templates.TemplateResponse(request, "targets.html", {
                 "targets": targets_repo.list_targets(),
                 "discovered": discovered_chats_repo.list_pending_discovered_chats(),
+                "languages": languages.LANGUAGES,
                 "error": i18n.t("targets.error_invalid_chat_id"),
             }, status_code=400)
         targets_repo.add_target(chat_id_int, title.strip() or None)
@@ -465,6 +472,21 @@ def build_crud_router() -> APIRouter:
         new_state = targets_repo.toggle_target(target_id)
         if new_state is not None:
             audit.record_audit("target_toggle", target=f"#{target_id}", detail=f"active={new_state}")
+        return RedirectResponse(url="/targets", status_code=303)
+
+    @router.post("/targets/{target_id}/language")
+    async def targets_set_language(
+        request: Request, target_id: int, language: str = Form(...),
+    ) -> Response:
+        """Язык публикации группы. Меняет ТОЛЬКО будущие рерайты: у постов,
+        уже прошедших рерайт, варианты на новый язык не появятся — их можно
+        вернуть в очередь кнопкой «Повторить» на странице поста."""
+        del request
+        applied = targets_repo.set_language(target_id, language)
+        if applied is not None:
+            audit.record_audit(
+                "target_language", target=f"#{target_id}", detail=f"язык={applied}",
+            )
         return RedirectResponse(url="/targets", status_code=303)
 
     @router.post("/targets/{target_id}/toggle-guardian")

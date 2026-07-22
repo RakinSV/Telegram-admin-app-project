@@ -3,6 +3,7 @@
 {% block content %}
 <h1>{{ t('targets.title') }}</h1>
 <p class="muted">{{ t('targets.desc') }} {{ t('targets.add_hint') }}</p>
+<p class="muted" style="font-size:13px; margin-top:-6px;">{{ t('targets.language_hint') }}</p>
 {% if truncated %}<p class="muted">{{ t('common.list_truncated', limit=500) }}</p>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
@@ -46,7 +47,8 @@
   <table>
     <tr>
       <th>ID</th><th>{{ t('targets.col_active') }}</th><th>{{ t('targets.col_chat_id') }}</th>
-      <th>{{ t('targets.col_title') }}</th><th>{{ t('targets.col_guardian') }}</th><th></th>
+      <th>{{ t('targets.col_title') }}</th><th>{{ t('targets.col_language') }}</th>
+      <th>{{ t('targets.col_guardian') }}</th><th></th>
     </tr>
     {% for tg in targets %}
     <tr>
@@ -58,6 +60,19 @@
         {% if tg.can_post == false %}
         <br><span class="error" style="font-size:12px;">⚠️ {{ t('targets.discovered_cannot_post') }}</span>
         {% endif %}
+      </td>
+      {# Язык публикации именно этой группы: по нему делается рерайт, а не по
+         языку исходника. Сохраняется сразу при выборе — отдельная кнопка
+         «применить» на однополевой форме только добавляет лишний клик. #}
+      <td>
+        <form method="post" action="/targets/{{ tg.id }}/language">
+          <select name="language" onchange="this.form.submit();" style="max-width:130px;">
+            {% for code, names in languages.items() %}
+            <option value="{{ code }}" {% if tg.language == code %}selected{% endif %}>{{ names[0] }}</option>
+            {% endfor %}
+          </select>
+          <noscript><button type="submit" class="secondary">OK</button></noscript>
+        </form>
       </td>
       <td>
         <span class="badge {{ 'ok' if tg.use_guardian else 'muted' }}">{{ t('common.yes') if tg.use_guardian else t('common.no') }}</span>
@@ -75,7 +90,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">{{ t('common.empty_list') }}</td></tr>
+    <tr><td colspan="7" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>

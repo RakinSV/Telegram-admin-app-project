@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from tg_repost import crypto
+from tg_repost import crypto, languages
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
@@ -60,6 +60,10 @@ _templates.env.globals["t"] = i18n.t
 _templates.env.globals["SUPPORTED_LANGS"] = i18n.SUPPORTED_LANGS
 _templates.env.globals["current_lang"] = i18n.get_current_lang
 _templates.env.globals["humanize_action"] = i18n.humanize_action
+# Название языка по коду — нужно и в галерее вариантов на модерации,
+# и в списке целей: держать перевод кодов в шаблонах значило бы
+# размазать справочник языков по HTML.
+_templates.env.globals["language_label"] = languages.label
 
 
 class LanguageMiddleware:

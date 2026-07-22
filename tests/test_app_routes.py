@@ -1370,3 +1370,46 @@ def test_retry_redoes_everything_when_there_is_no_text_yet():
     client.post(f"/moderation/{post_id}/retry", follow_redirects=False)
     with session_scope() as session:
         assert session.get(Post, post_id).status == PostStatus.NEW
+
+
+def test_targets_page_offers_a_language_choice():
+    """Язык публикации выбирается у КАЖДОЙ группы — значит на странице целей
+    должен быть выпадающий список, а не только у первой попавшейся."""
+    from tg_repost import targets_repo
+
+    client = _client()
+    _bootstrap(client)
+    targets_repo.add_target(-100500, "Тестовая группа")
+
+    r = client.get("/targets")
+    assert r.status_code == 200
+    assert "Русский" in r.text
+    assert "English" in r.text
+    assert "/language" in r.text
+
+
+def test_target_language_can_be_switched_from_the_admin():
+    from tg_repost import targets_repo
+
+    client = _client()
+    _bootstrap(client)
+    target, _ = targets_repo.add_target(-100600, "Англоязычная")
+
+    r = client.post(f"/targets/{target.id}/language", data={"language": "en"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert targets_repo.get_target(target.id).language == "en"
+
+
+def test_bogus_language_from_a_forged_form_does_not_break_anything():
+    """Единственный источник значений — выпадающий список, падать тут не на чем:
+    неизвестный код тихо приводится к языку по умолчанию."""
+    from tg_repost import targets_repo
+
+    client = _client()
+    _bootstrap(client)
+    target, _ = targets_repo.add_target(-100700, "Группа")
+
+    client.post(f"/targets/{target.id}/language", data={"language": "klingon"},
+                follow_redirects=False)
+    assert targets_repo.get_target(target.id).language == "ru"

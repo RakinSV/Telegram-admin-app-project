@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from tg_repost import languages
 from tg_repost.db.models import TargetGroup
 from tg_repost.db.session import session_scope
 from tg_repost.text_sanitize import strip_bidi_control_chars
@@ -53,6 +54,23 @@ def toggle_target(target_id: int) -> bool | None:
             return None
         target.is_active = not target.is_active
         return target.is_active
+
+
+def set_language(target_id: int, language: str) -> str | None:
+    """Задать язык публикации группы. Возвращает применённый код (нормализо-
+    ванный) либо None, если цели нет.
+
+    Неизвестный код молча приводится к языку по умолчанию, а не отвергается:
+    единственный источник значений — выпадающий список в админке, и падать
+    из-за подделанной формы тут не на чем.
+    """
+    normalized = languages.normalize(language)
+    with session_scope() as session:
+        target = session.get(TargetGroup, target_id)
+        if target is None:
+            return None
+        target.language = normalized
+        return normalized
 
 
 def toggle_guardian(target_id: int) -> bool | None:

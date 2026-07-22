@@ -43,7 +43,7 @@ class _FakeRewriter:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    async def rewrite(self, post_text, prompt_name="default", link_content=""):
+    async def rewrite(self, post_text, prompt_name="default", link_content="", language=None):
         self.calls.append({"post_text": post_text, "link_content": link_content})
         return RewriteResult(text=f"рерайт[{link_content[:20]}]", prompt_tokens=1, completion_tokens=1)
 

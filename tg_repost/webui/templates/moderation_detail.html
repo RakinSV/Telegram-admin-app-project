@@ -55,7 +55,10 @@
     {% for v in rewrite_variants %}
     <div style="border:1px solid var(--border); border-radius:6px; padding:10px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        {# Язык у варианта: у поста, уходящего в разноязычные группы, соседние
+           варианты отличаются именно им, и «Вариант 3» без языка бесполезен. #}
         <strong>{{ t('moderation_detail.variant_n', n=v.variant_index + 1) }}</strong>
+        <span class="badge muted">{{ language_label(v.language) }}</span>
         {% if v.variant_index == (post.active_rewrite_variant_index or 0) %}
           <span class="badge ok">{{ t('moderation_detail.active') }}</span>
         {% else %}

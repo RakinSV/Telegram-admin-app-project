@@ -14,6 +14,7 @@ from pathlib import Path
 
 from telegram.ext import Application
 
+from tg_repost import languages
 from tg_repost.ads.injector import inject_native_ad
 from tg_repost.config import get_settings
 from tg_repost.covers.dispatcher import generate_cover
@@ -30,7 +31,10 @@ from tg_repost.rewriter.client import RewriterClient, resolve_style_prompt
 from tg_repost.telegraph.article import publish_article
 from tg_repost.telegraph.client import TelegraphError
 from tg_repost.telegram.moderation_bot import send_pending_for_approval
-from tg_repost.telegram.publisher import publish_post
+from tg_repost.telegram.publisher import (
+    publish_post,
+    resolve_target_languages_for_post,
+)
 
 logger = get_logger(__name__)
 
@@ -157,30 +161,41 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
         # варианта из нескольких не фатален — фатально только если не вышло
         # получить НИ ОДНОГО (сохраняет прежнее поведение при variant_count=1).
         rewrite_count = max(1, min(get_settings().rewrite_variant_count, _MAX_VARIANTS))
+        # Языки берутся у ЦЕЛЕВЫХ ГРУПП поста: один источник может кормить и
+        # русские, и англоязычные каналы, и одним текстом их не обслужить.
+        # Пустой список (публиковать пока некуда) = один проход без указания
+        # языка, модель ответит на языке исходника — прежнее поведение.
+        target_languages: list[str | None] = list(
+            resolve_target_languages_for_post(post_id)
+        ) or [None]
         rewrite_texts: list[str] = []
         rewrite_tokens_list: list[int] = []
+        rewrite_languages: list[str] = []
         last_exc: Exception | None = None
-        for _ in range(rewrite_count):
-            try:
-                result = await rewriter.rewrite(
-                    original, prompt_name=prompt_name, link_content=link_text,
-                )
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                logger.warning("Вариант рерайта поста %s не удался: %s", post_id, exc)
-                continue
-            # Пустой ответ модели — это НЕ успех, хотя исключения и не было:
-            # модель могла отказаться отвечать или вернуть только пробелы.
-            # Раньше такой «вариант» проходил дальше, пост получал статус
-            # rewritten с пустым текстом, на модерации показывался оригинал
-            # (фолбэк в превью) — и владелец одобрял пустоту, узнавая о
-            # проблеме только когда публикация падала.
-            if not result.text.strip():
-                last_exc = last_exc or ValueError("модель вернула пустой текст")
-                logger.warning("Вариант рерайта поста %s пуст — отбрасываю", post_id)
-                continue
-            rewrite_texts.append(result.text)
-            rewrite_tokens_list.append(result.total_tokens)
+        for language in target_languages:
+            for _ in range(rewrite_count):
+                try:
+                    result = await rewriter.rewrite(
+                        original, prompt_name=prompt_name, link_content=link_text,
+                        language=language,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    logger.warning("Вариант рерайта поста %s не удался: %s", post_id, exc)
+                    continue
+                # Пустой ответ модели — это НЕ успех, хотя исключения и не
+                # было: модель могла отказаться отвечать или вернуть только
+                # пробелы. Раньше такой «вариант» проходил дальше, пост
+                # получал статус rewritten с пустым текстом, на модерации
+                # показывался оригинал (фолбэк в превью) — и владелец одобрял
+                # пустоту, узнавая о проблеме только когда публикация падала.
+                if not result.text.strip():
+                    last_exc = last_exc or ValueError("модель вернула пустой текст")
+                    logger.warning("Вариант рерайта поста %s пуст — отбрасываю", post_id)
+                    continue
+                rewrite_texts.append(result.text)
+                rewrite_tokens_list.append(result.total_tokens)
+                rewrite_languages.append(languages.normalize(language))
 
         if not rewrite_texts:
             logger.error("Рерайт поста %s провален (все варианты): %s", post_id, last_exc)
@@ -240,6 +255,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                     session.add(PostRewriteVariant(
                         post_id=post_id, variant_index=idx, text=text,
                         tokens=rewrite_tokens_list[idx],
+                        language=rewrite_languages[idx],
                     ))
                 if cover_paths:
                     post.media_path = cover_paths[0]

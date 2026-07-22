@@ -37,6 +37,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -44,6 +45,8 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from tg_repost.languages import DEFAULT_LANGUAGE
 
 
 def _utcnow() -> datetime:
@@ -209,6 +212,14 @@ class TargetGroup(Base):
     # из того же апдейта my_chat_member, что и DiscoveredChat (см.
     # targets_repo.sync_can_post, telegram/moderation_bot.py::_on_my_chat_member).
     can_post: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Язык публикации именно ЭТОЙ группы (коды см. tg_repost/languages.py).
+    # Решение «на каком языке говорить» принадлежит аудитории группы, а не
+    # источнику: один источник кормит и русские, и англоязычные каналы.
+    # Следствие для пайплайна: пост, уходящий в группы с разными языками,
+    # требует по рерайту на каждый язык (см. scheduler/jobs.py).
+    language: Mapped[str] = mapped_column(
+        String(8), default=DEFAULT_LANGUAGE, server_default=DEFAULT_LANGUAGE, nullable=False,
+    )
     # F28 (аудит ведения групп): защищать ли этот чат Guardian'ом (капча,
     # антиспам, антирейд, варны) — раньше Guardian был жёстко привязан к
     # ОДНОЙ группе через GUARDIAN_GROUP_ID в .env, независимо от того, что
@@ -438,12 +449,25 @@ class PostRewriteVariant(Base):
     `Post.active_rewrite_variant_index`/`rewritten_text` (денормализовано)."""
 
     __tablename__ = "post_rewrite_variants"
+    # Составной, а не по одному языку: запрос горячего пути — «вариант ЭТОГО
+    # поста на ЭТОМ языке» (публикация подбирает текст на каждую цель), а по
+    # одному языку индекс бесполезен — значений всего два.
+    __table_args__ = (
+        Index("ix_post_rewrite_variants_language", "post_id", "language"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
     variant_index: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
     tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # На каком языке написан ИМЕННО этот вариант. У поста, уходящего в группы
+    # с разными языками, вариантов столько же, сколько языков × настроенное
+    # число вариантов на язык; при публикации в каждую группу подбирается
+    # текст её языка (см. telegram/publisher.py::publish_post).
+    language: Mapped[str] = mapped_column(
+        String(8), default=DEFAULT_LANGUAGE, server_default=DEFAULT_LANGUAGE, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

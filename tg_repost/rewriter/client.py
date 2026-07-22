@@ -14,6 +14,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
+from tg_repost import languages
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger
 
@@ -108,14 +109,22 @@ def resolve_rewrite_template(prompt_name: str) -> str:
 
 def build_rewrite_prompt(
     prompt_name: str, post_text: str, link_content: str = "",
+    language: str | None = None,
 ) -> str:
-    """Собрать финальный промпт: шаблон стиля + анти-ИИ блок.
+    """Собрать финальный промпт: шаблон стиля + анти-ИИ блок + язык.
 
     Анти-ИИ блок (`rewrite_humanize_instructions`) добавляется ОДИН на все
     стили и ПОСЛЕ шаблона — инструкции в конце промпта модель соблюдает
     заметно охотнее, чем закопанные в середину, а держать пять копий одного
     и того же правила в пяти шаблонах означало бы гарантированно разъехавшиеся
     редакции.
+
+    `language` — код языка целевой группы (см. `tg_repost/languages.py`).
+    None означает «не указывать язык вовсе»: модель ответит на языке
+    исходника, как было до появления языка у целей. Указание ставится САМЫМ
+    последним, после анти-ИИ блока: получив материал на одном языке, модель
+    по умолчанию отвечает на нём же, и требование сменить язык должно быть
+    последним, что она читает.
     """
     template = resolve_rewrite_template(prompt_name)
     prompt = template.format(post_text=post_text, link_content=link_content)
@@ -131,6 +140,8 @@ def build_rewrite_prompt(
             # переписанный текст». Добавляется ТОЛЬКО вместе с блоком: без
             # него «ОТВЕТ» и так стоит последним, и дублировать нечего.
             prompt = f"{prompt}\n\n{humanize}\n\n{_OUTPUT_CONTRACT}"
+    if language is not None:
+        prompt = f"{prompt}\n\n{languages.instruction(language)}"
     return prompt
 
 
@@ -154,6 +165,7 @@ class RewriterClient:
 
     async def rewrite(
         self, post_text: str, prompt_name: str = "default", link_content: str = "",
+        language: str | None = None,
     ) -> RewriteResult:
         """Переписать текст поста выбранным стиль-профилем (F06/F15).
 
@@ -161,8 +173,12 @@ class RewriterClient:
         `enrichment/link_content.py`), пусто — если ссылки не было или
         переход не удался, тогда рерайт идёт только по `post_text`, как
         раньше.
+
+        `language` — язык готового поста (код из `tg_repost/languages.py`),
+        берётся у ЦЕЛЕВОЙ группы. None — не указывать язык вовсе, модель
+        ответит на языке исходника (поведение до появления языка у целей).
         """
-        prompt = build_rewrite_prompt(prompt_name, post_text, link_content)
+        prompt = build_rewrite_prompt(prompt_name, post_text, link_content, language)
         # Настройки читаются на КАЖДЫЙ вызов, а не кэшируются в __init__:
         # температура и промпты правятся в /settings живьём, без пересборки
         # клиента (в отличие от base_url/api_key/модели — те в конструкторе
@@ -170,8 +186,9 @@ class RewriterClient:
         temperature = get_settings().rewrite_temperature
 
         logger.debug(
-            "Запрос рерайта: model=%s, стиль=%s, длина=%d, ссылка=%s, t=%.2f",
-            self._model, prompt_name, len(post_text), bool(link_content), temperature,
+            "Запрос рерайта: model=%s, стиль=%s, язык=%s, длина=%d, ссылка=%s, t=%.2f",
+            self._model, prompt_name, language or "исходный", len(post_text),
+            bool(link_content), temperature,
         )
 
         response = await self._client.chat.completions.create(

@@ -35,6 +35,27 @@ def list_cover_variants(post_id: int) -> list[PostCoverVariant]:
         )
 
 
+def active_rewrite_language(post_id: int) -> str | None:
+    """Язык активного варианта текста — для подписи кнопки ◀▶ при модерации.
+
+    None, если вариантов нет вовсе (пост-реклама, дайджест, опрос — у них
+    нет рерайта): тогда подпись остаётся прежней, без языка.
+    """
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        if post is None:
+            return None
+        variant = (
+            session.query(PostRewriteVariant)
+            .filter(
+                PostRewriteVariant.post_id == post_id,
+                PostRewriteVariant.variant_index == (post.active_rewrite_variant_index or 0),
+            )
+            .one_or_none()
+        )
+        return variant.language if variant else None
+
+
 def select_rewrite_variant(post_id: int, variant_index: int) -> bool:
     """Сделать вариант текста активным (копирует в `Post.rewritten_text`).
 

@@ -14,9 +14,16 @@ from pathlib import Path
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
 
-from tg_repost import post_targets_repo
+from tg_repost import languages, post_targets_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostKind, PostStatus, TargetGroup, parse_chat_ids_csv
+from tg_repost.db.models import (
+    Post,
+    PostKind,
+    PostRewriteVariant,
+    PostStatus,
+    TargetGroup,
+    parse_chat_ids_csv,
+)
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
 from tg_repost.retry import retry_async
@@ -98,6 +105,71 @@ def resolve_targets_for_post(post_id: int) -> list[int]:
             )
         return chosen
     return active
+
+
+def _texts_by_language(
+    post_id: int, active_text: str,
+) -> tuple[dict[str, str], dict[int, str]]:
+    """Тексты поста по языкам и язык каждой целевой группы.
+
+    Возвращает (`{язык: текст}`, `{chat_id: язык}`). Для языка АКТИВНОГО
+    варианта текст берётся из `Post.rewritten_text` (аргумент `active_text`),
+    а не из строки варианта: правка владельца через ✏️ пишется именно туда, и
+    читать вариант значило бы опубликовать доправленную версию.
+
+    Языка, для которого варианта нет (цель добавили уже после рерайта, или
+    язык у группы переключили), в словаре не будет — публикация в такую
+    группу уйдёт с активным текстом и предупреждением в логе. Это лучше, чем
+    не опубликовать вовсе: язык поправим ретраем, а молчание канала — нет.
+    """
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        active_index = post.active_rewrite_variant_index if post else None
+        variants = (
+            session.query(PostRewriteVariant)
+            .filter(PostRewriteVariant.post_id == post_id)
+            .order_by(PostRewriteVariant.variant_index)
+            .all()
+        )
+        by_language = {}
+        for v in variants:
+            lang = languages.normalize(v.language)
+            if v.variant_index == active_index or lang not in by_language:
+                by_language[lang] = active_text if v.variant_index == active_index else v.text
+
+        chat_ids = _active_target_chat_ids()
+        rows = (
+            session.query(TargetGroup.chat_id, TargetGroup.language)
+            .filter(TargetGroup.chat_id.in_(chat_ids))
+            .all()
+        ) if chat_ids else []
+    return by_language, {chat_id: languages.normalize(lang) for chat_id, lang in rows}
+
+
+def resolve_target_languages_for_post(post_id: int) -> list[str]:
+    """Языки, на которых нужен текст этого поста — по его целевым группам.
+
+    Возвращает уникальные коды в стабильном порядке (первый = основной: он
+    попадёт в `Post.rewritten_text` и покажется на модерации первым). Пустой
+    список, если публиковать некуда — тогда рерайт делается без указания
+    языка, как раньше, и работа не пропадает: цели могут появиться позже.
+    """
+    chat_ids = resolve_targets_for_post(post_id)
+    if not chat_ids:
+        return []
+    with session_scope() as session:
+        rows = (
+            session.query(TargetGroup.chat_id, TargetGroup.language)
+            .filter(TargetGroup.chat_id.in_(chat_ids))
+            .all()
+        )
+    by_chat = {chat_id: languages.normalize(lang) for chat_id, lang in rows}
+    ordered: list[str] = []
+    for chat_id in chat_ids:  # порядок целей, а не порядок в БД
+        lang = by_chat.get(chat_id, languages.DEFAULT_LANGUAGE)
+        if lang not in ordered:
+            ordered.append(lang)
+    return ordered
 
 
 def resolve_target_labels_for_post(post_id: int) -> list[str]:
@@ -212,6 +284,11 @@ async def publish_post(bot: Bot, post_id: int) -> None:
                 InlineKeyboardButton(settings.post_source_button_label, url=post.source_link),
             ]])
 
+    # Текст на язык каждой цели. Для активного языка берём `text` из поста —
+    # именно он отражает правку владельца через ✏️ (варианты при этом не
+    # переписываются); остальные языки читаются из своих вариантов.
+    text_by_language, target_language = _texts_by_language(post_id, text)
+
     chat_ids = resolve_targets_for_post(post_id)
     if not chat_ids:
         with session_scope() as session:
@@ -237,10 +314,11 @@ async def publish_post(bot: Bot, post_id: int) -> None:
     # детерминированными ("первый по исходному списку chat_ids успешный"),
     # как и при последовательной версии, а не "первый, кто первым ответил".
     async def _send_to_target(chat_id: int) -> tuple[int, int | None, str | None]:
+        target_text = text_by_language.get(target_language.get(chat_id, ""), text)
         try:
             mid = await retry_async(
                 functools.partial(
-                    _send_one, bot, chat_id, text, media_path,
+                    _send_one, bot, chat_id, target_text, media_path,
                     poll_options=poll_options,
                     poll_is_anonymous=poll_is_anonymous,
                     poll_allows_multiple=poll_allows_multiple,
