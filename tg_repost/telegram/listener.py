@@ -29,6 +29,7 @@ from telethon.network.connection.tcpmtproxy import (
     ConnectionTcpMTProxyIntermediate,
     ConnectionTcpMTProxyRandomizedIntermediate,
 )
+from sqlalchemy import or_
 from telethon.sessions import StringSession
 
 from tg_repost import telethon_sessions_repo
@@ -41,6 +42,7 @@ from tg_repost.dedup.semantic import find_similar_post, pack_embedding
 from tg_repost.filtering import check_keywords
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import get_rewriter
+from tg_repost.rss.poller import SOURCE_KIND_RSS
 from tg_repost.text_sanitize import strip_bidi_control_chars
 
 logger = get_logger(__name__)
@@ -189,9 +191,27 @@ def build_extra_clients() -> list[TelegramClient]:
 
 
 def _load_active_source_entities() -> list[str]:
-    """Список username активных источников для подписки на события."""
+    """Список username активных Telegram-источников для подписки на события.
+
+    RSS-ленты сюда НЕ попадают: у них в `channel_username` лежит http-адрес,
+    и Telethon на каждом апдейте пытался разрешить его как канал —
+    `ValueError: Cannot find any entity corresponding to "https://…"` в логах
+    десятками (найдено вживую). Ленты живут своим опросом, см. rss/poller.py.
+    """
     with session_scope() as session:
-        sources = session.query(Source).filter(Source.is_active.is_(True)).order_by(Source.id).all()
+        sources = (
+            session.query(Source)
+            .filter(
+                Source.is_active.is_(True),
+                # У телеграм-источников kind = NULL (заведены до появления
+                # RSS), а `kind != 'rss'` в SQL на NULL даёт NULL — такое
+                # условие отбросило бы как раз настоящие каналы. Поэтому NULL
+                # разрешаем явно.
+                or_(Source.kind.is_(None), Source.kind != SOURCE_KIND_RSS),
+            )
+            .order_by(Source.id)
+            .all()
+        )
         return [s.channel_username for s in sources]
 
 

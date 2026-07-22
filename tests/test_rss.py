@@ -274,3 +274,34 @@ def test_preset_urls_are_unique():
     завышает счётчик на кнопке и путает."""
     urls = [f.url for f in presets.all_presets()]
     assert len(urls) == len(set(urls))
+
+
+# --- изоляция от Telegram-слушателя ---
+
+
+def test_listener_does_not_subscribe_telethon_to_rss_feeds():
+    """Найдено вживую: listener брал ВСЕ активные источники, и Telethon на
+    каждом апдейте пытался разрешить URL ленты как канал —
+    `Cannot find any entity corresponding to "https://…"` десятками в логах.
+    """
+    from tg_repost.telegram.listener import _load_active_source_entities
+
+    sources_repo.add_source("@real_channel")
+    sources_repo.add_rss_source("https://example.com/feed.xml", "Лента")
+
+    assert _load_active_source_entities() == ["real_channel"]
+
+
+def test_listener_keeps_sources_added_before_rss_existed():
+    """У таких источников kind = NULL, а `kind != 'rss'` в SQL на NULL даёт
+    NULL — наивный фильтр выкинул бы как раз настоящие каналы."""
+    from tg_repost.db.models import Source
+    from tg_repost.telegram.listener import _load_active_source_entities
+
+    sources_repo.add_source("@legacy_channel")
+    with session_scope() as s:
+        s.query(Source).filter(Source.channel_username == "@legacy_channel").update(
+            {"kind": None},
+        )
+
+    assert "legacy_channel" in _load_active_source_entities()
