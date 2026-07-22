@@ -118,6 +118,47 @@ def test_openai_cover_prompt_forbids_text_and_asks_for_association():
     assert "literal" in lowered   # ...и явно запрещаем буквальную иллюстрацию
 
 
+def test_openai_cover_prompt_avoids_the_generated_look():
+    """Картинка не должна выглядеть сгенерированной. Слова вроде «cinematic»,
+    «8k», «masterpiece» тянут ровно в тот глянцевый рендер, который
+    опознаётся мгновенно, — их в промпте быть не должно."""
+    template = get_settings().cover_image_prompt_template
+    lowered = template.lower()
+    for banned in ("cinematic", "8k", "masterpiece", "highly detailed", "trending on"):
+        assert banned not in lowered, f"промпт тянет в AI-глянец: {banned}"
+
+
+def test_openai_cover_prompt_asks_for_documentary_imperfection():
+    """Обратное требование: репортажный кадр, зерно, естественный свет —
+    именно этого генераторы сами не делают."""
+    lowered = get_settings().cover_image_prompt_template.lower()
+    for wanted in ("documentary", "grain", "available light", "35mm"):
+        assert wanted in lowered
+
+
+def test_openai_cover_prompt_avoids_faces():
+    """Лица и руки — самый заметный провал генераторов: кадр без людей
+    почти никогда не выдаёт происхождение."""
+    lowered = get_settings().cover_image_prompt_template.lower()
+    assert "no recognisable people" in lowered
+    assert "face not visible" in lowered
+
+
+def test_openai_cover_prompt_avoids_symmetry_and_centering():
+    lowered = get_settings().cover_image_prompt_template.lower()
+    assert "off-centre" in lowered
+    assert "avoid perfect symmetry" in lowered
+
+
+def test_comfyui_negative_covers_both_text_and_generated_look():
+    """Негатив закрывает две группы: текст в кадре и признаки генерации."""
+    negative = get_settings().comfyui_negative_prompt.lower()
+    for banned in ("text", "watermark", "logo"):
+        assert banned in negative
+    for banned in ("3d render", "oversaturated", "neon", "deformed hands", "perfect symmetry"):
+        assert banned in negative
+
+
 def test_cover_search_prompt_forbids_text_bearing_scenes():
     template = get_settings().cover_search_prompt_template
     assert "{post_text}" in template

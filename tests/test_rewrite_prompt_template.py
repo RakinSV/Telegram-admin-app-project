@@ -98,9 +98,30 @@ def test_humanize_block_appended_to_prompt_when_enabled():
     settings_store.save_setting("rewrite_humanize_enabled", True, "bool")
     settings_store.save_setting("rewrite_humanize_instructions", "НЕ ПИШИ КАК БОТ", "str")
     prompt = build_rewrite_prompt("default", "исходный пост", "текст статьи")
-    assert prompt.endswith("НЕ ПИШИ КАК БОТ")
-    assert "исходный пост" in prompt
+    # Блок идёт после шаблона, но не самым последним: за ним повторяется
+    # контракт ответа (см. test_output_contract_is_the_last_thing_the_model_sees).
+    assert "НЕ ПИШИ КАК БОТ" in prompt
+    assert prompt.index("НЕ ПИШИ КАК БОТ") > prompt.index("исходный пост")
     assert "текст статьи" in prompt
+
+
+def test_output_contract_is_the_last_thing_the_model_sees():
+    """Анти-ИИ блок отодвигает секцию «ОТВЕТ» шаблона в середину промпта, а
+    последняя строка соблюдается охотнее всего. Без повтора контракта модель
+    начинает предварять пост фразами вроде «Вот переписанный текст»."""
+    settings_store.save_setting("rewrite_humanize_enabled", True, "bool")
+    settings_store.save_setting("rewrite_humanize_instructions", "НЕ КАК БОТ", "str")
+    prompt = build_rewrite_prompt("default", "пост")
+    last_line = prompt.strip().splitlines()[-1]
+    assert "только готовый текст" in last_line
+    assert prompt.index("НЕ КАК БОТ") < prompt.rindex(last_line)
+
+
+def test_output_contract_not_duplicated_when_humanize_disabled():
+    """Без блока «ОТВЕТ» шаблона и так стоит последним — дублировать нечего."""
+    settings_store.save_setting("rewrite_humanize_enabled", False, "bool")
+    prompt = build_rewrite_prompt("default", "пост")
+    assert "Ещё раз:" not in prompt
 
 
 def test_humanize_block_omitted_when_disabled():
@@ -241,6 +262,63 @@ def test_humanize_block_lists_concrete_ai_tells_not_vague_advice():
     block = get_settings().rewrite_humanize_instructions
     for marker in ("не просто", "стоит отметить", "таким образом", "подводя итог"):
         assert marker in block
+
+
+def test_humanize_block_bans_russian_officialese():
+    """Канцелярит — главный маркер машинного текста именно в русском, и
+    списка запретных оборотов из английской практики для него мало."""
+    block = get_settings().rewrite_humanize_instructions
+    for marker in ("является", "осуществляется", "данный", "в связи с тем"):
+        assert marker in block, f"нет запрета на канцелярит: {marker}"
+
+
+def test_humanize_block_bans_english_calques():
+    block = get_settings().rewrite_humanize_instructions
+    for marker in ("это позволяет", "с точки зрения", "в то время как"):
+        assert marker in block
+
+
+def test_humanize_block_has_positive_instructions_not_only_bans():
+    """Список из одних запретов заставляет модель писать скованно: она занята
+    избеганием, а не письмом. Нужен и раздел «как писать»."""
+    block = get_settings().rewrite_humanize_instructions
+    assert "КАК ПИСАТЬ" in block
+    bans = block.index("ЧЕГО В ТЕКСТЕ БЫТЬ НЕ ДОЛЖНО")
+    positive = block.index("КАК ПИСАТЬ")
+    assert positive > bans, "позитивная часть должна идти после запретов"
+
+
+def test_humanize_block_addresses_structure_not_just_words():
+    """Ровная структура выдаёт машину даже при идеальной лексике."""
+    block = get_settings().rewrite_humanize_instructions
+    assert "РИТМ И СТРУКТУРА" in block
+    assert "симметри" in block
+    assert "Абзацы тоже разной длины" in block
+
+
+@pytest.mark.parametrize("style", ["default", "news", "opinion", "instruction", "humor"])
+def test_prompt_has_no_stray_non_russian_characters(style):
+    """Гвард: при правке промптов дважды проскакивал посторонний иероглиф.
+    В глаза он не бросается, а модель получает мусор посреди инструкции."""
+    _assert_no_stray_scripts(resolve_rewrite_template(style), style)
+
+
+def test_humanize_block_has_no_stray_non_russian_characters():
+    _assert_no_stray_scripts(
+        get_settings().rewrite_humanize_instructions, "humanize",
+    )
+
+
+def _assert_no_stray_scripts(text: str, label: str) -> None:
+    """Разрешены кириллица, латиница, цифры, пунктуация и типографика.
+    Всё остальное (CJK, арабица и прочее) в русских промптах — опечатка."""
+    import unicodedata
+
+    bad = sorted({
+        ch for ch in text
+        if ord(ch) > 0x2500 and not unicodedata.category(ch).startswith(("P", "S", "Z"))
+    })
+    assert not bad, f"{label}: посторонние символы {bad}"
 
 
 def test_humanize_block_never_wraps_a_quoted_phrase_across_lines():

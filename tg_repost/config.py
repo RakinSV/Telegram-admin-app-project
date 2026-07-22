@@ -63,55 +63,94 @@ def _prompt_file_default(name: str) -> str:
 # и юмора, дублировать его в пяти шаблонах — гарантированно разъехавшиеся
 # копии. Список ниже — не абстрактное "пиши живее", а конкретные маркеры
 # LLM-текста, которые и делают рерайт узнаваемо машинным.
-_DEFAULT_HUMANIZE_INSTRUCTIONS = """ЖИВОЙ ТЕКСТ (обязательно)
-Готовый пост не должен читаться как написанный нейросетью. Конкретно:
+_DEFAULT_HUMANIZE_INSTRUCTIONS = """ЖИВОЙ ТЕКСТ — обязательная часть задания
+Текст пишет человек, который разбирается в теме и пишет для своих. Не
+редакция, не пресс-служба, не ассистент.
 
-- Ритм. Меняй длину предложений: короткое рядом с длинным. Ровный ряд фраз
-  одинаковой длины — главный признак машинного текста.
-- Запрещённые конструкции:
-  «не просто X, а Y» · «это не только X, но и Y» · «в мире, где»
-  «давайте разберёмся» · «важно понимать, что» · «речь идёт о том, что»
-- Запрещённые связки:
+РИТМ И СТРУКТУРА
+- Длина предложений должна скакать. Короткое. Потом длинное, с придаточным
+  и уточнением, которое разворачивает мысль. Ровный ряд одинаковых фраз —
+  главный признак машинного текста, важнее любых отдельных слов.
+- Абзацы тоже разной длины. Один абзац в одну строку — нормально и сильно.
+- Не выстраивай симметрию «вступление → три равных пункта → вывод».
+  Задержись на том, что интересно, и проскочи то, что скучно.
+- Не заканчивай пересказом того, что уже сказал.
+
+ЧЕГО В ТЕКСТЕ БЫТЬ НЕ ДОЛЖНО
+- Связки-пустышки:
   «стоит отметить» · «следует подчеркнуть» · «таким образом» · «более того»
   «в заключение» · «подводя итог» · «резюмируя» · «не секрет, что»
-- Никаких перечислений тройками ради ритма («быстро, дёшево и надёжно»).
-- Не открывай пост риторическим вопросом и не закрывай выводом-моралью,
-  которой не было в исходном материале.
-- Не ставь эмодзи в начало каждого абзаца и не делай буллеты одинаковой
-  длины с одинаковой грамматикой. Живой текст неровный.
-- Не подстраховывайся: убери «возможно», «вероятно», «в некоторой степени»
-  там, где в источнике сказано прямо.
-- Не разжёвывай очевидное и не объясняй читателю, что он сейчас прочитает.
-- Конкретика вместо обобщений: число, название и дата вместо
-  «ряд экспертов» · «некоторые компании» · «в последнее время»
-- Тире и двоеточия — по делу, а не как универсальный способ связать части
-  фразы."""
+- Шаблонные конструкции:
+  «не просто X, а Y» · «это не только X, но и Y» · «в мире, где»
+  «давайте разберёмся» · «важно понимать, что» · «речь идёт о том, что»
+- Канцелярит. Глагол вместо отглагольного существительного:
+  «является» → «это» · «осуществляется» → «делается» · «производится»
+  «данный» → «этот» · «в связи с тем что» → «потому что»
+  «в целях» → «чтобы» · «на сегодняшний день» → «сейчас»
+- Кальки с английского:
+  «это позволяет» · «с точки зрения» · «в то время как» · «является ключевым»
+- Пустые усилители: «важный» · «ключевой» · «значительный» · «существенный»
+  «поистине» · «по-настоящему». Если слово можно выбросить без потери
+  смысла — выбрось.
+- Перечисления тройками ради ритма («быстро, дёшево и надёжно»).
+- Страдательный залог там, где известно, кто действует.
+- Оговорки «возможно», «вероятно», «в некоторой степени» там, где в
+  источнике сказано прямо.
+- Эмодзи в начале каждого абзаца и буллеты одинаковой длины с одинаковой
+  грамматикой.
+- Риторический вопрос в первой строке и мораль в последней.
+
+КАК ПИСАТЬ
+- Конкретика вместо обобщений: число, название, версия, дата — вместо
+  «ряд экспертов» · «некоторые компании» · «в последнее время».
+- Называй вещи своими именами и говори прямо. Короткое слово лучше длинного.
+- Если в материале чего-то нет — так и скажи («сроки не назвали»), а не
+  обходи обтекаемой формулировкой.
+- Можно неполное предложение, если оно работает. Можно начать с союза.
+- Пиши то, что человек сказал бы вслух, объясняя это коллеге."""
 
 # Дефолт для `cover_image_prompt_template` (F18-доп., стратегия "openai") —
 # промпт для самого генератора картинок (не для LLM, выбирающего короткий
 # search-запрос, как в cover_search_prompt_template для unsplash/comfyui).
 # `{post_text}` — исходный пост, редактируется в /settings (textarea).
 #
-# "no text" повторено несколько раз и в начале, и в конце намеренно: модели
-# генерации изображений систематически дорисовывают надписи/подписи/логотипы
-# на "новостных" картинках, одного упоминания в середине промпта не хватает.
-# Сцена просится АССОЦИАТИВНАЯ, а не буквальная иллюстрация заголовка —
-# буквальная почти всегда вырождается в коллаж с псевдотекстом.
-_DEFAULT_COVER_IMAGE_PROMPT = """A photorealistic editorial cover photograph. NO TEXT of any kind: no letters, \
-no words, no numbers, no captions, no watermarks, no logos, no brand marks, \
-no street signs, no book covers, no screens showing text, no UI elements.
+# "no text" повторено и в начале, и в конце намеренно: модели генерации
+# систематически дорисовывают надписи/подписи/логотипы на "новостных"
+# картинках, одного упоминания в середине промпта не хватает.
+#
+# Второе требование — картинка не должна выглядеть СГЕНЕРИРОВАННОЙ. У
+# AI-изображений свои маркеры, и просят их обычно сами же промпты:
+#   * «cinematic», «dramatic lighting», «8k», «highly detailed»,
+#     «masterpiece» — тянут в глянцевый переслащённый рендер, который
+#     опознаётся мгновенно; поэтому таких слов здесь нет и быть не должно;
+#   * лица и руки — самый заметный провал генераторов, поэтому люди либо
+#     исключены, либо со спины/фрагментом и без крупного плана;
+#   * идеальная симметрия, центрированный объект, всё в фокусе и
+#     вылизанные текстуры — просим обратное: репортажный кадр, зерно,
+#     естественный (в том числе неидеальный) свет.
+_DEFAULT_COVER_IMAGE_PROMPT = """A single documentary photograph, as if shot on assignment for a magazine. \
+NO TEXT of any kind: no letters, no words, no numbers, no captions, no \
+watermarks, no logos, no brand marks, no street signs, no book covers, no \
+screens displaying text, no user interface.
 
-Subject: a single clean real-world scene that a picture editor would choose to \
-sit above the story below — one object, place, material detail or human \
-gesture that carries the mood of the topic. Suggest the theme by association; \
-never illustrate the headline literally, and never depict recognisable public \
-figures or company branding.
+Subject: one real-world scene associated with the story below — an object, a \
+place, a material detail, a work surface, a moment. Suggest the topic \
+sideways; never illustrate the headline literally. No recognisable people, no \
+public figures, no company branding. If a person is unavoidable, show only \
+hands at work or a figure from behind, small in the frame, face not visible.
 
-Composition: one clear focal point, uncluttered background, generous negative \
-space in the upper third so a caption could sit there, wide 16:9 framing.
+Composition: off-centre subject, one clear focal point, ordinary background \
+with some depth, quiet space in the upper third. Wide 16:9 framing. Avoid \
+perfect symmetry and avoid a centred hero object.
 
-Light and craft: natural directional light, shallow depth of field, realistic \
-colour, no collage, no split screens, no text overlay panels.
+Look: available light, including imperfect light — an overcast window, a \
+single lamp, plain daylight. Natural muted colour, mild film grain, shallow \
+depth of field with a soft background. Shot on 35mm.
+
+Deliberately avoid: glossy advertising polish, HDR, heavy vignette, teal and \
+orange grading, lens flares, hyper-saturation, plastic skin, glowing edges, \
+floating holograms, abstract neon "technology" imagery, collage, split \
+screens, overlay panels.
 
 Story (use only as a source of association, never render its words):
 ---
@@ -434,10 +473,17 @@ class Settings(BaseSettings):
     # модели упорно дорисовывают на «новостных» картинках надписи, подписи и
     # псевдологотипы, а одного «no text» в позитивном промпте не хватает.
     comfyui_negative_node_id: str = Field("", alias="COMFYUI_NEGATIVE_NODE_ID")
+    # Две группы: (1) всё, что даёт текст в кадре, (2) всё, что выдаёт
+    # генерацию — глянец, пережатый цвет, неон, кривые руки и лица.
     comfyui_negative_prompt: str = Field(
         "text, words, letters, numbers, caption, subtitle, watermark, signature, "
         "logo, brand, poster, banner, sign, label, ui, interface, infographic, "
-        "chart, diagram, blurry, low quality, deformed",
+        "chart, diagram, "
+        "cgi, 3d render, digital art, illustration, airbrushed, plastic skin, "
+        "oversaturated, hdr, heavy vignette, teal and orange, lens flare, bloom, "
+        "glowing edges, neon, hologram, futuristic abstract, stock photo smile, "
+        "perfect symmetry, centered composition, "
+        "deformed hands, extra fingers, distorted face, blurry, low quality",
         alias="COMFYUI_NEGATIVE_PROMPT",
     )
     comfyui_poll_attempts: int = Field(60, alias="COMFYUI_POLL_ATTEMPTS")

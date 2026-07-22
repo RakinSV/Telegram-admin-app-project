@@ -46,6 +46,12 @@ KNOWN_STYLES = tuple(_STYLE_SETTING_FIELDS)
 # хотя это другая ось: стиль — как писать, формат — куда публиковать).
 _EXTRA_PROMPT_FIELDS = {"article": "article_prompt_template"}
 
+# Повторяется последней строкой промпта, когда анти-ИИ блок отодвинул секцию
+# «ОТВЕТ» шаблона от конца (см. `build_rewrite_prompt`).
+_OUTPUT_CONTRACT = (
+    "Ещё раз: верни только готовый текст, без вступлений и пояснений."
+)
+
 
 @dataclass
 class RewriteResult:
@@ -118,7 +124,13 @@ def build_rewrite_prompt(
     if settings.rewrite_humanize_enabled:
         humanize = settings.rewrite_humanize_instructions.strip()
         if humanize:
-            prompt = f"{prompt}\n\n{humanize}"
+            # Анти-ИИ блок отодвигает секцию «ОТВЕТ» шаблона из конца в
+            # середину, а именно последняя строка соблюдается охотнее всего.
+            # Поэтому контракт ответа повторяется после него одной строкой —
+            # иначе модель начинает предварять пост фразами вроде «Вот
+            # переписанный текст». Добавляется ТОЛЬКО вместе с блоком: без
+            # него «ОТВЕТ» и так стоит последним, и дублировать нечего.
+            prompt = f"{prompt}\n\n{humanize}\n\n{_OUTPUT_CONTRACT}"
     return prompt
 
 
