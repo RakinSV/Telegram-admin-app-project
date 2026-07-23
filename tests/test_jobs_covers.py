@@ -287,3 +287,50 @@ def test_effective_source_chars_ignores_links_and_boilerplate():
     assert effective_source_chars(stub, "") < 60
     # статья по ссылке добавляет материал
     assert effective_source_chars(stub, "x" * 500) > 500
+
+
+# --- ошибка оплаты у провайдера ---
+
+
+def test_is_billing_error_recognises_402_and_balance_text():
+    from tg_repost.scheduler.jobs import is_billing_error
+
+    class _E402(Exception):
+        status_code = 402
+
+    assert is_billing_error(_E402())
+    assert is_billing_error(RuntimeError("Error code: 402 - Недостаточно средств на балансе"))
+    assert is_billing_error(RuntimeError("insufficient_quota"))
+    assert not is_billing_error(RuntimeError("Connection error."))
+    assert not is_billing_error(TimeoutError("Timed out"))
+
+
+@pytest.mark.asyncio
+async def test_billing_error_leaves_post_new_and_aborts_batch(monkeypatch):
+    """Найдено на живом стенде: баланс провайдера ушёл в минус (HTTP 402), и
+    пайплайн бил по каждому посту, сжигая всю очередь в failed. Теперь ошибка
+    оплаты обрывает пачку, а посты остаются `new` до пополнения счёта."""
+    settings_store.save_setting("rewrite_min_source_chars", 0, "int")
+
+    class _Broke:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def rewrite(self, *a, **k):
+            self.calls += 1
+            raise RuntimeError("Error code: 402 - {'error': 'Недостаточно средств на балансе'}")
+
+    with session_scope() as session:
+        session.query(Post).delete()
+        for i in range(3):
+            session.add(Post(kind=PostKind.SOURCE, original_text=f"пост {i}", status=PostStatus.NEW))
+
+    rewriter = _Broke()
+    await jobs.rewrite_new_posts(rewriter, batch=5)
+
+    with session_scope() as session:
+        # ни один пост не ушёл в failed — все ждут в new
+        assert session.query(Post).filter(Post.status == PostStatus.FAILED).count() == 0
+        assert session.query(Post).filter(Post.status == PostStatus.NEW).count() == 3
+    # пачка оборвана на первом же посте, а не прошлась по всем трём
+    assert rewriter.calls == 1

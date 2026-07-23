@@ -70,6 +70,22 @@ _URL_RE = re.compile(r"https?://\S+")
 _BOILERPLATE_RE = re.compile(r"(?im)^\s*(information published\.?|read more\.?)\s*$")
 
 
+_BILLING_MARKERS = ("недостаточно средств", "insufficient", "quota", "billing", "баланс")
+
+
+def is_billing_error(exc: BaseException) -> bool:
+    """Ошибка оплаты/баланса у провайдера рерайта (HTTP 402 или текст про
+    нехватку средств). Такая ошибка постоянна: она одинаково валит КАЖДЫЙ
+    пост, и продолжать пачку бессмысленно — только сожжём всю очередь в
+    failed, которую потом руками разгребать. Лучше остановиться и оставить
+    посты `new` до пополнения счёта.
+    """
+    if getattr(exc, "status_code", None) == 402:
+        return True
+    text = str(exc).lower()
+    return any(marker in text for marker in _BILLING_MARKERS)
+
+
 def effective_source_chars(original: str, link_text: str) -> int:
     """Сколько ОСМЫСЛЕННОГО материала есть для рерайта.
 
@@ -237,6 +253,20 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                 rewrite_languages.append(languages.normalize(language))
 
         if not rewrite_texts:
+            # Ошибка оплаты (402/нет средств) одинаково валит КАЖДЫЙ пост:
+            # продолжать пачку — только сжечь всю очередь в failed, которую
+            # потом руками разгребать. Возвращаем пост в `new` (дождётся
+            # пополнения счёта) и обрываем весь проход.
+            if last_exc is not None and is_billing_error(last_exc):
+                logger.error(
+                    "Рерайт остановлен: провайдер вернул ошибку оплаты (%s). "
+                    "Пост %s оставлен в очереди до пополнения счёта.", last_exc, post_id,
+                )
+                with session_scope() as session:
+                    post = session.get(Post, post_id)
+                    if post and post.status == PostStatus.REWRITING:
+                        post.set_status(PostStatus.NEW)
+                return
             logger.error("Рерайт поста %s провален (все варианты): %s", post_id, last_exc)
             with session_scope() as session:
                 post = session.get(Post, post_id)
