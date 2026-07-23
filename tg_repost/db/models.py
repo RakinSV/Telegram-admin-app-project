@@ -100,9 +100,11 @@ _ALLOWED_TRANSITIONS: dict[PostStatus, frozenset[PostStatus]] = {
     ),
     # NEW из rewriting — ручное восстановление поста, зависшего в обработке
     # (процесс упал/перезапустился посреди рерайта): сам он оттуда уже не
-    # выйдет, пайплайн разбирает только NEW.
+    # выйдет, пайплайн разбирает только NEW. FILTERED_OUT — страж от выдумок:
+    # уже начав обработку, поняли, что рерайтить нечего (только заголовок,
+    # статья не прочитана), см. scheduler/jobs.py::rewrite_new_posts.
     PostStatus.REWRITING: frozenset(
-        {PostStatus.REWRITTEN, PostStatus.FAILED, PostStatus.NEW}
+        {PostStatus.REWRITTEN, PostStatus.FAILED, PostStatus.NEW, PostStatus.FILTERED_OUT}
     ),
     # failed из rewritten — это «текст готов, но доставить его на модерацию не
     # удалось» (Telegram стабильно отвергает подпись/медиа). Без этого перехода

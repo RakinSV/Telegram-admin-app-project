@@ -28,11 +28,16 @@ def _clean_posts_and_settings():
             session.query(PostRewriteVariant).delete()
             session.query(Post).delete()
             session.query(AppSetting).filter(
-                AppSetting.key.in_(("fetch_link_content_enabled", "rewrite_variant_count")),
+                AppSetting.key.in_((
+                    "fetch_link_content_enabled", "rewrite_variant_count",
+                    "rewrite_min_source_chars",
+                )),
             ).delete(synchronize_session=False)
         invalidate_settings_cache()
 
     _wipe()
+    # Порог материала выключен: эти тесты про переход по ссылке, не про страж.
+    settings_store.save_setting("rewrite_min_source_chars", 0, "int")
     yield
     _wipe()
 

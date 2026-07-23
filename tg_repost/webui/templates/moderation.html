@@ -4,6 +4,16 @@
 <h1>{{ t('moderation.title') }}</h1>
 <p class="muted">{{ t('moderation.desc') }}</p>
 
+{% if posts %}
+<div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+  <span class="muted">{{ t('moderation.pending_count', count=posts|length) }}</span>
+  <form method="post" action="/moderation/reject-all"
+        onsubmit="return confirm('{{ t('moderation.confirm_reject_all', count=posts|length) }}');">
+    <button type="submit" class="danger">{{ t('moderation.reject_all') }}</button>
+  </form>
+</div>
+{% endif %}
+
 <div class="card">
   <table>
     <tr>

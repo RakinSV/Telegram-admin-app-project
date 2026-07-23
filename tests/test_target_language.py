@@ -41,6 +41,7 @@ def _clean():
                 AppSetting.key.in_((
                     "rewrite_variant_count", "fetch_link_content_enabled",
                     "enable_auto_cover", "cover_replace_source_media",
+                    "rewrite_min_source_chars",
                 )),
             ).delete(synchronize_session=False)
         invalidate_settings_cache()
@@ -49,6 +50,8 @@ def _clean():
     settings_store.save_setting("fetch_link_content_enabled", False, "bool")
     settings_store.save_setting("enable_auto_cover", False, "bool")
     settings_store.save_setting("cover_replace_source_media", False, "bool")
+    # Тесты про язык, не про страж от выдумок — порог выключен.
+    settings_store.save_setting("rewrite_min_source_chars", 0, "int")
     yield
     _wipe()
 

@@ -61,6 +61,25 @@ async def approve_post(bot: Bot, post_id: int) -> str:
         return post.status.value if post else "неизвестно"
 
 
+def reject_all_pending(source_id: int | None = None, reason: str = "массовое отклонение") -> int:
+    """Отклонить ВСЕ посты, ждущие модерации. Возвращает число отклонённых.
+
+    `source_id` — ограничить одним источником (None = все). Нужно, когда
+    очередь забита низкосортными постами (например RSS-стабами CVE) и
+    разбирать её по одному в личке бота нереально. Только PENDING_APPROVAL:
+    уже одобренные/опубликованные не трогаем.
+    """
+    with session_scope() as session:
+        query = session.query(Post).filter(Post.status == PostStatus.PENDING_APPROVAL)
+        if source_id is not None:
+            query = query.filter(Post.source_id == source_id)
+        count = 0
+        for post in query.all():
+            post.set_status(PostStatus.REJECTED, reason=reason)
+            count += 1
+        return count
+
+
 def reject_post(post_id: int, reason: str = "отклонено вручную") -> bool:
     """Отклонить пост. False, если не найден.
 

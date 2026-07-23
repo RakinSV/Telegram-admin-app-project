@@ -584,6 +584,18 @@ def build_crud_router() -> APIRouter:
         audit.record_audit("post_approve", target=f"#{post_id}", detail=outcome)
         return RedirectResponse(url="/moderation", status_code=303)
 
+    @router.post("/moderation/reject-all")
+    async def moderation_reject_all(request: Request) -> Response:
+        """Отклонить всю очередь модерации разом. Нужно, когда она забита
+        низкосортными постами и разбирать по одному в личке бота нереально
+        (жалоба: «888 постов, всё не то»). Деструктивно — форма в шаблоне
+        под confirm()."""
+        del request
+        count = moderation_repo.reject_all_pending()
+        audit.record_audit("post_reject_all", detail=f"отклонено {count}")
+        logger.info("Массовое отклонение очереди модерации: %d постов", count)
+        return RedirectResponse(url="/moderation", status_code=303)
+
     @router.post("/moderation/{post_id}/reject")
     async def moderation_reject(request: Request, post_id: int) -> Response:
         try:

@@ -1413,3 +1413,48 @@ def test_bogus_language_from_a_forged_form_does_not_break_anything():
     client.post(f"/targets/{target.id}/language", data={"language": "klingon"},
                 follow_redirects=False)
     assert targets_repo.get_target(target.id).language == "ru"
+
+
+def test_reject_all_clears_the_whole_queue():
+    """Жалоба «888 постов, всё не то»: разобрать очередь по одному в личке
+    бота нереально. Кнопка отклоняет всю очередь разом."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        session.query(Post).delete()
+        for i in range(5):
+            session.add(Post(
+                kind=PostKind.SOURCE, original_text=f"пост {i}",
+                rewritten_text=f"пост {i}", status=PostStatus.PENDING_APPROVAL,
+            ))
+
+    r = client.post("/moderation/reject-all", follow_redirects=False)
+    assert r.status_code == 303
+    with session_scope() as session:
+        assert session.query(Post).filter(Post.status == PostStatus.PENDING_APPROVAL).count() == 0
+        assert session.query(Post).filter(Post.status == PostStatus.REJECTED).count() == 5
+
+
+def test_reject_all_leaves_non_pending_posts_alone():
+    """Уже одобренные/опубликованные массовое отклонение не трогает."""
+    from tg_repost.db.models import Post, PostKind, PostStatus
+    from tg_repost.db.session import session_scope
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        session.query(Post).delete()
+        p_pending = Post(kind=PostKind.SOURCE, original_text="ждёт",
+                         rewritten_text="ждёт", status=PostStatus.PENDING_APPROVAL)
+        p_posted = Post(kind=PostKind.SOURCE, original_text="опубликован",
+                        rewritten_text="опубликован", status=PostStatus.POSTED)
+        session.add_all([p_pending, p_posted])
+        session.flush()
+        posted_id = p_posted.id
+
+    client.post("/moderation/reject-all", follow_redirects=False)
+    with session_scope() as session:
+        assert session.get(Post, posted_id).status == PostStatus.POSTED

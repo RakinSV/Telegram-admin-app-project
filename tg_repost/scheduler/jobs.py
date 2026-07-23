@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from pathlib import Path
 
@@ -64,6 +65,24 @@ async def _save_link_image(post_id: int, image_url: str) -> str | None:
     return str(dest)
 
 
+_URL_RE = re.compile(r"https?://\S+")
+# Служебные строки RSS-стабов, которые не несут смысла, но накручивают длину.
+_BOILERPLATE_RE = re.compile(r"(?im)^\s*(information published\.?|read more\.?)\s*$")
+
+
+def effective_source_chars(original: str, link_text: str) -> int:
+    """Сколько ОСМЫСЛЕННОГО материала есть для рерайта.
+
+    Из оригинала выкидываются ссылки и служебные строки-заглушки («Information
+    published»): у RSS-стаба CVE это почти весь объём, и без вычистки такой
+    заголовок ложно выглядел бы «достаточным». `link_text` (текст статьи по
+    ссылке) добавляется как есть — если статью прочитали, материала заведомо
+    хватает.
+    """
+    stripped = _BOILERPLATE_RE.sub("", _URL_RE.sub("", original or ""))
+    return len("".join(stripped.split())) + len((link_text or "").strip())
+
+
 async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
     """Рерайтнуть посты со статусом `new` (F06)."""
     with session_scope() as session:
@@ -112,6 +131,26 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                     link_image_url = link_content.image_url
                     link_url = link_content.url
                     break
+
+        # Страж от выдумок: если по ссылке НЕ прочитана статья, а в оригинале
+        # только заголовок — рерайтить нечего, и модель начинает изобретать
+        # (см. rewrite_min_source_chars). Отсеиваем ДО обращения к модели: и
+        # деньги на выдумку не тратятся, и очередь не засоряется. Порог 0 —
+        # защита выключена.
+        min_source = get_settings().rewrite_min_source_chars
+        if min_source > 0 and effective_source_chars(original, link_text) < min_source:
+            logger.info(
+                "Пост %s отсеян: недостаточно материала для рерайта "
+                "(только заголовок, статья по ссылке не прочитана)", post_id,
+            )
+            with session_scope() as session:
+                post = session.get(Post, post_id)
+                if post:
+                    post.set_status(
+                        PostStatus.FILTERED_OUT,
+                        reason="недостаточно материала: только заголовок, статья не прочитана",
+                    )
+            continue
 
         # Формат «статья»: рерайт пишет лонгрид, он уезжает на Telegraph, а в
         # канал идёт тизер со ссылкой. Ветка отдельная и ДО генерации

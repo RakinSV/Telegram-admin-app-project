@@ -591,6 +591,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Posts awaiting a manual decision — the same ones sent to "
         "the owner in Telegram with ✅/❌/✏️ buttons.",
     },
+    "moderation.pending_count": {
+        "ru": "В очереди: {count}", "en": "In queue: {count}",
+    },
+    "moderation.reject_all": {
+        "ru": "❌ Отклонить всё", "en": "❌ Reject all",
+    },
+    "moderation.confirm_reject_all": {
+        "ru": "Отклонить ВСЕ {count} постов из очереди? Отменить нельзя.",
+        "en": "Reject ALL {count} posts in the queue? This cannot be undone.",
+    },
     "moderation.empty": {"ru": "Очередь пуста", "en": "Queue is empty"},
     "moderation.col_kind": {"ru": "Тип", "en": "Kind"},
     "moderation.col_text": {"ru": "Текст", "en": "Text"},
@@ -1388,6 +1398,21 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.field.openai_max_retries.label": {
         "ru": "Повторов запроса при сбое", "en": "Request retries on failure",
+    },
+    "settings.field.rewrite_min_source_chars.label": {
+        "ru": "Минимум материала для рерайта", "en": "Minimum source material to rewrite",
+    },
+    "settings.field.rewrite_min_source_chars.hint": {
+        "ru": "Сколько осмысленного текста (без ссылок и служебных строк) нужно, "
+              "чтобы запускать рерайт. Если по ссылке не прочитана статья и в "
+              "оригинале только заголовок (CVE-стабы из RSS) — рерайтить нечего, "
+              "и модель начинает ВЫДУМЫВАТЬ. Такие посты отсеиваются до модели. "
+              "0 — выключить защиту.",
+        "en": "How much meaningful text (excluding links and boilerplate) is "
+              "required before rewriting. If the article wasn't fetched and the "
+              "original is only a title (RSS CVE stubs), there's nothing to "
+              "rewrite and the model starts INVENTING. Such posts are filtered "
+              "out before the model. 0 disables the guard.",
     },
     "settings.field.fetch_link_content_enabled.label": {
         "ru": "Переходить по ссылке в посте", "en": "Follow link in post",

@@ -109,6 +109,7 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("openai_model", "Модель", "str", needs_resync=True),
             SettingField("openai_timeout_seconds", "Таймаут запроса, сек", "float", needs_resync=True),
             SettingField("openai_max_retries", "Повторов запроса при сбое", "int", needs_resync=True),
+            SettingField("rewrite_min_source_chars", "Минимум материала для рерайта", "int"),
             # Живое поле — RewriterClient.rewrite() читает его из get_settings()
             # на каждый вызов, needs_resync не нужен (в отличие от base_url/
             # model выше, которые сидят в конструкторе клиента).

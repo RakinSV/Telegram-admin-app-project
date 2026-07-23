@@ -30,6 +30,7 @@ from tg_repost.webui import settings_store
 _SETTING_KEYS = (
     "cover_replace_source_media", "cover_variant_count",
     "rewrite_variant_count", "fetch_link_content_enabled",
+    "rewrite_min_source_chars",
 )
 
 
@@ -47,6 +48,9 @@ def _clean():
 
     _wipe()
     settings_store.save_setting("fetch_link_content_enabled", False, "bool")
+    # По умолчанию порог выключен: эти тесты про обложки/пустой ответ, а не
+    # про страж от выдумок (у него свои тесты, они порог включают явно).
+    settings_store.save_setting("rewrite_min_source_chars", 0, "int")
     yield
     _wipe()
 
@@ -205,3 +209,81 @@ async def test_one_empty_variant_does_not_sink_the_whole_post(monkeypatch):
         post = session.get(Post, post_id)
         assert post.status == PostStatus.REWRITTEN
         assert post.rewritten_text == "нормальный рерайт"
+
+
+# --- страж от выдумок на тонком материале ---
+
+
+@pytest.mark.asyncio
+async def test_bare_title_without_article_is_filtered_not_hallucinated(monkeypatch):
+    """Найдено на живом стенде: RSS-стаб CVE («CVE-XXXX ... Information
+    published» + ссылка) раздувался моделью в абзацы выдуманных последствий.
+    Для канала по безопасности это публикация выдуманных фактов. Теперь такой
+    пост отсеивается ДО модели, а не рерайтится."""
+    settings_store.save_setting("rewrite_min_source_chars", 200, "int")
+    settings_store.save_setting("fetch_link_content_enabled", False, "bool")
+    called = {"n": 0}
+
+    class _MustNotRewrite:
+        async def rewrite(self, *a, **k):
+            called["n"] += 1
+            return RewriteResult(text="ВЫДУМКА", prompt_tokens=1, completion_tokens=1)
+
+    with session_scope() as session:
+        post = Post(
+            kind=PostKind.SOURCE, status=PostStatus.NEW,
+            original_text=(
+                "CVE-2026-63809 bpf: use kvfree() for replaced sysctl write buffer\n\n"
+                "Information published.\n\n"
+                "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-63809"
+            ),
+        )
+        session.add(post)
+        session.flush()
+        post_id = post.id
+
+    await jobs.rewrite_new_posts(_MustNotRewrite(), batch=5)
+
+    assert called["n"] == 0, "модель не должна вызываться на голом заголовке"
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        assert post.status == PostStatus.FILTERED_OUT
+        assert "материал" in (post.status_reason or "")
+
+
+@pytest.mark.asyncio
+async def test_real_article_passes_the_guard(monkeypatch):
+    """Обратная сторона: когда статья прочитана, порог не мешает."""
+    settings_store.save_setting("rewrite_min_source_chars", 200, "int")
+    settings_store.save_setting("cover_replace_source_media", False, "bool")
+    _fake_generator(monkeypatch)
+
+    async def _fetch(url):
+        from tg_repost.enrichment.link_content import LinkContent
+        return LinkContent(url=url, title="t", text="настоящая статья " * 40, image_url=None)
+
+    monkeypatch.setattr(jobs, "fetch_link_content", _fetch)
+    settings_store.save_setting("fetch_link_content_enabled", True, "bool")
+
+    with session_scope() as session:
+        post = Post(kind=PostKind.SOURCE, status=PostStatus.NEW,
+                    original_text="Короткий тизер https://example.com/article")
+        session.add(post)
+        session.flush()
+        post_id = post.id
+
+    await jobs.rewrite_new_posts(_FakeRewriter(), batch=5)
+
+    with session_scope() as session:
+        assert session.get(Post, post_id).status == PostStatus.REWRITTEN
+
+
+def test_effective_source_chars_ignores_links_and_boilerplate():
+    from tg_repost.scheduler.jobs import effective_source_chars
+
+    stub = ("CVE-2026-1 bpf: use kvfree()\n\nInformation published.\n\n"
+            "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-1")
+    # осмысленного текста мало — только заголовок, без ссылки и «Information published»
+    assert effective_source_chars(stub, "") < 60
+    # статья по ссылке добавляет материал
+    assert effective_source_chars(stub, "x" * 500) > 500
