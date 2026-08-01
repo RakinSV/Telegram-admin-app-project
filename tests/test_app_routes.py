@@ -429,6 +429,24 @@ def test_secrets_reveal_records_audit_entry():
     assert entries[0].detail is None  # НИКОГДА не хранить само значение в аудит-логе
 
 
+def test_editorial_section_renders_on_settings():
+    """Редакция из двух агентов (F40) видна и правится в /settings — галочка
+    включения, лимит раундов, веб-сверка и оба промпта. Регресс против
+    «поле есть в Settings, но забыто в админке»."""
+    client = _client()
+    _bootstrap(client)
+    html = client.get("/settings").text
+    start = html.find('id="editorial"')
+    assert start != -1
+    section = html[start: html.find('<div class="settings-group"', start + 10)]
+    for name in (
+        "editorial_enabled", "editorial_max_rounds",
+        "editorial_web_verify_enabled", "editorial_web_verify_max_claims",
+        "editorial_prompt_template", "editorial_revise_prompt_template",
+    ):
+        assert f'name="{name}"' in section, f"нет контрола {name} в секции редакции"
+
+
 def test_secrets_reveal_unknown_key_redirects():
     client = _client()
     _bootstrap(client)

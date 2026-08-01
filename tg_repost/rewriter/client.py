@@ -24,6 +24,23 @@ logger = get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# Маркеры ошибки оплаты/баланса в тексте исключения провайдера рерайта.
+_BILLING_MARKERS = ("недостаточно средств", "insufficient", "quota", "billing", "баланс")
+
+
+def is_billing_error(exc: BaseException) -> bool:
+    """Ошибка оплаты/баланса у провайдера рерайта (HTTP 402 или текст про
+    нехватку средств). Такая ошибка постоянна: она одинаково валит КАЖДЫЙ
+    пост, и продолжать пачку бессмысленно — только сожжём всю очередь в
+    failed, которую потом руками разгребать. Лучше остановиться и оставить
+    посты `new` до пополнения счёта. Живёт здесь (а не в scheduler/jobs.py),
+    чтобы и editorial-цикл мог отличить 402 от обычного сбоя без импорта
+    планировщика (иначе цикл jobs→editorial→jobs)."""
+    if getattr(exc, "status_code", None) == 402:
+        return True
+    text = str(exc).lower()
+    return any(marker in text for marker in _BILLING_MARKERS)
+
 # Имя настройки с текстом промпта для каждого стиль-профиля (F15). Раньше поле
 # было только у "default", а остальные стили читались прямо из файлов —
 # источник со `style_profile="news"` молча игнорировал промпт, отредактированный
@@ -47,7 +64,14 @@ KNOWN_STYLES = tuple(_STYLE_SETTING_FIELDS)
 # Промпты, которые НЕ являются стиль-профилями и потому в KNOWN_STYLES не
 # входят (иначе «article» появился бы в выпадающем списке стилей источника,
 # хотя это другая ось: стиль — как писать, формат — куда публиковать).
-_EXTRA_PROMPT_FIELDS = {"article": "article_prompt_template"}
+# editor/journalist_revise — служебные промпты редакции из двух агентов
+# (F40, см. rewriter/editorial.py), тоже не стили: их формат другой и они
+# не выбираются на источнике.
+_EXTRA_PROMPT_FIELDS = {
+    "article": "article_prompt_template",
+    "editor": "editorial_prompt_template",
+    "journalist_revise": "editorial_revise_prompt_template",
+}
 
 # Повторяется последней строкой промпта, когда анти-ИИ блок отодвинул секцию
 # «ОТВЕТ» шаблона от конца (см. `build_rewrite_prompt`).
@@ -223,12 +247,21 @@ class RewriterClient:
             completion_tokens=completion_tokens,
         )
 
-    async def rewrite_with_prompt(self, prompt: str) -> RewriteResult:
+    async def rewrite_with_prompt(
+        self, prompt: str, *, temperature: float | None = None,
+    ) -> RewriteResult:
         """Рерайт по УЖЕ собранному промпту (формат «статья», см.
-        `telegraph/article.py`). Отдельный метод, потому что `rewrite()`
-        собирает промпт сам из стиль-профиля, а у статьи свой шаблон и
-        сборка происходит на стороне вызывающего."""
-        temperature = get_settings().rewrite_temperature
+        `telegraph/article.py`; рецензия/правка редакции, см.
+        `rewriter/editorial.py`). Отдельный метод, потому что `rewrite()`
+        собирает промпт сам из стиль-профиля, а тут шаблон и сборка — на
+        стороне вызывающего.
+
+        `temperature=None` — брать `rewrite_temperature` из настроек (прежнее
+        поведение). Явное значение нужно рецензии редактора: фактчек должен
+        быть детерминированным, а не «творческим» на 0.8."""
+        temperature = (
+            temperature if temperature is not None else get_settings().rewrite_temperature
+        )
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],

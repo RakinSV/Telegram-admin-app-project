@@ -322,6 +322,37 @@ class Settings(BaseSettings):
     # (единственный текст, без кнопок переключения вариантов).
     rewrite_variant_count: int = Field(1, alias="REWRITE_VARIANT_COUNT")
 
+    # --- F40: редакция из двух агентов (профессиональный рерайт) ---
+    # Вместо одного присеста «написал начисто» — цикл журналист→редактор→
+    # правка (см. rewriter/editorial.py). Журналист пишет черновик, редактор-
+    # фактчекер сверяет его с источниками (пост + статья по ссылке), пишет
+    # замечания и вердикт, журналист переписывает по замечаниям. Заметно
+    # дороже по токенам: 1 раунд правки = ТРИ вызова LLM на вариант вместо
+    # одного. Поэтому — выключатель и лимит раундов настройкой.
+    editorial_enabled: bool = Field(True, alias="EDITORIAL_ENABLED")
+    # Максимум раундов правки. 0 = фактически как раньше (только черновик, без
+    # рецензии). 1 = черновик+рецензия+правка (3 вызова). 2 = до пяти вызовов.
+    editorial_max_rounds: int = Field(1, alias="EDITORIAL_MAX_ROUNDS")
+    # Веб-сверка спорных фактов: редактор помечает утверждения, требующие
+    # проверки, и мы догоняем их поиском (SearXNG/Brave, тот же клиент, что F16
+    # добор источников), находки идут журналисту на правку. Без настроенного
+    # поиска шаг тихо пропускается. Отдельно от faithfulness-проверки, которая
+    # работает всегда — сверка с самими скачанными источниками бесплатна.
+    editorial_web_verify_enabled: bool = Field(True, alias="EDITORIAL_WEB_VERIFY_ENABLED")
+    # Потолок веб-запросов на пост (каждый помеченный факт = один поиск) —
+    # чтобы редактор с длинным списком не устроил лавину запросов.
+    editorial_web_verify_max_claims: int = Field(3, alias="EDITORIAL_WEB_VERIFY_MAX_CLAIMS")
+    # Промпты редакции (файлы rewriter/prompts/*.txt, редактируются в /settings,
+    # как и стиль-промпты выше). Пусто = откат на файл.
+    editorial_prompt_template: str = Field(
+        default_factory=lambda: _prompt_file_default("editor"),
+        alias="EDITORIAL_PROMPT_TEMPLATE",
+    )
+    editorial_revise_prompt_template: str = Field(
+        default_factory=lambda: _prompt_file_default("journalist_revise"),
+        alias="EDITORIAL_REVISE_PROMPT_TEMPLATE",
+    )
+
     # --- F23: веб-админка (Фаза 5) ---
     # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
     # секретов ключом из той же БД не защищало бы ни от чего). Генерируются

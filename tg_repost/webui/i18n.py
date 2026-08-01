@@ -642,6 +642,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Варианты обложки", "en": "Cover variants",
     },
     "moderation_detail.variant_n": {"ru": "Вариант {n}", "en": "Variant {n}"},
+    "moderation_detail.editorial_notes": {
+        "ru": "Замечания редактора", "en": "Editor's notes",
+    },
     "moderation_detail.active": {"ru": "Активен", "en": "Active"},
     "moderation_detail.select": {"ru": "Выбрать", "en": "Select"},
     "moderation_detail.confirm_reject": {
@@ -1267,6 +1270,52 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Any OpenAI-compatible provider — not necessarily OpenAI itself. "
         "If the post contains a link, the bot follows it and rewrites from "
         "the full article text, not just the short teaser.",
+    },
+    "settings.group.editorial.title": {
+        "ru": "Редакция из двух агентов", "en": "Two-agent editorial",
+    },
+    "settings.group.editorial.desc": {
+        "ru": "Профессиональный рерайт: журналист пишет черновик, редактор-"
+        "фактчекер сверяет его с источниками и пишет замечания, журналист "
+        "переписывает по ним. Дороже по токенам — 1 раунд правки это ТРИ "
+        "вызова LLM на вариант вместо одного. 0 раундов = только черновик. "
+        "Веб-сверка требует настроенного поиска (см. «Добор источников»).",
+        "en": "Professional rewrite: a journalist writes a draft, an editor/"
+        "fact-checker checks it against the sources and writes notes, the "
+        "journalist revises. Costs more tokens — one revision round is THREE "
+        "LLM calls per variant instead of one. 0 rounds = draft only. Web "
+        "verification needs a configured search engine (see “Source enrichment”).",
+    },
+    "settings.field.editorial_enabled.label": {
+        "ru": "Включить редакцию (журналист + редактор)",
+        "en": "Enable editorial (journalist + editor)",
+    },
+    "settings.field.editorial_max_rounds.label": {
+        "ru": "Максимум раундов правки", "en": "Max revision rounds",
+    },
+    "settings.field.editorial_max_rounds.hint": {
+        "ru": "0 = только черновик без рецензии. 1 = черновик+рецензия+правка "
+        "(3 вызова LLM). 2 = до пяти вызовов на вариант.",
+        "en": "0 = draft only, no review. 1 = draft+review+revise (3 LLM calls). "
+        "2 = up to five calls per variant.",
+    },
+    "settings.field.editorial_web_verify_enabled.label": {
+        "ru": "Веб-сверка спорных фактов", "en": "Web-verify disputed facts",
+    },
+    "settings.field.editorial_web_verify_enabled.hint": {
+        "ru": "Редактор помечает сомнительные утверждения, мы догоняем их "
+        "поиском (тот же движок, что «Добор источников»), находки идут на правку.",
+        "en": "The editor flags dubious claims, we look them up with search "
+        "(same engine as “Source enrichment”), findings go into the revision.",
+    },
+    "settings.field.editorial_web_verify_max_claims.label": {
+        "ru": "Потолок веб-запросов на пост", "en": "Web-query cap per post",
+    },
+    "settings.field.editorial_prompt_template.label": {
+        "ru": "Промпт редактора-фактчекера", "en": "Editor/fact-checker prompt",
+    },
+    "settings.field.editorial_revise_prompt_template.label": {
+        "ru": "Промпт правки по замечаниям", "en": "Revision prompt",
     },
     "settings.group.filtering.title": {"ru": "Фильтрация по словам", "en": "Word filtering"},
     "settings.group.filtering.desc": {

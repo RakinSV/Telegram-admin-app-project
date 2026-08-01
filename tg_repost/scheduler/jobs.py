@@ -28,7 +28,12 @@ from tg_repost.enrichment.link_content import (
     fetch_link_content,
 )
 from tg_repost.logging_conf import get_logger
-from tg_repost.rewriter.client import RewriterClient, resolve_style_prompt
+from tg_repost.rewriter.client import (
+    RewriterClient,
+    is_billing_error,  # re-export: тесты и старый код зовут jobs.is_billing_error
+    resolve_style_prompt,
+)
+from tg_repost.rewriter.editorial import editorial_rewrite
 from tg_repost.telegraph.article import publish_article
 from tg_repost.telegraph.client import TelegraphError
 from tg_repost.telegram.moderation_bot import send_pending_for_approval
@@ -68,22 +73,6 @@ async def _save_link_image(post_id: int, image_url: str) -> str | None:
 _URL_RE = re.compile(r"https?://\S+")
 # Служебные строки RSS-стабов, которые не несут смысла, но накручивают длину.
 _BOILERPLATE_RE = re.compile(r"(?im)^\s*(information published\.?|read more\.?)\s*$")
-
-
-_BILLING_MARKERS = ("недостаточно средств", "insufficient", "quota", "billing", "баланс")
-
-
-def is_billing_error(exc: BaseException) -> bool:
-    """Ошибка оплаты/баланса у провайдера рерайта (HTTP 402 или текст про
-    нехватку средств). Такая ошибка постоянна: она одинаково валит КАЖДЫЙ
-    пост, и продолжать пачку бессмысленно — только сожжём всю очередь в
-    failed, которую потом руками разгребать. Лучше остановиться и оставить
-    посты `new` до пополнения счёта.
-    """
-    if getattr(exc, "status_code", None) == 402:
-        return True
-    text = str(exc).lower()
-    return any(marker in text for marker in _BILLING_MARKERS)
 
 
 def effective_source_chars(original: str, link_text: str) -> int:
@@ -223,17 +212,35 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
         target_languages: list[str | None] = list(
             resolve_target_languages_for_post(post_id)
         ) or [None]
+        # F40 — редакция из двух агентов: если включена, каждый вариант идёт
+        # циклом журналист→редактор→правка (см. rewriter/editorial.py), иначе —
+        # прежний одиночный вызов. Редакция дороже (до 3 вызовов на вариант),
+        # поэтому под настройкой editorial_enabled.
+        editorial_on = get_settings().editorial_enabled
         rewrite_texts: list[str] = []
         rewrite_tokens_list: list[int] = []
         rewrite_languages: list[str] = []
+        rewrite_notes: list[str | None] = []
         last_exc: Exception | None = None
         for language in target_languages:
             for _ in range(rewrite_count):
                 try:
-                    result = await rewriter.rewrite(
-                        original, prompt_name=prompt_name, link_content=link_text,
-                        language=language,
-                    )
+                    if editorial_on:
+                        ed = await editorial_rewrite(
+                            rewriter, original=original, link_content=link_text,
+                            prompt_name=prompt_name, language=language,
+                        )
+                        variant_text, variant_tokens, variant_notes = (
+                            ed.text, ed.tokens, ed.notes or None,
+                        )
+                    else:
+                        result = await rewriter.rewrite(
+                            original, prompt_name=prompt_name, link_content=link_text,
+                            language=language,
+                        )
+                        variant_text, variant_tokens, variant_notes = (
+                            result.text, result.total_tokens, None,
+                        )
                 except Exception as exc:  # noqa: BLE001
                     last_exc = exc
                     logger.warning("Вариант рерайта поста %s не удался: %s", post_id, exc)
@@ -244,13 +251,14 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                 # получал статус rewritten с пустым текстом, на модерации
                 # показывался оригинал (фолбэк в превью) — и владелец одобрял
                 # пустоту, узнавая о проблеме только когда публикация падала.
-                if not result.text.strip():
+                if not variant_text.strip():
                     last_exc = last_exc or ValueError("модель вернула пустой текст")
                     logger.warning("Вариант рерайта поста %s пуст — отбрасываю", post_id)
                     continue
-                rewrite_texts.append(result.text)
-                rewrite_tokens_list.append(result.total_tokens)
+                rewrite_texts.append(variant_text)
+                rewrite_tokens_list.append(variant_tokens)
                 rewrite_languages.append(languages.normalize(language))
+                rewrite_notes.append(variant_notes)
 
         if not rewrite_texts:
             # Ошибка оплаты (402/нет средств) одинаково валит КАЖДЫЙ пост:
@@ -325,6 +333,7 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                         post_id=post_id, variant_index=idx, text=text,
                         tokens=rewrite_tokens_list[idx],
                         language=rewrite_languages[idx],
+                        editorial_notes=rewrite_notes[idx],
                     ))
                 if cover_paths:
                     post.media_path = cover_paths[0]
@@ -335,9 +344,9 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
                         ))
                 post.set_status(PostStatus.REWRITTEN)
         logger.info(
-            "Пост %s рерайчен (стиль=%s, вариантов текста=%d, вариантов обложки=%d, "
-            "ссылка=%s, обогащение=%s, %d токенов)",
-            post_id, prompt_name, len(rewrite_texts), len(cover_paths),
+            "Пост %s рерайчен (стиль=%s, редакция=%s, вариантов текста=%d, "
+            "вариантов обложки=%d, ссылка=%s, обогащение=%s, %d токенов)",
+            post_id, prompt_name, editorial_on, len(rewrite_texts), len(cover_paths),
             bool(link_text), enrich, sum(rewrite_tokens_list),
         )
 

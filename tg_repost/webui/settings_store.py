@@ -159,6 +159,24 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         secret_keys=("openai_api_key",),
     ),
     SettingsGroup(
+        "editorial", "Редакция из двух агентов — F40",
+        (
+            # Все поля живые — читаются в scheduler/jobs.py и rewriter/editorial.py
+            # из get_settings() на каждый пост, ни в каком клиенте не кэшируются.
+            SettingField("editorial_enabled", "Включить редакцию (журналист + редактор)", "bool"),
+            SettingField("editorial_max_rounds", "Максимум раундов правки", "int"),
+            SettingField("editorial_web_verify_enabled", "Веб-сверка спорных фактов", "bool"),
+            SettingField("editorial_web_verify_max_claims", "Потолок веб-запросов на пост", "int"),
+            SettingField("editorial_prompt_template", "Промпт редактора-фактчекера", "text"),
+            SettingField("editorial_revise_prompt_template", "Промпт правки по замечаниям", "text"),
+        ),
+        "Профессиональный рерайт: журналист пишет черновик, редактор-фактчекер "
+        "сверяет его с источниками и пишет замечания, журналист переписывает по "
+        "ним. Дороже по токенам — 1 раунд правки это ТРИ вызова LLM на вариант "
+        "вместо одного. 0 раундов = только черновик, без рецензии. Веб-сверка "
+        "требует настроенного поиска (см. «Добор источников»).",
+    ),
+    SettingsGroup(
         "filtering", "Фильтрация по словам — F03",
         (
             SettingField("filter_stop_words", "Стоп-слова", "csv_list"),

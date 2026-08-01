@@ -98,10 +98,21 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
         resolve_target_labels_for_post(post_id)
         if post is not None and not post.status.is_terminal else None
     )
+    rewrite_variants = post_variants_repo.list_rewrite_variants(post_id)
+    # F40: замечания редактора-фактчекера активного варианта — показываются
+    # отдельным блоком даже при одном варианте (частый случай), чтобы владелец
+    # видел, что и как правила редакция. None — редакция была выключена.
+    active_idx = (post.active_rewrite_variant_index or 0) if post is not None else 0
+    active_editorial_notes = next(
+        (v.editorial_notes for v in rewrite_variants
+         if v.variant_index == active_idx and v.editorial_notes),
+        None,
+    )
     return {
         "post": post,
         "error": error,
-        "rewrite_variants": post_variants_repo.list_rewrite_variants(post_id),
+        "rewrite_variants": rewrite_variants,
+        "active_editorial_notes": active_editorial_notes,
         "cover_variants": post_variants_repo.list_cover_variants(post_id),
         "target_labels": target_labels,
         # F29: список целей публикации с их message_id — только полезно

@@ -470,6 +470,10 @@ class PostRewriteVariant(Base):
     language: Mapped[str] = mapped_column(
         String(8), default=DEFAULT_LANGUAGE, server_default=DEFAULT_LANGUAGE, nullable=False,
     )
+    # Замечания редактора-фактчекера по ЭТОМУ варианту (F40, редакция из двух
+    # агентов, см. rewriter/editorial.py) — показываются при модерации, чтобы
+    # владелец видел, что и как правила редакция. NULL — редакция была выключена.
+    editorial_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
