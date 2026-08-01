@@ -74,24 +74,40 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         secret_keys=("tg_api_hash", "tg_bot_token", "tg_session_string"),
     ),
     SettingsGroup(
-        "proxy", "Прокси — MTProto для Telethon (альтернатива, host/port; секрет ниже в этой группе)",
+        "proxy", "Прокси",
         (
-            # host/port сами по себе не секрет (бесполезны без mtproto_proxy_secret
-            # ниже в этой же группе) — тот же класс полей, что "телеграм-
-            # идентичность" выше: применяются к НОВОМУ клиенту, для уже
-            # запущенного listener'а нужен ручной рестарт на /components (не
-            # needs_resync — тот флаг только про состав джобов планировщика,
-            # не про пересборку Telethon-клиента).
-            SettingField("mtproto_proxy_host", "MTProto proxy host (для Telethon)", "str"),
-            SettingField("mtproto_proxy_port", "MTProto proxy port", "int"),
+            # Единый прокси-раздел: три ТИПА (каждый со своей галочкой включения
+            # и полями) + три галочки применения. Вся логика выбора — в
+            # tg_repost/proxy.py. Адрес/логин — обычные редактируемые поля (не
+            # секрет: бесполезны без пароля/секрета из карточки секретов ниже).
+            # Применяются к НОВЫМ клиентам — для уже запущенного listener'а/бота
+            # нужен ручной рестарт на /components (не needs_resync: тот флаг
+            # только про состав джобов планировщика, не про пересборку клиентов).
+            #
+            # MTProto — только для Telethon (fake-TLS, секрет вместо логина/пароля).
+            SettingField("proxy_mtproto_enabled", "MTProto: включить", "bool"),
+            SettingField("proxy_mtproto_address", "MTProto: адрес (host:port)", "str"),
+            # SOCKS5 — универсальный туннель (Telethon, Bot API, нейросети).
+            SettingField("proxy_socks5_enabled", "SOCKS5: включить", "bool"),
+            SettingField("proxy_socks5_address", "SOCKS5: адрес (host:port)", "str"),
+            SettingField("proxy_socks5_login", "SOCKS5: логин", "str"),
+            # HTTP(S) — универсальный, предпочтителен для нейросетей (HTTP-трафик).
+            SettingField("proxy_http_enabled", "HTTP(S): включить", "bool"),
+            SettingField("proxy_http_address", "HTTP(S): адрес (host:port)", "str"),
+            SettingField("proxy_http_login", "HTTP(S): логин", "str"),
+            # Галочки применения: какой трафик гнать через прокси.
+            SettingField("proxy_use_for_telegram", "Применять для Telegram (Telethon + бот)", "bool"),
+            SettingField("proxy_use_for_rewrite", "Применять для нейросети рерайта", "bool"),
+            SettingField("proxy_use_for_images", "Применять для картиночной нейросети", "bool"),
         ),
-        "Если Telegram зарезан у провайдера/на сервере — сначала попробуй "
-        "секрет «Telethon SOCKS5 Proxy URL» ниже, это ПРОЩЕ и БЕЗ ограничения "
-        "fake-TLS (см. подсказку там). Эта пара host/port — для альтернативного "
-        "MTProto-пути (секрет — тоже ниже), не работает с секретами "
-        "формата ee. Bot API ботов проксируется отдельно, своим SOCKS5 "
-        "ниже — другой протокол, не путать.",
-        secret_keys=("mtproto_proxy_secret", "telethon_proxy_url", "bot_api_proxy_url"),
+        "Один прокси-раздел на всё. Включи нужный ТИП (MTProto / SOCKS5 / "
+        "HTTP(S)), впиши его адрес и, если нужно, логин + пароль (пароль/секрет "
+        "— в карточке секретов ниже, скрыт до кнопки «показать»), затем отметь, "
+        "для чего его применять: Telegram, нейросеть рерайта, картиночная "
+        "нейросеть. MTProto годится только для Telegram; для нейросетей — SOCKS5 "
+        "или HTTP(S). Приоритет при нескольких включённых: у Telegram SOCKS5 → "
+        "HTTP → MTProto, у нейросетей HTTP → SOCKS5.",
+        secret_keys=("proxy_mtproto_secret", "proxy_socks5_password", "proxy_http_password"),
     ),
     SettingsGroup(
         "rewrite", "Рерайт — F06",
@@ -398,9 +414,9 @@ SECRET_LABELS: dict[str, str] = {
     "openai_api_key": "OpenAI API Key",
     "brave_api_key": "Brave Search API Key",
     "unsplash_access_key": "Unsplash Access Key",
-    "mtproto_proxy_secret": "MTProto Proxy Secret",
-    "telethon_proxy_url": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
-    "bot_api_proxy_url": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
+    "proxy_mtproto_secret": "MTProto: секрет",
+    "proxy_socks5_password": "SOCKS5: пароль",
+    "proxy_http_password": "HTTP(S): пароль",
     "guardian_bot_token": "Guardian Bot Token",
     "telegraph_access_token": "Telegraph Access Token",
 }
@@ -429,21 +445,18 @@ SECRET_HINTS: dict[str, str] = {
     ),
     "brave_api_key": "Для добора источников (F16) — поиск по теме поста через Brave Search API. Без ключа этот блок просто не добавляется в пост.",
     "unsplash_access_key": "Для авто-обложек (F18), если выбрана стратегия unsplash в /settings. Без ключа обложка не генерируется, пост публикуется без неё.",
-    "mtproto_proxy_secret": (
-        "Секрет-часть MTProto-прокси для Telethon (не для ботов — Bot API "
-        "прокси ниже, отдельно). Host/port — в полях выше, в этой же группе. "
-        "Внимание: секреты с префиксом ee (fake-TLS) Telethon НЕ поддерживает "
-        "— используй SOCKS5-прокси ниже вместо этого."
+    "proxy_mtproto_secret": (
+        "Секрет-часть MTProto-прокси (вместо логина/пароля). Адрес — в поле "
+        "«MTProto: адрес» выше, в этой же группе. Внимание: секреты с префиксом "
+        "ee (fake-TLS) Telethon НЕ поддерживает — тогда бери SOCKS5 или HTTP(S)."
     ),
-    "telethon_proxy_url": (
-        "SOCKS5-туннель для Telethon (юзер-сессия) — рекомендуемая замена "
-        "MTProto-прокси, БЕЗ ограничения fake-TLS. Если задан, имеет приоритет "
-        "над MTProto-прокси. Формат: socks5://[user:pass@]host:port."
+    "proxy_socks5_password": (
+        "Пароль SOCKS5-прокси. Адрес и логин — в полях выше. Оставь пустым, "
+        "если прокси без авторизации."
     ),
-    "bot_api_proxy_url": (
-        "SOCKS5-прокси для Bot API репост-бота (постинг/модерация) — НЕ "
-        "MTProto, другой протокол. Логин:пароль опциональны, как и у "
-        "Telethon-прокси выше. Формат: socks5://[user:pass@]host:port."
+    "proxy_http_password": (
+        "Пароль HTTP(S)-прокси. Адрес и логин — в полях выше. Оставь пустым, "
+        "если прокси без авторизации."
     ),
     "guardian_bot_token": (
         "Токен ОТДЕЛЬНОГО бота-модератора Guardian — НЕ тот же бот, что "

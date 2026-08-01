@@ -115,7 +115,6 @@
 
         {% if s.is_set %}
         <form method="post" action="/secrets/{{ s.key }}/reveal" class="inline-form">
-          <input type="password" name="password" placeholder="{{ t('settings.password_placeholder') }}" required>
           <button type="submit" class="secondary small">{{ t('common.show') }}</button>
         </form>
         {% endif %}

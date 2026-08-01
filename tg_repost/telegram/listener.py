@@ -22,16 +22,11 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
-
-from telethon import TelegramClient, events
-from telethon.network.connection.tcpmtproxy import (
-    ConnectionTcpMTProxyIntermediate,
-    ConnectionTcpMTProxyRandomizedIntermediate,
-)
 from sqlalchemy import or_
+from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
+from tg_repost import proxy as proxy_module
 from tg_repost import telethon_sessions_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
 from tg_repost.config import Settings, get_settings
@@ -84,71 +79,11 @@ def _get_rate_limiter(client: TelegramClient) -> HourlyRateLimiter:
     return limiter
 
 
-def _mtproxy_kwargs(settings: Settings) -> dict:
-    """Аргументы MTProto-прокси для `TelegramClient` — пусто, если не
-    настроено (host — обязательный маркер "прокси включён"). Один общий
-    прокси на ВСЕ Telethon-клиенты (основной + F26-ротация), см. config.py.
-
-    Класс `connection` зависит от ФОРМАТА секрета (соглашение MTProxy,
-    не наша выдумка): секрет с префиксом `dd` ТРЕБУЕТ randomized
-    intermediate (Telethon сам бросает ValueError при несовпадении —
-    см. `tcpmtproxy.py::MTProxyIO.init_header`); обычный hex-секрет без
-    префикса рассчитан на простой intermediate. Раньше здесь был
-    захардкожен один RandomizedIntermediate на все секреты — с обычным
-    (не `dd`) секретом сервер обрывал соединение сразу после хендшейка
-    ("0 bytes read on a total of 4 expected bytes", найдено на реальном
-    деплое). `ee`-секреты (fake-TLS) сюда тоже попадают как
-    RandomizedIntermediate, но Telethon в принципе не умеет полноценный
-    fake-TLS handshake — с таким секретом соединение зависает независимо
-    от выбора класса ниже (ограничение библиотеки, не этой функции).
-    """
-    if not settings.mtproto_proxy_host:
-        return {}
-    secret = settings.mtproto_proxy_secret
-    connection = (
-        ConnectionTcpMTProxyRandomizedIntermediate
-        if secret[:2].lower() in ("dd", "ee")
-        else ConnectionTcpMTProxyIntermediate
-    )
-    return {
-        "connection": connection,
-        "proxy": (settings.mtproto_proxy_host, settings.mtproto_proxy_port, secret),
-    }
-
-
-def _socks5_proxy_kwargs(settings: Settings) -> dict:
-    """Аргументы SOCKS5-туннеля для `TelegramClient` (TELETHON_PROXY_URL).
-
-    В отличие от MTProto-прокси, это обычный TCP-туннель — Telethon через него
-    ходит НАПРЯМУЮ к серверам Telegram, без MTProxy-класса и без ограничения
-    fake-TLS. `proxy`-кортеж в формате python_socks/PySocks:
-    (тип, host, port, rdns, [user], [pass]); rdns=True — резолвить DNS на
-    стороне прокси. Битый URL не роняет процесс (веб-панель должна
-    подниматься всегда, см. main.py) — логируем и идём без прокси."""
-    url = settings.telethon_proxy_url.strip()
-    if not url:
-        return {}
-    parsed = urlparse(url)
-    if parsed.scheme not in ("socks5", "socks5h") or not parsed.hostname or not parsed.port:
-        logger.error(
-            "TELETHON_PROXY_URL некорректен (ожидался socks5://[user:pass@]host:port) "
-            "— Telethon запускается БЕЗ прокси. Проверь формат на /secrets."
-        )
-        return {}
-    proxy: tuple = ("socks5", parsed.hostname, parsed.port, True)
-    if parsed.username or parsed.password:
-        proxy = proxy + (parsed.username or "", parsed.password or "")
-    return {"proxy": proxy}
-
-
 def _telethon_proxy_kwargs(settings: Settings) -> dict:
-    """Единый выбор прокси для ВСЕХ Telethon-клиентов (основной, F26-ротация,
-    визард логина в gen_session). SOCKS5-туннель ИМЕЕТ ПРИОРИТЕТ над
-    MTProto-прокси: он не упирается в fake-TLS-ограничение Telethon и обычно
-    надёжнее (см. config.py::telethon_proxy_url). Оба пусты — прямое
-    соединение."""
-    socks = _socks5_proxy_kwargs(settings)
-    return socks if socks else _mtproxy_kwargs(settings)
+    """Выбор прокси для ВСЕХ Telethon-клиентов (основной, F26-ротация, визард
+    логина). Делегирует единому прокси-разделу (`tg_repost/proxy.py`): там
+    SOCKS5 → HTTP → MTProto по галочке «использовать для Telegram»."""
+    return proxy_module.telethon_proxy_kwargs(settings)
 
 
 def build_client() -> TelegramClient:

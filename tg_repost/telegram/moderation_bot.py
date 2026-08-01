@@ -36,6 +36,7 @@ from tg_repost import (
     post_variants_repo,
     targets_repo,
 )
+from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.db.models import InvalidStatusTransition, Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
@@ -741,29 +742,31 @@ def build_application() -> Application:
     owner_filter = filters.User(user_id=settings.tg_owner_user_id)
 
     builder = Application.builder().token(settings.tg_bot_token)
-    if settings.bot_api_proxy_url:
-        # Bot API ходит по HTTPS, не по MTProto — тут нужен SOCKS5/HTTP-прокси,
-        # не тот же самый, что для Telethon (см. config.py::mtproto_proxy_*).
-        # `.get_updates_proxy()` — отдельно для долгоживущего long-polling
-        # соединения (иначе оно продолжало бы идти напрямую).
-        builder = builder.proxy(settings.bot_api_proxy_url).get_updates_proxy(
-            settings.bot_api_proxy_url
-        )
+    bot_proxy = proxy_module.httpx_proxy_url(settings, "telegram")
+    if bot_proxy:
+        # Bot API ходит по HTTPS, не по MTProto — тут нужен SOCKS5/HTTP-прокси
+        # (единый прокси-раздел, галочка «использовать для Telegram», см.
+        # tg_repost/proxy.py). `.get_updates_proxy()` — отдельно для
+        # долгоживущего long-polling соединения (иначе оно шло бы напрямую).
+        builder = builder.proxy(bot_proxy).get_updates_proxy(bot_proxy)
     try:
         # URL прокси парсится именно ЗДЕСЬ, в .build() (не лениво при первом
-        # запросе, проверено эмпирически) — битый BOT_API_PROXY_URL иначе
-        # ронял бы необработанным ValueError весь процесс main.py (веб-панель
-        # ДОЛЖНА подниматься всегда, даже без рабочего Telegram-конфига —
-        # см. main.py::run) (найдено security-ревью, тот же класс бага, что
-        # и в guardian/bot.py::main).
+        # запросе, проверено эмпирически) — битый прокси-URL иначе ронял бы
+        # необработанным ValueError весь процесс main.py (веб-панель ДОЛЖНА
+        # подниматься всегда, даже без рабочего Telegram-конфига — см.
+        # main.py::run) (найдено security-ревью, тот же класс бага, что и в
+        # guardian/bot.py::main). Хотя proxy.py и собирает только валидные
+        # URL (split_host_port отбрасывает мусорный адрес → None → без прокси),
+        # оставляем защиту: типов прокси-полей несколько, и цена ошибки —
+        # упавший веб-сервер.
         application = builder.build()
     except ValueError as exc:
-        if not settings.bot_api_proxy_url:
+        if not bot_proxy:
             raise  # ValueError не про прокси — не глотать чужую ошибку
         logger.error(
-            "BOT_API_PROXY_URL некорректен (%s) — бот модерации запускается "
-            "БЕЗ прокси, напрямую. Проверь формат socks5://[user:pass@]host:port "
-            "на /secrets.", exc,
+            "Прокси для Bot API некорректен (%s) — бот модерации запускается "
+            "БЕЗ прокси, напрямую. Проверь адрес/логин/пароль прокси в разделе "
+            "«Прокси» на /settings.", exc,
         )
         application = Application.builder().token(settings.tg_bot_token).build()
     application.add_handler(CommandHandler("start", _cmd_start, filters=owner_filter))

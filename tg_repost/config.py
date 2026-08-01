@@ -216,25 +216,37 @@ class Settings(BaseSettings):
     # напрямую с серверами Telegram). Один общий прокси на ВСЕ Telethon-
     # клиенты — и основной, и дополнительные из ротации сессий (F26): цель
     # обычно "спрятать IP сервера", а не развести аккаунты по разным адресам.
-    # host/port не секрет сами по себе (бесполезны без secret), поэтому
-    # обычные настройки; mtproto_proxy_secret — в SECRET_FIELD_NAMES ниже.
-    mtproto_proxy_host: str = Field("", alias="MTPROTO_PROXY_HOST")
-    mtproto_proxy_port: int = Field(0, alias="MTPROTO_PROXY_PORT")
-    mtproto_proxy_secret: str = Field("", alias="MTPROTO_PROXY_SECRET")
-    # SOCKS5-прокси для Telethon (юзер-сессия) — АЛЬТЕРНАТИВА MTProto-прокси
-    # выше. В отличие от MTProto-прокси, это обычный TCP-туннель: Telethon
-    # через него ходит НАПРЯМУЮ к настоящим серверам Telegram и говорит
-    # MTProto поверх туннеля. Не имеет ограничения fake-TLS (ee-секреты),
-    # которое есть у MTProto-прокси-класса Telethon (репо Telethon
-    # заархивирован 02.2026, fake-TLS так и не добавили). Имеет ПРИОРИТЕТ над
-    # MTPROTO_PROXY_* если задан (см. listener.py::_telethon_proxy_kwargs).
-    # URL socks5://[user:pass@]host:port — целиком секрет (может нести креды).
-    telethon_proxy_url: str = Field("", alias="TELETHON_PROXY_URL")
-    # SOCKS5-прокси для Bot API (постинг/модерация репост-бота) — Bot API
-    # ходит по HTTPS, MTProto-прокси тут не применим. Логин:пароль в URL
-    # опциональны, как и у TELETHON_PROXY_URL выше — формат
-    # socks5://[user:pass@]host:port. URL целиком секрет (может нести креды).
-    bot_api_proxy_url: str = Field("", alias="BOT_API_PROXY_URL")
+    #
+    # --- Единый прокси-раздел (см. tg_repost/proxy.py) ---
+    # Три ТИПА прокси, каждый со своей галочкой включения и своими полями, плюс
+    # три галочки применения (какой трафик гнать через прокси). Адрес/логин —
+    # обычные редактируемые настройки; пароль/секрет — секреты (в
+    # SECRET_FIELD_NAMES ниже, скрыты в UI до нажатия «показать»). Вся логика
+    # выбора прокси централизована в tg_repost/proxy.py — ни один модуль не
+    # читает эти поля напрямую, только через httpx_proxy_url/telethon_proxy_kwargs.
+    #
+    # MTProto — специфичный для Telegram fake-TLS-прокси (только для Telethon,
+    # секрет вместо логина/пароля). SOCKS5/HTTP — обычные TCP/HTTP-туннели,
+    # годятся и для Telethon (Bot API+Telethon), и для нейросетей рерайта, и
+    # для картиночной нейросети. Приоритет при выборе — см. proxy.py.
+    proxy_mtproto_enabled: bool = Field(False, alias="PROXY_MTPROTO_ENABLED")
+    proxy_mtproto_address: str = Field("", alias="PROXY_MTPROTO_ADDRESS")  # host:port
+    proxy_mtproto_secret: str = Field("", alias="PROXY_MTPROTO_SECRET")
+
+    proxy_socks5_enabled: bool = Field(False, alias="PROXY_SOCKS5_ENABLED")
+    proxy_socks5_address: str = Field("", alias="PROXY_SOCKS5_ADDRESS")  # host:port
+    proxy_socks5_login: str = Field("", alias="PROXY_SOCKS5_LOGIN")
+    proxy_socks5_password: str = Field("", alias="PROXY_SOCKS5_PASSWORD")
+
+    proxy_http_enabled: bool = Field(False, alias="PROXY_HTTP_ENABLED")
+    proxy_http_address: str = Field("", alias="PROXY_HTTP_ADDRESS")  # host:port
+    proxy_http_login: str = Field("", alias="PROXY_HTTP_LOGIN")
+    proxy_http_password: str = Field("", alias="PROXY_HTTP_PASSWORD")
+
+    # Галочки применения: какой трафик гнать через прокси.
+    proxy_use_for_telegram: bool = Field(False, alias="PROXY_USE_FOR_TELEGRAM")
+    proxy_use_for_rewrite: bool = Field(False, alias="PROXY_USE_FOR_REWRITE")
+    proxy_use_for_images: bool = Field(False, alias="PROXY_USE_FOR_IMAGES")
 
     # --- Рерайт (OpenAI-совместимое API) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
@@ -593,16 +605,16 @@ class Settings(BaseSettings):
             return [str(s).strip() for s in value if str(s).strip()]
         return []
 
-    @field_validator("tg_api_id", "tg_owner_user_id", "mtproto_proxy_port", mode="before")
+    @field_validator("tg_api_id", "tg_owner_user_id", mode="before")
     @classmethod
     def _blank_int_to_zero(cls, value: object) -> object:
         """Пустая строка (`TG_API_ID=` — обычный плейсхолдер из .env.example,
         пока секрет не задан через `/setup`) не должна валить `Settings()`:
         pydantic иначе пытается распарсить "" как int и падает с
         ValidationError вместо мягкого дефолта 0 (`is_minimally_configured`
-        корректно интерпретирует 0 как «не настроено»; для mtproto_proxy_port
-        0 так же означает «прокси не настроен», см. listener.py::_mtproxy_kwargs
-        — проверяет host, но port должен хотя бы парситься)."""
+        корректно интерпретирует 0 как «не настроено»). Прокси-адреса теперь
+        строки формата host:port (см. tg_repost/proxy.py::split_host_port),
+        отдельного int-порта, требующего этой защиты, больше нет."""
         if value == "":
             return 0
         return value
@@ -646,9 +658,11 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "openai_api_key",
     "brave_api_key",
     "unsplash_access_key",
-    "mtproto_proxy_secret",
-    "telethon_proxy_url",
-    "bot_api_proxy_url",
+    # Прокси-раздел: секрет только у паролей/секрета, адрес и логин —
+    # обычные редактируемые поля (см. tg_repost/proxy.py).
+    "proxy_mtproto_secret",
+    "proxy_socks5_password",
+    "proxy_http_password",
     "guardian_bot_token",
     # Не вводится руками: выдаётся автоматически при первой публикации
     # статьи (`telegraph/client.py::get_or_create_token`) и сохраняется сюда.

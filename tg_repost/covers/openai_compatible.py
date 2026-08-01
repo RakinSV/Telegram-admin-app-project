@@ -13,8 +13,10 @@ from __future__ import annotations
 import base64
 import binascii
 
+import httpx
 from openai import AsyncOpenAI
 
+from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger
 
@@ -50,8 +52,13 @@ class OpenAICompatibleImageClient:
 
     def __init__(self) -> None:
         settings = get_settings()
+        # Прокси для картиночной нейросети (галочка «использовать для
+        # картиночной нейросети», единый прокси-раздел — tg_repost/proxy.py).
+        proxy_url = proxy_module.httpx_proxy_url(settings, "images")
+        http_client = httpx.AsyncClient(proxy=proxy_url) if proxy_url else None
         self._client = AsyncOpenAI(
             base_url=settings.openai_base_url, api_key=settings.openai_api_key,
+            http_client=http_client,
         )
         self._model = settings.cover_openai_model
         self._size = settings.cover_openai_image_size

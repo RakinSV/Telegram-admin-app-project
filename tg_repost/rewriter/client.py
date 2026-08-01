@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+import httpx
 from openai import AsyncOpenAI
 
 from tg_repost import languages
+from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger
 
@@ -150,6 +152,14 @@ class RewriterClient:
 
     def __init__(self) -> None:
         settings = get_settings()
+        # Прокси для рерайт-нейросети (единый прокси-раздел, галочка
+        # «использовать для нейросети рерайта», см. tg_repost/proxy.py). Свой
+        # http_client — единственный способ прогнать OpenAI-SDK через прокси.
+        proxy_url = proxy_module.httpx_proxy_url(settings, "rewrite")
+        http_client = (
+            httpx.AsyncClient(proxy=proxy_url, timeout=settings.openai_timeout_seconds)
+            if proxy_url else None
+        )
         self._client = AsyncOpenAI(
             base_url=settings.openai_base_url,
             api_key=settings.openai_api_key,
@@ -159,6 +169,7 @@ class RewriterClient:
             # RSS-лентах Ubuntu USN). Значение правится в /settings.
             timeout=settings.openai_timeout_seconds,
             max_retries=settings.openai_max_retries,
+            http_client=http_client,
         )
         self._model = settings.openai_model
         self._embedding_model = settings.openai_embedding_model

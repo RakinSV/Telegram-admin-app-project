@@ -975,7 +975,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Показано один раз — обнови страницу, чтобы скрыть:",
         "en": "Shown once — refresh the page to hide it:",
     },
-    "settings.password_placeholder": {"ru": "пароль администратора", "en": "admin password"},
     "settings.telethon_manual_toggle": {
         "ru": "…или вставить готовую session string вручную",
         "en": "…or paste an existing session string manually",
@@ -1245,16 +1244,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Application credentials from my.telegram.org — not the bot "
         "token, a different kind of credential.",
     },
-    "settings.group.proxy.title": {"ru": "Прокси — MTProto для Telethon", "en": "Proxy — MTProto for Telethon"},
+    "settings.group.proxy.title": {"ru": "Прокси", "en": "Proxy"},
     "settings.group.proxy.desc": {
-        "ru": "Если Telegram зарезан — сначала попробуй секрет «Telethon "
-        "SOCKS5» ниже, он проще и без ограничения fake-TLS. Эта пара "
-        "host/port — альтернативный MTProto-путь, не работает с секретами "
-        "формата ee.",
-        "en": "If Telegram is blocked — try the “Telethon SOCKS5” secret "
-        "below first, it's simpler and has no fake-TLS limitation. This "
-        "host/port pair is the alternative MTProto path — doesn't work "
-        "with ee-format secrets.",
+        "ru": "Один прокси-раздел на всё. Включи нужный ТИП (MTProto / SOCKS5 / "
+        "HTTP(S)), впиши адрес и, если нужно, логин + пароль (пароль/секрет — в "
+        "карточке секретов ниже, скрыт до кнопки «показать»), затем отметь, для "
+        "чего применять: Telegram, нейросеть рерайта, картиночная нейросеть. "
+        "MTProto годится только для Telegram; для нейросетей — SOCKS5 или "
+        "HTTP(S).",
+        "en": "One proxy section for everything. Enable a TYPE (MTProto / "
+        "SOCKS5 / HTTP(S)), enter its address and, if needed, login + password "
+        "(password/secret lives in the secrets card below, hidden until you "
+        "click “show”), then tick what to use it for: Telegram, the rewrite AI, "
+        "the image AI. MTProto only works for Telegram; for the AIs use SOCKS5 "
+        "or HTTP(S).",
     },
     "settings.group.rewrite.title": {"ru": "Рерайт", "en": "Rewrite"},
     "settings.group.rewrite.desc": {
@@ -1383,8 +1386,38 @@ STRINGS: dict[str, dict[str, str]] = {
     # --- Настройки tg_repost: лейблы полей ---
     "settings.field.tg_api_id.label": {"ru": "API ID", "en": "API ID"},
     "settings.field.tg_owner_user_id.label": {"ru": "Owner user ID", "en": "Owner user ID"},
-    "settings.field.mtproto_proxy_host.label": {"ru": "MTProto host", "en": "MTProto host"},
-    "settings.field.mtproto_proxy_port.label": {"ru": "MTProto port", "en": "MTProto port"},
+    "settings.field.proxy_mtproto_enabled.label": {"ru": "MTProto: включить", "en": "MTProto: enable"},
+    "settings.field.proxy_mtproto_address.label": {"ru": "MTProto: адрес (host:port)", "en": "MTProto: address (host:port)"},
+    "settings.field.proxy_socks5_enabled.label": {"ru": "SOCKS5: включить", "en": "SOCKS5: enable"},
+    "settings.field.proxy_socks5_address.label": {"ru": "SOCKS5: адрес (host:port)", "en": "SOCKS5: address (host:port)"},
+    "settings.field.proxy_socks5_login.label": {"ru": "SOCKS5: логин", "en": "SOCKS5: login"},
+    "settings.field.proxy_socks5_login.hint": {
+        "ru": "Необязательно — оставь пустым, если прокси без авторизации.",
+        "en": "Optional — leave blank if the proxy needs no authentication.",
+    },
+    "settings.field.proxy_http_enabled.label": {"ru": "HTTP(S): включить", "en": "HTTP(S): enable"},
+    "settings.field.proxy_http_address.label": {"ru": "HTTP(S): адрес (host:port)", "en": "HTTP(S): address (host:port)"},
+    "settings.field.proxy_http_login.label": {"ru": "HTTP(S): логин", "en": "HTTP(S): login"},
+    "settings.field.proxy_http_login.hint": {
+        "ru": "Необязательно — оставь пустым, если прокси без авторизации.",
+        "en": "Optional — leave blank if the proxy needs no authentication.",
+    },
+    "settings.field.proxy_use_for_telegram.label": {
+        "ru": "Применять для Telegram (Telethon + бот)",
+        "en": "Use for Telegram (Telethon + bot)",
+    },
+    "settings.field.proxy_use_for_telegram.hint": {
+        "ru": "Чтение каналов (Telethon) и постинг/модерация (Bot API) пойдут через прокси.",
+        "en": "Channel reading (Telethon) and posting/moderation (Bot API) will go through the proxy.",
+    },
+    "settings.field.proxy_use_for_rewrite.label": {
+        "ru": "Применять для нейросети рерайта",
+        "en": "Use for the rewrite AI",
+    },
+    "settings.field.proxy_use_for_images.label": {
+        "ru": "Применять для картиночной нейросети",
+        "en": "Use for the image AI",
+    },
     "settings.field.openai_base_url.label": {"ru": "Base URL", "en": "Base URL"},
     "settings.field.openai_model.label": {"ru": "Модель", "en": "Model"},
     "settings.field.openai_timeout_seconds.label": {
@@ -1857,30 +1890,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Links your account to Telethon (reads sources). Easier — "
         "the “Sign in with Telegram” button on the right.",
     },
-    "secrets.field.mtproto_proxy_secret.label": {"ru": "MTProto Proxy Secret", "en": "MTProto Proxy Secret"},
-    "secrets.field.mtproto_proxy_secret.hint": {
-        "ru": "Секрет-часть MTProto-прокси. Секреты с префиксом ee "
-        "(fake-TLS) Telethon НЕ поддерживает — используй SOCKS5 ниже.",
-        "en": "Secret part of the MTProto proxy. Telethon does NOT "
-        "support ee-prefixed (fake-TLS) secrets — use SOCKS5 below instead.",
+    "secrets.field.proxy_mtproto_secret.label": {"ru": "MTProto: секрет", "en": "MTProto: secret"},
+    "secrets.field.proxy_mtproto_secret.hint": {
+        "ru": "Секрет-часть MTProto-прокси (вместо логина/пароля). Секреты с "
+        "префиксом ee (fake-TLS) Telethon НЕ поддерживает — тогда используй "
+        "SOCKS5 или HTTP(S).",
+        "en": "Secret part of the MTProto proxy (instead of login/password). "
+        "Telethon does NOT support ee-prefixed (fake-TLS) secrets — use SOCKS5 "
+        "or HTTP(S) then.",
     },
-    "secrets.field.telethon_proxy_url.label": {
-        "ru": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
-        "en": "Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)",
+    "secrets.field.proxy_socks5_password.label": {"ru": "SOCKS5: пароль", "en": "SOCKS5: password"},
+    "secrets.field.proxy_socks5_password.hint": {
+        "ru": "Пароль SOCKS5-прокси. Оставь пустым, если прокси без авторизации.",
+        "en": "SOCKS5 proxy password. Leave blank if the proxy needs no authentication.",
     },
-    "secrets.field.telethon_proxy_url.hint": {
-        "ru": "SOCKS5-туннель для Telethon — рекомендуемая замена "
-        "MTProto-прокси, без ограничения fake-TLS. Имеет приоритет, если заданы оба.",
-        "en": "SOCKS5 tunnel for Telethon — the recommended replacement "
-        "for the MTProto proxy, no fake-TLS limitation. Takes priority if both are set.",
-    },
-    "secrets.field.bot_api_proxy_url.label": {
-        "ru": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
-        "en": "Bot API Proxy URL (socks5://[user:pass@]host:port)",
-    },
-    "secrets.field.bot_api_proxy_url.hint": {
-        "ru": "SOCKS5-прокси для Bot API репост-бота — не MTProto, другой протокол.",
-        "en": "SOCKS5 proxy for the repost bot's Bot API — not MTProto, a different protocol.",
+    "secrets.field.proxy_http_password.label": {"ru": "HTTP(S): пароль", "en": "HTTP(S): password"},
+    "secrets.field.proxy_http_password.hint": {
+        "ru": "Пароль HTTP(S)-прокси. Оставь пустым, если прокси без авторизации.",
+        "en": "HTTP(S) proxy password. Leave blank if the proxy needs no authentication.",
     },
     "secrets.field.guardian_bot_token.label": {
         "ru": "Guardian Bot Token", "en": "Guardian Bot Token",

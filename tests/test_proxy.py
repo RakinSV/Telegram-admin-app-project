@@ -1,6 +1,10 @@
-"""Тесты MTProto/SOCKS5-прокси: Telethon (build_client/build_extra_clients),
-Bot API репост-бота (moderation_bot.build_application) и Bot API Guardian
-(config.py::bot_api_proxy_url, используется в bot.py::main)."""
+"""Единый прокси-раздел (tg_repost/proxy.py): три типа (mtproto/socks5/http) ×
+три галочки применения (telegram/rewrite/images), плюс интеграция с Telethon
+(build_client / login-визард), Bot API репост-бота и Guardian.
+
+Значения задаются через env (у полей алиасы PROXY_*), потому что Settings
+конструируется из env, а не по именам полей (нет populate_by_name).
+"""
 
 from __future__ import annotations
 
@@ -17,22 +21,30 @@ from telethon.network.connection.tcpmtproxy import (
 from guardian.config import (
     GuardianSettings,
     get_guardian_settings,
-    invalidate_settings_cache as guardian_invalidate_settings_cache,
 )
-from tg_repost.config import invalidate_settings_cache
+from guardian.config import invalidate_settings_cache as guardian_invalidate_settings_cache
+from tg_repost import proxy
+from tg_repost.config import get_settings, invalidate_settings_cache
 from tg_repost.telegram.listener import build_client
 from tg_repost.telegram.moderation_bot import build_application
 from tg_repost.tools.gen_session import start_telethon_login
 
 _ENV_EXAMPLE = Path(__file__).parent.parent / ".env.example"
 
+_PROXY_ENV = (
+    "PROXY_MTPROTO_ENABLED", "PROXY_MTPROTO_ADDRESS", "PROXY_MTPROTO_SECRET",
+    "PROXY_SOCKS5_ENABLED", "PROXY_SOCKS5_ADDRESS", "PROXY_SOCKS5_LOGIN", "PROXY_SOCKS5_PASSWORD",
+    "PROXY_HTTP_ENABLED", "PROXY_HTTP_ADDRESS", "PROXY_HTTP_LOGIN", "PROXY_HTTP_PASSWORD",
+    "PROXY_USE_FOR_TELEGRAM", "PROXY_USE_FOR_REWRITE", "PROXY_USE_FOR_IMAGES",
+    # старые (должны игнорироваться новой логикой)
+    "MTPROTO_PROXY_HOST", "MTPROTO_PROXY_PORT", "MTPROTO_PROXY_SECRET",
+    "TELETHON_PROXY_URL", "BOT_API_PROXY_URL", "GUARDIAN_BOT_API_PROXY_URL",
+)
+
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch):
-    for key in (
-        "MTPROTO_PROXY_HOST", "MTPROTO_PROXY_PORT", "MTPROTO_PROXY_SECRET",
-        "TELETHON_PROXY_URL", "BOT_API_PROXY_URL", "GUARDIAN_BOT_API_PROXY_URL",
-    ):
+    for key in _PROXY_ENV:
         monkeypatch.delenv(key, raising=False)
     invalidate_settings_cache()
     guardian_invalidate_settings_cache()
@@ -41,58 +53,149 @@ def _isolated(monkeypatch):
     guardian_invalidate_settings_cache()
 
 
+def _set(monkeypatch, **env):
+    for key, value in env.items():
+        monkeypatch.setenv(key, str(value))
+    invalidate_settings_cache()
+    return get_settings()
+
+
+# --- разбор адреса ---
+
+
+def test_split_host_port():
+    assert proxy.split_host_port("1.2.3.4:1080") == ("1.2.3.4", 1080)
+    assert proxy.split_host_port("proxy.example.com:8080") == ("proxy.example.com", 8080)
+    assert proxy.split_host_port("[::1]:9050") == ("::1", 9050)
+
+
+def test_split_host_port_rejects_bad_input():
+    assert proxy.split_host_port("") is None
+    assert proxy.split_host_port("нет-порта") is None
+    assert proxy.split_host_port("host:notaport") is None
+    assert proxy.split_host_port("host:") is None
+
+
+# --- httpx-прокси (нейросети/бот) ---
+
+
+def test_no_proxy_when_usage_flag_off(monkeypatch):
+    s = _set(monkeypatch, PROXY_HTTP_ENABLED="true", PROXY_HTTP_ADDRESS="1.2.3.4:8080",
+             PROXY_USE_FOR_REWRITE="false")
+    assert proxy.httpx_proxy_url(s, "rewrite") is None
+
+
+def test_http_proxy_for_rewrite(monkeypatch):
+    s = _set(monkeypatch, PROXY_HTTP_ENABLED="true", PROXY_HTTP_ADDRESS="1.2.3.4:8080",
+             PROXY_USE_FOR_REWRITE="true")
+    assert proxy.httpx_proxy_url(s, "rewrite") == "http://1.2.3.4:8080"
+
+
+def test_http_proxy_credentials_are_url_encoded(monkeypatch):
+    s = _set(monkeypatch, PROXY_HTTP_ENABLED="true", PROXY_HTTP_ADDRESS="p:8080",
+             PROXY_HTTP_LOGIN="user", PROXY_HTTP_PASSWORD="p@ss:w/rd",
+             PROXY_USE_FOR_IMAGES="true")
+    # спецсимволы пароля экранированы, иначе разбор URL сломался бы
+    assert proxy.httpx_proxy_url(s, "images") == "http://user:p%40ss%3Aw%2Frd@p:8080"
+
+
+def test_socks5_preferred_for_telegram(monkeypatch):
+    s = _set(monkeypatch,
+             PROXY_SOCKS5_ENABLED="true", PROXY_SOCKS5_ADDRESS="s:1080",
+             PROXY_HTTP_ENABLED="true", PROXY_HTTP_ADDRESS="h:8080",
+             PROXY_USE_FOR_TELEGRAM="true")
+    assert proxy.httpx_proxy_url(s, "telegram") == "socks5://s:1080"
+
+
+def test_http_preferred_for_llm(monkeypatch):
+    s = _set(monkeypatch,
+             PROXY_SOCKS5_ENABLED="true", PROXY_SOCKS5_ADDRESS="s:1080",
+             PROXY_HTTP_ENABLED="true", PROXY_HTTP_ADDRESS="h:8080",
+             PROXY_USE_FOR_REWRITE="true")
+    assert proxy.httpx_proxy_url(s, "rewrite") == "http://h:8080"
+
+
+def test_old_env_vars_are_ignored_by_new_logic(monkeypatch):
+    """Старые TELETHON_PROXY_URL/BOT_API_PROXY_URL новой логикой не читаются —
+    только новый раздел (иначе редизайн был бы иллюзией)."""
+    s = _set(monkeypatch, TELETHON_PROXY_URL="socks5://old:1080",
+             BOT_API_PROXY_URL="socks5://old:1080")
+    assert proxy.httpx_proxy_url(s, "telegram") is None
+    assert proxy.telethon_proxy_kwargs(s) == {}
+
+
+# --- Telethon ---
+
+
+def test_telethon_no_proxy_when_flag_off(monkeypatch):
+    s = _set(monkeypatch, PROXY_SOCKS5_ENABLED="true", PROXY_SOCKS5_ADDRESS="s:1080")
+    assert proxy.telethon_proxy_kwargs(s) == {}
+
+
 async def test_build_client_without_proxy_uses_default_connection():
-    # async — не просто стиль: TelegramClient.__init__ дёргает asyncio.
-    # get_running_loop() внутри (см. telethon/client/telegrambaseclient.py::
-    # loop), в sync-тесте после нескольких async-тестов до него в общем
-    # прогоне в потоке уже нет текущего event loop (Python 3.12) — падает
-    # RuntimeError, хотя сам build_client() с сетью не работает.
+    # async: TelegramClient.__init__ дёргает asyncio.get_running_loop().
     client = build_client()
     assert client._proxy is None
 
 
-async def test_build_client_with_dd_secret_uses_randomized_intermediate(monkeypatch):
-    # "dd"-секрет ТРЕБУЕТ randomized intermediate — Telethon сам бросает
-    # ValueError при несовпадении (tcpmtproxy.py::MTProxyIO.init_header).
-    monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
-    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
-    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
-
+async def test_build_client_socks5_tuple(monkeypatch):
+    _set(monkeypatch, PROXY_SOCKS5_ENABLED="true",
+         PROXY_SOCKS5_ADDRESS="1.2.3.4:1080", PROXY_SOCKS5_LOGIN="u",
+         PROXY_SOCKS5_PASSWORD="p", PROXY_USE_FOR_TELEGRAM="true")
     client = build_client()
+    assert client._proxy == ("socks5", "1.2.3.4", 1080, True, "u", "p")
 
+
+async def test_build_client_socks5_without_creds(monkeypatch):
+    _set(monkeypatch, PROXY_SOCKS5_ENABLED="true",
+         PROXY_SOCKS5_ADDRESS="1.2.3.4:1080", PROXY_USE_FOR_TELEGRAM="true")
+    client = build_client()
+    assert client._proxy == ("socks5", "1.2.3.4", 1080, True)
+
+
+async def test_build_client_mtproto_dd_secret_randomized(monkeypatch):
+    # dd/ee-секрет ТРЕБУЕТ randomized intermediate (соглашение MTProxy).
+    _set(monkeypatch, PROXY_MTPROTO_ENABLED="true", PROXY_MTPROTO_ADDRESS="1.2.3.4:443",
+         PROXY_MTPROTO_SECRET="ddeadbeefdeadbeefdeadbeefdeadbeef",
+         PROXY_USE_FOR_TELEGRAM="true")
+    client = build_client()
     assert client._proxy == ("1.2.3.4", 443, "ddeadbeefdeadbeefdeadbeefdeadbeef")
     assert client._connection is ConnectionTcpMTProxyRandomizedIntermediate
 
 
-async def test_build_client_with_plain_secret_uses_intermediate(monkeypatch):
-    # Регрессия (найдено на реальном деплое): раньше ВСЕГДА хардкодился
-    # RandomizedIntermediate — с обычным (не dd/ee) hex-секретом прокси
-    # обрывал соединение сразу после хендшейка ("0 bytes read on a total
-    # of 4 expected bytes"), т.к. randomized intermediate framing не
-    # совпадал с тем, что ожидает сервер для такого секрета.
-    monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
-    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
-    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "deadbeefdeadbeefdeadbeefdeadbeef")
-
+async def test_build_client_mtproto_plain_secret_intermediate(monkeypatch):
+    # Регрессия: обычный (не dd/ee) секрет требует ПРОСТОЙ intermediate,
+    # иначе прокси рвёт соединение сразу после хендшейка.
+    _set(monkeypatch, PROXY_MTPROTO_ENABLED="true", PROXY_MTPROTO_ADDRESS="1.2.3.4:443",
+         PROXY_MTPROTO_SECRET="deadbeefdeadbeefdeadbeefdeadbeef",
+         PROXY_USE_FOR_TELEGRAM="true")
     client = build_client()
-
-    assert client._proxy == ("1.2.3.4", 443, "deadbeefdeadbeefdeadbeefdeadbeef")
     assert client._connection is ConnectionTcpMTProxyIntermediate
 
 
-async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
-    # Регрессия (найдено на реальном деплое): визард входа
-    # (webui/telethon_login.py -> gen_session.start_telethon_login) строил
-    # СВОЙ TelegramClient в обход _mtproxy_kwargs() — прокси применялся
-    # только к уже работающему listener'у (build_client), а самый первый
-    # логин, которым и добывается TG_SESSION_STRING, стучался в Telegram
-    # напрямую и падал "Connection to Telegram failed 5 time(s)" на сервере
-    # без прямого доступа.
-    monkeypatch.setenv("MTPROTO_PROXY_HOST", "1.2.3.4")
-    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
-    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
-    invalidate_settings_cache()
+async def test_socks5_takes_precedence_over_mtproto(monkeypatch):
+    _set(monkeypatch,
+         PROXY_SOCKS5_ENABLED="true", PROXY_SOCKS5_ADDRESS="1.2.3.4:1080",
+         PROXY_MTPROTO_ENABLED="true", PROXY_MTPROTO_ADDRESS="5.6.7.8:443",
+         PROXY_MTPROTO_SECRET="ddeadbeefdeadbeefdeadbeefdeadbeef",
+         PROXY_USE_FOR_TELEGRAM="true")
+    client = build_client()
+    assert client._proxy == ("socks5", "1.2.3.4", 1080, True)
 
+
+async def test_build_client_bad_address_falls_back_direct(monkeypatch):
+    _set(monkeypatch, PROXY_SOCKS5_ENABLED="true", PROXY_SOCKS5_ADDRESS="not-valid",
+         PROXY_USE_FOR_TELEGRAM="true")
+    client = build_client()
+    assert client._proxy is None
+
+
+async def test_start_telethon_login_applies_proxy(monkeypatch):
+    # Регрессия: визард входа строил СВОЙ клиент в обход прокси, и самый
+    # первый логин (которым добывается session string) шёл напрямую.
+    _set(monkeypatch, PROXY_MTPROTO_ENABLED="true", PROXY_MTPROTO_ADDRESS="1.2.3.4:443",
+         PROXY_MTPROTO_SECRET="ddeadbeefdeadbeefdeadbeefdeadbeef",
+         PROXY_USE_FOR_TELEGRAM="true")
     from unittest.mock import AsyncMock
 
     monkeypatch.setattr("telethon.TelegramClient.connect", AsyncMock(return_value=None))
@@ -100,70 +203,25 @@ async def test_start_telethon_login_applies_mtproto_proxy(monkeypatch):
         "telethon.TelegramClient.send_code_request",
         AsyncMock(return_value=type("Sent", (), {"phone_code_hash": "hash"})()),
     )
-
     state = await start_telethon_login(api_id=1, api_hash="hash", phone="+10000000000")
-
     assert state.client._proxy == ("1.2.3.4", 443, "ddeadbeefdeadbeefdeadbeefdeadbeef")
-    assert state.client._connection is ConnectionTcpMTProxyRandomizedIntermediate
 
 
-async def test_build_client_with_socks5_uses_tunnel_not_mtproxy(monkeypatch):
-    # SOCKS5-туннель: Telethon ходит НАПРЯМУЮ к Telegram через прокси,
-    # без MTProxy-класса (иначе упёрлись бы в fake-TLS). Проверяем, что
-    # _proxy — socks5-кортеж, а connection НЕ MTProxy.
-    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://168.168.88.33:1080")
-    invalidate_settings_cache()
-
-    client = build_client()
-
-    assert client._proxy == ("socks5", "168.168.88.33", 1080, True)
-    assert client._connection is not ConnectionTcpMTProxyRandomizedIntermediate
-    assert client._connection is not ConnectionTcpMTProxyIntermediate
-
-
-async def test_build_client_socks5_with_auth_includes_credentials(monkeypatch):
-    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://user:pass@1.2.3.4:1080")
-    invalidate_settings_cache()
-
-    client = build_client()
-
-    assert client._proxy == ("socks5", "1.2.3.4", 1080, True, "user", "pass")
-
-
-async def test_socks5_takes_precedence_over_mtproto(monkeypatch):
-    # Оба заданы — SOCKS5 выигрывает (не упирается в fake-TLS, надёжнее).
-    monkeypatch.setenv("TELETHON_PROXY_URL", "socks5://1.2.3.4:1080")
-    monkeypatch.setenv("MTPROTO_PROXY_HOST", "5.6.7.8")
-    monkeypatch.setenv("MTPROTO_PROXY_PORT", "443")
-    monkeypatch.setenv("MTPROTO_PROXY_SECRET", "ddeadbeefdeadbeefdeadbeefdeadbeef")
-    invalidate_settings_cache()
-
-    client = build_client()
-
-    assert client._proxy == ("socks5", "1.2.3.4", 1080, True)
-
-
-async def test_build_client_with_malformed_socks5_url_falls_back_direct(monkeypatch, caplog):
-    # Битый URL не роняет процесс (веб-панель должна подниматься всегда) —
-    # логируем и идём без прокси.
-    monkeypatch.setenv("TELETHON_PROXY_URL", "not-a-valid-url")
-    invalidate_settings_cache()
-
-    client = build_client()
-
-    assert client._proxy is None
+# --- Bot API репост-бота ---
 
 
 def test_build_application_without_proxy_does_not_crash():
-    build_application()  # baseline — не должно падать без прокси
+    build_application()
 
 
 def test_build_application_with_socks5_proxy_does_not_crash(monkeypatch):
-    # Bot API — SOCKS5, не MTProto (см. docstring build_application) — без
-    # httpx[socks] (socksio) эта строка падает ImportError при первом
-    # реальном запросе; здесь важно, что САМА сборка Application не падает.
-    monkeypatch.setenv("BOT_API_PROXY_URL", "socks5://user:pass@1.2.3.4:1080")
+    _set(monkeypatch, PROXY_SOCKS5_ENABLED="true",
+         PROXY_SOCKS5_ADDRESS="1.2.3.4:1080", PROXY_SOCKS5_LOGIN="user",
+         PROXY_SOCKS5_PASSWORD="pass", PROXY_USE_FOR_TELEGRAM="true")
     build_application()
+
+
+# --- Guardian (свой отдельный прокси, не трогали) ---
 
 
 def test_guardian_bot_api_proxy_url_defaults_empty():
@@ -172,42 +230,25 @@ def test_guardian_bot_api_proxy_url_defaults_empty():
 
 def test_guardian_bot_api_proxy_url_read_from_env(monkeypatch):
     monkeypatch.setenv("GUARDIAN_BOT_API_PROXY_URL", "socks5://user:pass@1.2.3.4:1080")
+    guardian_invalidate_settings_cache()
     assert get_guardian_settings().bot_api_proxy_url == "socks5://user:pass@1.2.3.4:1080"
 
 
 def test_guardian_aiohttp_session_picks_up_proxy_without_crash(monkeypatch):
-    # То же самое, что делает bot.py::main() — без aiohttp_socks эта строка
-    # упала бы ImportError при первом реальном запросе, важно что сборка
-    # session сама по себе не падает.
     monkeypatch.setenv("GUARDIAN_BOT_API_PROXY_URL", "socks5://user:pass@1.2.3.4:1080")
+    guardian_invalidate_settings_cache()
     settings = get_guardian_settings()
     session = AiohttpSession(proxy=settings.bot_api_proxy_url)
     assert session._proxy == "socks5://user:pass@1.2.3.4:1080"
 
 
 def test_guardian_settings_constructs_with_real_env_example_values(monkeypatch):
-    # Тот же приём, что tests/test_config.py делает для tg_repost.Settings —
-    # оба реальных прод-бага (NoDecode, MTPROTO_PROXY_PORT="") нашлись именно
-    # прямым прогоном против файла. GuardianSettings читает тот же .env.
     values = dotenv_values(_ENV_EXAMPLE)
     for key, value in values.items():
         monkeypatch.setenv(key, value or "")
     GuardianSettings()  # type: ignore[call-arg]  # не должно бросить ValidationError
 
 
-def test_build_application_with_malformed_proxy_url_falls_back_without_crash(monkeypatch, caplog):
-    # Регрессия (security-ревью): PTB парсит URL прокси ИМЕННО в .build()
-    # (не лениво при первом запросе) — битый BOT_API_PROXY_URL раньше ронял
-    # необработанным ValueError весь процесс main.py (веб-панель обязана
-    # подниматься ВСЕГДА, даже без рабочего Telegram-конфига).
-    monkeypatch.setenv("BOT_API_PROXY_URL", "not-a-valid-proxy-url")
-    application = build_application()
-    assert application is not None
-    assert "BOT_API_PROXY_URL" in caplog.text
-
-
 def test_guardian_aiohttp_session_with_malformed_proxy_url_raises_value_error():
-    # bot.py::main() ловит именно этот ValueError и логирует понятную
-    # ошибку вместо падения процесса (см. регресс на ту же находку выше).
     with pytest.raises(ValueError):
         AiohttpSession(proxy="not-a-valid-proxy-url")

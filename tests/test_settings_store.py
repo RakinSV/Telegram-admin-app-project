@@ -81,18 +81,21 @@ def test_set_secret_and_list_status_db_source():
     assert "sk-test-abcd1234" not in status.masked_hint
 
 
-def test_proxy_host_port_are_plain_settings_not_secrets():
+def test_proxy_address_is_a_plain_setting_not_secret():
+    # Адрес прокси (host:port) — обычное редактируемое поле, НЕ секрет:
+    # бесполезен без пароля/секрета, а прятать его пользователь просил не
+    # прятать («не прятало настройки прокси... чтобы можно было редактировать»).
     field = next(
-        f for g in settings_store.SETTINGS_GROUPS for f in g.fields if f.name == "mtproto_proxy_host"
+        f for g in settings_store.SETTINGS_GROUPS for f in g.fields if f.name == "proxy_socks5_address"
     )
-    settings_store.save_setting("mtproto_proxy_host", "1.2.3.4", "str")
-    assert settings_store.effective_value(field) == "1.2.3.4"
-    assert get_settings().mtproto_proxy_host == "1.2.3.4"
+    settings_store.save_setting("proxy_socks5_address", "1.2.3.4:1080", "str")
+    assert settings_store.effective_value(field) == "1.2.3.4:1080"
+    assert get_settings().proxy_socks5_address == "1.2.3.4:1080"
 
 
-def test_mtproto_proxy_secret_is_a_write_only_secret():
+def test_proxy_secret_is_a_write_only_secret():
     with pytest.raises(ValueError):
-        settings_store.save_setting("mtproto_proxy_secret", "deadbeef", "str")
+        settings_store.save_setting("proxy_mtproto_secret", "deadbeef", "str")
 
 
 def test_guardian_bot_token_saves_and_masks_even_though_not_a_settings_field():
@@ -125,16 +128,16 @@ def test_every_secret_field_belongs_to_exactly_one_settings_group():
             counts[key] += 1
     for key, count in counts.items():
         assert count == 1, f"'{key}' встречается в {count} группах, ожидалась ровно одна"
-    settings_store.set_secret("mtproto_proxy_secret", "deadbeefdeadbeefdeadbeefdeadbeef")
-    assert get_settings().mtproto_proxy_secret == "deadbeefdeadbeefdeadbeefdeadbeef"
+    settings_store.set_secret("proxy_mtproto_secret", "deadbeefdeadbeefdeadbeefdeadbeef")
+    assert get_settings().proxy_mtproto_secret == "deadbeefdeadbeefdeadbeefdeadbeef"
     statuses = {s.key: s for s in settings_store.list_secret_status()}
-    assert statuses["mtproto_proxy_secret"].is_set is True
-    assert "deadbeef" not in statuses["mtproto_proxy_secret"].masked_hint[:-4]
+    assert statuses["proxy_mtproto_secret"].is_set is True
+    assert "deadbeef" not in statuses["proxy_mtproto_secret"].masked_hint[:-4]
 
 
-def test_bot_api_proxy_url_is_a_write_only_secret():
-    settings_store.set_secret("bot_api_proxy_url", "socks5://user:pass@1.2.3.4:1080")
-    assert get_settings().bot_api_proxy_url == "socks5://user:pass@1.2.3.4:1080"
+def test_proxy_password_is_a_write_only_secret():
+    settings_store.set_secret("proxy_http_password", "s3cr3t-http-pw")
+    assert get_settings().proxy_http_password == "s3cr3t-http-pw"
 
 
 def test_set_secret_rejects_unknown_key():
@@ -150,20 +153,20 @@ def test_set_secret_rejects_empty_value():
 def test_clear_secret_removes_db_row():
     # Регрессия (жалоба пользователя): раньше на /secrets не было способа
     # удалить сохранённый секрет — пустое value в POST molчa игнорировалось.
-    settings_store.set_secret("telethon_proxy_url", "socks5://1.2.3.4:1080")
-    assert get_settings().telethon_proxy_url == "socks5://1.2.3.4:1080"
+    settings_store.set_secret("proxy_socks5_password", "s3cr3t-pw")
+    assert get_settings().proxy_socks5_password == "s3cr3t-pw"
 
-    cleared = settings_store.clear_secret("telethon_proxy_url")
+    cleared = settings_store.clear_secret("proxy_socks5_password")
 
     assert cleared is True
-    assert get_settings().telethon_proxy_url == ""
-    status = next(s for s in settings_store.list_secret_status() if s.key == "telethon_proxy_url")
+    assert get_settings().proxy_socks5_password == ""
+    status = next(s for s in settings_store.list_secret_status() if s.key == "proxy_socks5_password")
     assert status.is_set is False
     assert status.source == "unset"
 
 
 def test_clear_secret_returns_false_when_nothing_to_clear():
-    assert settings_store.clear_secret("telethon_proxy_url") is False
+    assert settings_store.clear_secret("proxy_socks5_password") is False
 
 
 def test_clear_secret_rejects_unknown_key():

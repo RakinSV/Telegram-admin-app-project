@@ -376,17 +376,16 @@ def test_secrets_clear_route_removes_saved_secret_via_http():
     value молча ничего не делала. Теперь есть отдельная кнопка/роут."""
     client = _client()
     _bootstrap(client)
-    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://1.2.3.4:1080"})
+    client.post("/secrets/proxy_socks5_password", data={"value": "s3cr3t-pw"})
     r = client.get("/settings")
-    assert "1.2.3.4:1080" not in r.text  # write-only, введённое значение не отдаётся обратно
-    # "Telethon SOCKS5 ..." встречается на странице трижды (в описании группы,
-    # в <strong>-заголовке строки секрета и ещё раз внутри confirm() у кнопки
-    # «Очистить») — якорем берём именно <strong>-тег, он однозначен.
-    anchor = "<strong>Telethon SOCKS5 Proxy URL (socks5://[user:pass@]host:port)</strong>"
+    assert "s3cr3t-pw" not in r.text  # write-only, введённое значение не отдаётся обратно
+    # <strong>-заголовок строки секрета — однозначный якорь (слово "SOCKS5"
+    # встречается на странице ещё и в описании группы, и в метках полей).
+    anchor = "<strong>SOCKS5: пароль</strong>"
     section = r.text.split(anchor)[1][:600]
     assert "не задан" not in section  # секрет сохранён — статус "ok"
 
-    r = client.post("/secrets/telethon_proxy_url/clear", follow_redirects=False)
+    r = client.post("/secrets/proxy_socks5_password/clear", follow_redirects=False)
     assert r.status_code == 303
 
     r = client.get("/settings")
@@ -404,64 +403,70 @@ def test_secrets_get_redirects_to_settings():
     assert r.headers["location"] == "/settings"
 
 
-def test_secrets_reveal_with_correct_password_shows_plaintext():
+def test_secrets_reveal_shows_plaintext_in_one_click():
+    # /settings целиком за require_login — админ уже аутентифицирован, кнопка
+    # «показать» работает в один клик, без повторного пароля (реальная жалоба:
+    # «нажимаю показать, а не показывает»).
     client = _client()
-    _bootstrap(client, password="reveal-test-password-1")
-    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
+    _bootstrap(client)
+    client.post("/secrets/proxy_socks5_password", data={"value": "reveal-me-9999"})
 
-    r = client.post(
-        "/secrets/telethon_proxy_url/reveal",
-        data={"password": "reveal-test-password-1"},
-    )
+    r = client.post("/secrets/proxy_socks5_password/reveal")
     assert r.status_code == 200
-    assert "socks5://9.9.9.9:1080" in r.text
-
-
-def test_secrets_reveal_with_wrong_password_does_not_show_plaintext():
-    client = _client()
-    _bootstrap(client, password="reveal-test-password-2")
-    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
-
-    r = client.post(
-        "/secrets/telethon_proxy_url/reveal",
-        data={"password": "totally-wrong-password"},
-    )
-    assert r.status_code == 401
-    assert "socks5://9.9.9.9:1080" not in r.text
-    assert "Неверный пароль" in r.text
+    assert "reveal-me-9999" in r.text
 
 
 def test_secrets_reveal_records_audit_entry():
     client = _client()
-    _bootstrap(client, password="reveal-test-password-3")
-    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
-    _clear_audit_before = len(audit.list_audit_log())
-    client.post(
-        "/secrets/telethon_proxy_url/reveal",
-        data={"password": "reveal-test-password-3"},
-    )
+    _bootstrap(client)
+    client.post("/secrets/proxy_socks5_password", data={"value": "reveal-me-9999"})
+    _audit_before = len(audit.list_audit_log())
+    client.post("/secrets/proxy_socks5_password/reveal")
     entries = audit.list_audit_log()
-    assert len(entries) > _clear_audit_before
+    assert len(entries) > _audit_before
     assert entries[0].action == "secret_reveal"
-    assert entries[0].target == "telethon_proxy_url"
+    assert entries[0].target == "proxy_socks5_password"
     assert entries[0].detail is None  # НИКОГДА не хранить само значение в аудит-логе
 
 
-def test_secrets_reveal_locks_out_after_repeated_wrong_passwords():
+def test_secrets_reveal_unknown_key_redirects():
     client = _client()
-    _bootstrap(client, password="reveal-test-password-4")
-    client.post("/secrets/telethon_proxy_url", data={"value": "socks5://9.9.9.9:1080"})
-    for _ in range(auth._MAX_FAILED_ATTEMPTS):
-        client.post(
-            "/secrets/telethon_proxy_url/reveal",
-            data={"password": "wrong"},
-        )
-    r = client.post(
-        "/secrets/telethon_proxy_url/reveal",
-        data={"password": "reveal-test-password-4"},  # даже верный пароль заблокирован
-    )
-    assert r.status_code == 429
-    assert "socks5://9.9.9.9:1080" not in r.text
+    _bootstrap(client)
+    r = client.post("/secrets/not_a_real_secret/reveal", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/settings"
+
+
+def test_proxy_section_renders_all_controls_and_hides_only_password():
+    """Единый прокси-раздел (ТЗ пользователя): три галочки-типа + адрес/логин
+    редактируемыми полями + три галочки применения; пароль скрыт, но кнопка
+    «показать» работает в один клик. Регрессия против случайного отката к
+    старой модели (host/port + write-only URL)."""
+    client = _client()
+    _bootstrap(client)
+    client.post("/secrets/proxy_socks5_password", data={"value": "socks-pw-xyz"})
+
+    html = client.get("/settings").text
+    start = html.find('id="proxy"')
+    section = html[start: html.find('<div class="settings-group"', start + 10)]
+
+    for name in (
+        "proxy_mtproto_enabled", "proxy_mtproto_address",
+        "proxy_socks5_enabled", "proxy_socks5_address", "proxy_socks5_login",
+        "proxy_http_enabled", "proxy_http_address", "proxy_http_login",
+        "proxy_use_for_telegram", "proxy_use_for_rewrite", "proxy_use_for_images",
+    ):
+        assert f'name="{name}"' in section, f"нет контрола {name} в секции прокси"
+
+    # пароль-секрет write-only: введённое значение обратно не отдаётся,
+    assert "socks-pw-xyz" not in section
+    # а форма «показать» — без повторного ввода пароля (один клик).
+    reveal_tail = section.split("proxy_socks5_password/reveal")[1][:220]
+    assert 'name="password"' not in reveal_tail
+
+    r = client.post("/secrets/proxy_socks5_password/reveal")
+    assert r.status_code == 200
+    assert "socks-pw-xyz" in r.text
 
 
 def test_sources_create_and_list_round_trip():

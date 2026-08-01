@@ -18,17 +18,6 @@ def test_blank_tg_api_id_does_not_crash(monkeypatch):
     assert settings.tg_owner_user_id == 0
 
 
-def test_blank_mtproto_proxy_port_does_not_crash(monkeypatch):
-    # Регрессия: то же самое семейство бага, что уже чинили для
-    # filter_stop_words/posting_slots (NoDecode) — здесь MTPROTO_PROXY_PORT=""
-    # падал с pydantic ValidationError (int_parsing) до добавления в
-    # _blank_int_to_zero. Найдено ДО коммита прямым прогоном против
-    # реального .env.example, не в проде на этот раз.
-    monkeypatch.setenv("MTPROTO_PROXY_PORT", "")
-    settings = Settings()
-    assert settings.mtproto_proxy_port == 0
-
-
 def test_blank_tg_api_id_means_not_minimally_configured(monkeypatch):
     monkeypatch.setenv("TG_API_ID", "")
     monkeypatch.setenv("TG_OWNER_USER_ID", "")
@@ -82,8 +71,8 @@ def test_settings_constructs_with_real_env_example_values(monkeypatch):
     """Широкая регрессия на весь класс багов выше: конструирует `Settings()`
     буквально со ВСЕМИ значениями из настоящего `.env.example` (не только
     отдельных полей, которые уже ловили руками — filter_stop_words,
-    posting_slots, mtproto_proxy_port). Оба реальных прод-бага (NoDecode для
-    CSV-списков, MTPROTO_PROXY_PORT="" → int_parsing) обнаружились именно так
+    posting_slots, пустые int-порты). Оба реальных прод-бага (NoDecode для
+    CSV-списков, пустой int-порт → int_parsing) обнаружились именно так
     — прямым прогоном против файла, а не догадкой, какое поле проверить.
     Ловит любое НОВОЕ поле с той же проблемой автоматически, без правки
     этого теста."""

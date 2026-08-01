@@ -652,41 +652,19 @@ def _protected_router() -> APIRouter:
         return RedirectResponse(url="/settings", status_code=303)
 
     @router.post("/secrets/{key}/reveal", response_class=HTMLResponse)
-    async def secrets_reveal(
-        request: Request, key: str, password: str = Form(...)
-    ) -> Response:
-        """Показать расшифрованное значение секрета — требует повторного
-        пароля администратора (жалоба пользователя: секреты в /secrets были
-        write-only без исключений, видно было только маску последних
-        символов). Значение возвращается ТОЛЬКО в этом одном HTML-ответе,
-        нигде не кэшируется и не переживает следующий GET /settings.
+    async def secrets_reveal(request: Request, key: str) -> Response:
+        """Показать расшифрованное значение секрета — в ОДИН клик, без
+        повторного ввода пароля. Вся страница /settings уже за `require_login`
+        (см. `_protected_router`), админ аутентифицирован — второй пароль был
+        лишним трением (реальная жалоба: «нажимаю показать, а не показывает»).
+        Маскирование секрета защищает от подглядывания через плечо/оставленного
+        открытым экрана, а не от самого залогиненного владельца.
 
-        Тот же rate-limit, что и на /login (`is_login_locked`/
-        `register_failed_login`) — этот роут точно так же перебирает пароль
-        администратора, отдельный счётчик не нужен, риск тот же."""
+        Значение возвращается ТОЛЬКО в этом одном HTML-ответе, нигде не
+        кэшируется и не переживает следующий GET /settings. Факт показа пишется
+        в аудит-лог."""
         if key not in SECRET_FIELD_NAMES:
             return RedirectResponse(url="/settings", status_code=303)
-
-        client_key = request.client.host if request.client else "unknown"
-        if is_login_locked(client_key):
-            return _templates.TemplateResponse(
-                request,
-                "settings.html",
-                {
-                    "groups": _settings_groups_context(),
-                    "error": i18n.t("login.error_locked"),
-                },
-                status_code=429,
-            )
-        if not verify_login(password):
-            register_failed_login(client_key)
-            return _templates.TemplateResponse(
-                request,
-                "settings.html",
-                {"groups": _settings_groups_context(), "error": i18n.t("login.error_wrong_password")},
-                status_code=401,
-            )
-        clear_failed_logins(client_key)
         audit.record_audit("secret_reveal", target=key)
         plaintext = getattr(get_settings(), key, "")
         return _templates.TemplateResponse(

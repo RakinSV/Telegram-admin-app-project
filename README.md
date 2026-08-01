@@ -175,10 +175,10 @@ other. Both are managed from a single web panel.
   rejected → posted | failed`, every transition logged.
 - **Retry with exponential backoff** on every network call (Telegram, LLM,
   search).
-- **MTProto/SOCKS5 proxy support** — Telethon (user session) goes through
-  an MTProto proxy, the Bot API (posting/moderation) through SOCKS5; see
-  [Proxies](#proxies) below — **and read the Wiki's Proxy Guide before you
-  configure this, there's an important limitation.**
+- **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, enable a
+  type and tick what to route through it (Telegram, rewrite AI, image AI);
+  see [Proxies](#proxies) below — **and read the Wiki's Proxy Guide before
+  you configure this, there's an important limitation.**
 
 ---
 
@@ -228,7 +228,7 @@ cuts a legitimate message.
 - **Log channel** — every moderation action, manual or automatic, is
   written to a private channel with inline buttons for a quick admin
   response.
-- **SOCKS5 proxy support for the Bot API** — see [Proxies](#proxies) below.
+- **SOCKS5/HTTP proxy support for the Bot API** — see [Proxies](#proxies) below.
 - **21 admin commands** — `/warn /mute /unmute /ban /unban /kick /check
   /addword /delword /listwords /trust /untrust /addomain /deldomain
   /listdomains /setmode /setcaptcha /setwarn /setmutime /mode /stats
@@ -271,34 +271,40 @@ Argon2id.
 
 ## Proxies
 
-Telethon (the user session) can reach Telegram two ways: over its native
-**MTProto** protocol via an **MTProto proxy**, or tunneled through a plain
-**SOCKS5** proxy (Telethon connects to Telegram's real servers *through* the
-tunnel). The Bot API (posting/moderation for both bots) runs over plain
-HTTPS and needs **SOCKS5**.
+One unified proxy section on `/settings` → **Proxy**. You enable one or more
+**types**, fill in each one's address (and optional credentials), then tick
+what to route through it. There are three types and three usage toggles:
 
-| What's proxied | Type | Where to configure |
+- **Types:** **MTProto** (Telegram-specific fake-TLS proxy, Telethon only,
+  uses a *secret* instead of login/password), **SOCKS5**, and **HTTP(S)**
+  (both plain tunnels — usable for Telethon, the Bot API, and the AI calls).
+- **Usage toggles:** *Telegram* (Telethon reading + both bots' Bot API),
+  *rewrite AI*, *image AI*.
+
+| Setting | Secret? | Notes |
 |---|---|---|
-| Telethon — **recommended** | SOCKS5 tunnel | `/secrets` (`Telethon SOCKS5 Proxy URL`, `socks5://[user:pass@]host:port`) — no fake-TLS limitation; takes precedence over the MTProto proxy if both are set |
-| Telethon — alternative | MTProto | `/settings` (host/port) + `/secrets` (secret) — one shared proxy for every Telethon client (**but see the fake-TLS caveat below**) |
-| Repost bot's Bot API | SOCKS5 | `/secrets` (`Bot API Proxy URL`, the whole thing including credentials) |
-| Guardian's Bot API | SOCKS5 | **`.env` only** (`GUARDIAN_BOT_API_PROXY_URL`) — unlike the repost bot, Guardian has no live component restart; `Bot()` is built once at process start, same as `GUARDIAN_BOT_TOKEN`; changing it needs `docker compose restart guardian` |
+| Address (`host:port`), login | plain, editable on `/settings` | never hidden — useless without the password/secret anyway |
+| Password / MTProto secret | write-only secret | masked; **one-click "show"** reveals it (you're already logged in) |
+| Usage toggles | plain checkboxes | pick per-traffic: Telegram / rewrite AI / image AI |
 
-Leave everything blank for a direct connection (the default, nothing to
-configure if you don't need a proxy).
+Precedence when several types are enabled: for **Telegram**, SOCKS5 → HTTP →
+MTProto; for the **AIs**, HTTP → SOCKS5 (MTProto is Telegram-only). Leave
+every type disabled for a direct connection (the default).
+
+Guardian's Bot API proxy is **separate** (`.env` only,
+`GUARDIAN_BOT_API_PROXY_URL`) — Guardian is a different process built once at
+start, so changing it needs `docker compose restart guardian`.
 
 > ⚠️ **Read this before setting up an MTProto proxy.** Telethon's built-in
 > MTProto proxy support does **not** implement fake-TLS mode (secrets
-> starting with `ee`) — this is a known limitation of the library itself,
-> not something this project can patch around. Most modern public MTProto
-> proxies default to fake-TLS. If your proxy secret starts with `ee`,
-> Telethon will hang or fail with a garbled decryption error no matter what
-> you configure here. **The simplest fix is to skip the MTProto proxy and use
-> the SOCKS5 tunnel instead** (`Telethon SOCKS5 Proxy URL` on `/secrets`) —
-> a SOCKS5 tunnel has no fake-TLS limitation. Alternatively, get a classic
-> (plain hex / `dd`-prefixed) secret from the same proxy. **Full details, real
-> error messages, and a decision tree in the [Wiki's Proxy
-> Guide](../../wiki/Proxy-Guide).**
+> starting with `ee`) — a known limitation of the library itself, not
+> something this project can patch around. Most modern public MTProto proxies
+> default to fake-TLS. If your proxy secret starts with `ee`, Telethon will
+> hang or fail with a garbled decryption error. **The simplest fix is to use a
+> SOCKS5 or HTTP(S) proxy instead** — plain tunnels have no fake-TLS
+> limitation. Alternatively, get a classic (plain hex / `dd`-prefixed) secret
+> from the same proxy. **Full details, real error messages, and a decision
+> tree in the [Wiki's Proxy Guide](../../wiki/Proxy-Guide).**
 
 ---
 
@@ -585,9 +591,10 @@ tests/                   # 537 tests — pytest + pytest-asyncio
 - ✅ **CI/CD** — GitHub Actions on every push/PR, fully clean
   mypy/ruff/bandit/pip-audit across both packages.
 - ✅ **Auto-backup** — `.env` + both databases + logs in one script.
-- ✅ **MTProto/SOCKS5 proxy support** — Telethon via MTProto, both bots'
-  Bot API via SOCKS5, configured through `/settings`+`/secrets` (see
-  [Proxies](#proxies) — and read the fake-TLS caveat).
+- ✅ **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, per-type
+  enable + per-traffic usage toggles (Telegram / rewrite AI / image AI),
+  configured on `/settings` (see [Proxies](#proxies) — and read the fake-TLS
+  caveat).
 - ✅ **Production deployment proven** — an LXC on Proxmox (Docker inside an
   unprivileged container with nesting enabled), a full `docker compose up`
   run end to end.
