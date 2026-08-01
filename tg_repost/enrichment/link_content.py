@@ -36,6 +36,17 @@ from bs4 import BeautifulSoup
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger
 
+# trafilatura — специализированный экстрактор тела статьи (отбрасывает меню,
+# футеры, «читайте также», баннеры и оставляет собственно текст). На порядок
+# точнее самодельной BS4-эвристики, которая на сложной вёрстке либо тянула
+# мусор, либо возвращала пусто — из-за чего рерайт шёл по обрывкам и модель
+# добирала выдумками. Импорт защищён: если по какой-то причине пакета нет в
+# сборке, экстрактор откатывается на прежний BS4-путь, а не падает.
+try:
+    import trafilatura  # type: ignore[import-untyped]
+except ImportError:  # pragma: no cover
+    trafilatura = None  # type: ignore[assignment]
+
 logger = get_logger(__name__)
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
@@ -223,6 +234,38 @@ def _extract_main_text(soup: BeautifulSoup, max_chars: int) -> str:
     return text[:max_chars]
 
 
+def _extract_with_trafilatura(html: str) -> str:
+    """Тело статьи через trafilatura. Пустая строка — если пакета нет, парсер
+    не нашёл статьи или упал (тогда вызывающий код откатится на BS4)."""
+    if trafilatura is None:
+        return ""
+    try:
+        # favor_recall — брать больше текста (нам нужен полный материал для
+        # рерайта, а не лаконичная выжимка). Комментарии и таблицы выключены:
+        # первые — шум, вторые ломают связный пересказ.
+        extracted = trafilatura.extract(
+            html, include_comments=False, include_tables=False,
+            favor_recall=True, no_fallback=False,
+        )
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover
+        logger.debug("trafilatura не разобрала страницу, откат на BS4: %s", exc)
+        return ""
+    return (extracted or "").strip()
+
+
+def extract_article_text(html: str, soup: BeautifulSoup, max_chars: int) -> str:
+    """Тело статьи: сначала trafilatura, при неудаче — прежняя BS4-эвристика.
+
+    Вынесено отдельной функцией (чистой, без сети) — так проверяется тестами
+    на реальном HTML без запросов наружу.
+    """
+    text = _extract_with_trafilatura(html)
+    if len(text) >= _MIN_PARAGRAPH_LEN:
+        return text[:max_chars]
+    # trafilatura ничего осмысленного не нашла — пробуем самодельную эвристику.
+    return _extract_main_text(soup, max_chars)
+
+
 def _extract_image(soup: BeautifulSoup, base_url: str) -> str | None:
     og = soup.find("meta", attrs={"property": "og:image"})
     og_content = og.get("content") if og else None
@@ -262,7 +305,7 @@ async def fetch_link_content(url: str) -> LinkContent | None:
         html = html_bytes.decode(encoding, errors="ignore")
         soup = BeautifulSoup(html, "html.parser")
         title = soup.title.get_text(strip=True) if soup.title else ""
-        text = _extract_main_text(soup, settings.link_content_max_chars)
+        text = extract_article_text(html, soup, settings.link_content_max_chars)
         image_url = _extract_image(soup, final_url)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Не удалось разобрать содержимое ссылки %s: %s", url, exc)
