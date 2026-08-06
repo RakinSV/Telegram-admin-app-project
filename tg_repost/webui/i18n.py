@@ -2024,6 +2024,45 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Пароль HTTP(S)-прокси. Оставь пустым, если прокси без авторизации.",
         "en": "HTTP(S) proxy password. Leave blank if the proxy needs no authentication.",
     },
+    "settings.group.quiz.title": {"ru": "Викторины по постам", "en": "Post quizzes"},
+    "settings.group.quiz.desc": {
+        "ru": "Бот выдаёт контент, а через паузу задаёт по нему вопрос — очки "
+        "идут за ПРАВИЛЬНЫЙ ОТВЕТ, а не за количество сообщений (те "
+        "превращаются в ферму флуда). Вопрос составляет LLM из уже проверенного "
+        "редактором материала: +1 вызов на пост, из которого делаем квиз. "
+        "Публикует бот Engage — без его токена викторины не заработают. "
+        "РАБОТАЕТ ТОЛЬКО В ГРУППАХ: в канале у постов нет авторов-участников, и "
+        "ответы оттуда не приходят (для канала — его discussion-группа).",
+        "en": "The bot delivers content, then asks a question about it after a "
+        "delay — points go for the CORRECT ANSWER, not for message count (that "
+        "turns into a flood farm). The question is written by the LLM from "
+        "material already checked by the editor: +1 call per post used for a "
+        "quiz. Published by the Engage bot — without its token quizzes will not "
+        "work. GROUPS ONLY: channel posts have no member authors and answers "
+        "never arrive from there (for a channel use its discussion group).",
+    },
+    "settings.field.quiz_enabled.label": {
+        "ru": "Включить викторины", "en": "Enable quizzes",
+    },
+    "settings.field.quiz_delay_minutes.label": {
+        "ru": "Пауза после поста, мин", "en": "Delay after the post, min",
+    },
+    "settings.field.quiz_delay_minutes.hint": {
+        "ru": "Спрашивать сразу — значит проверять не чтение, а скорость реакции.",
+        "en": "Asking immediately tests reaction speed, not reading.",
+    },
+    "settings.field.quiz_every_nth_post.label": {
+        "ru": "Из каждого N-го поста", "en": "From every Nth post",
+    },
+    "settings.field.quiz_every_nth_post.hint": {
+        "ru": "1 — из каждого, 3 — из каждого третьего. Вопрос по каждому посту "
+        "быстро превращается в шум.",
+        "en": "1 — every post, 3 — every third. A question after every post "
+        "quickly becomes noise.",
+    },
+    "settings.field.quiz_prompt_template.label": {
+        "ru": "Промпт составителя вопроса", "en": "Quiz author prompt",
+    },
     "settings.group.engage_bot.title": {
         "ru": "Engage — бот вовлечения", "en": "Engage — engagement bot",
     },

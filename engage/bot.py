@@ -17,9 +17,11 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from engage.config import get_engage_settings
-from engage.handlers import start
+from engage.handlers import quiz, start
 from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
@@ -60,10 +62,22 @@ async def main() -> None:
     bot = _build_bot(settings.engage_bot_token)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(start.router)
+    dp.include_router(quiz.router)
+
+    # Публикация созревших викторин (F43). Минутный тик: сама задержка
+    # после поста задаётся настройкой quiz_delay_minutes, здесь только
+    # частота проверки «не пора ли».
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        quiz.publish_pending_quizzes, IntervalTrigger(minutes=1),
+        args=[bot], id="publish_quizzes",
+    )
+    scheduler.start()
 
     try:
         await dp.start_polling(bot)
     finally:
+        scheduler.shutdown(wait=False)
         await bot.session.close()
 
 

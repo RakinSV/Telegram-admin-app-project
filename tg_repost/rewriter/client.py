@@ -71,6 +71,8 @@ _EXTRA_PROMPT_FIELDS = {
     "article": "article_prompt_template",
     "editor": "editorial_prompt_template",
     "journalist_revise": "editorial_revise_prompt_template",
+    # F43: составитель викторины — тоже не стиль, отдельная ось.
+    "quiz": "quiz_prompt_template",
 }
 
 # Повторяется последней строкой промпта, когда анти-ИИ блок отодвинул секцию

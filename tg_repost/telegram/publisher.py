@@ -385,3 +385,54 @@ async def publish_post(bot: Bot, post_id: int) -> None:
                 if failed_chat_ids else None
             )
             post.set_status(PostStatus.POSTED)
+
+    # F43: викторина по опубликованному посту. ПОСЛЕ смены статуса и вне
+    # session_scope — генерация ходит в LLM и может быть долгой, держать на
+    # ней открытую транзакцию нельзя. Сбой ничего не ломает: пост уже
+    # опубликован, просто не будет вопроса.
+    await _maybe_create_quiz(post_id, first_chat_id)
+
+
+async def _maybe_create_quiz(post_id: int, chat_id: int | None) -> None:
+    """Составить викторину по посту, если это включено и пост «тот самый».
+
+    Вопрос по КАЖДОМУ посту быстро превращается в шум, поэтому берём каждый
+    N-й (`quiz_every_nth_post`). Отбор по id поста, а не счётчиком в памяти:
+    счётчик сбрасывался бы при каждом рестарте контейнера.
+    """
+    settings = get_settings()
+    if not settings.quiz_enabled or chat_id is None:
+        return
+    nth = max(1, settings.quiz_every_nth_post)
+    if post_id % nth != 0:
+        return
+
+    from tg_repost import quiz_repo
+    from tg_repost.rewriter.client import get_rewriter
+    from tg_repost.rewriter.quiz import generate_quiz
+
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        # Материал для вопроса — то же, что читала модель при рерайте:
+        # готовый текст поста (он уже проверен редактором F40).
+        source_text = (post.rewritten_text or post.original_text or "") if post else ""
+    if not source_text.strip():
+        return
+
+    try:
+        draft = await generate_quiz(get_rewriter(), source_text)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Квиз для поста %s не составлен: %s", post_id, exc)
+        return
+    if draft is None:
+        return
+
+    # Квиз идёт в ПЕРВУЮ группу публикации: в канале участников-авторов нет,
+    # и poll_answer оттуда не приходит — играть можно только в группе.
+    quiz_id = quiz_repo.create_quiz(
+        post_id=post_id, chat_id=chat_id, question=draft.question,
+        options=draft.options, correct_index=draft.correct_index,
+        explanation=draft.explanation,
+    )
+    if quiz_id is not None:
+        logger.info("Квиз %s создан по посту %s (%d токенов)", quiz_id, post_id, draft.tokens)

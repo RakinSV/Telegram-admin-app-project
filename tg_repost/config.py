@@ -366,6 +366,23 @@ class Settings(BaseSettings):
         "problems", alias="EDITORIAL_NEWSROOM_VERBOSITY",
     )
 
+    # --- F43: викторины по постам (геймификация, бот Engage) ---
+    # Бот выдаёт контент, а через паузу спрашивает по нему. Очки — за
+    # ПРАВИЛЬНЫЙ ОТВЕТ, а не за количество сообщений: те превращаются в ферму
+    # флуда. Вопрос составляет LLM из уже проверенного редактором материала
+    # (см. rewriter/quiz.py) — +1 вызов на пост, из которого делаем квиз.
+    quiz_enabled: bool = Field(False, alias="QUIZ_ENABLED")
+    # Пауза между постом и вопросом — часть механики: спрашивать сразу значит
+    # проверять не чтение, а скорость реакции.
+    quiz_delay_minutes: int = Field(60, alias="QUIZ_DELAY_MINUTES")
+    # Из каждого ли поста делать квиз. 1 — из каждого, 3 — из каждого третьего.
+    # Вопрос по каждому посту быстро превращается в шум.
+    quiz_every_nth_post: int = Field(3, alias="QUIZ_EVERY_NTH_POST")
+    quiz_prompt_template: str = Field(
+        default_factory=lambda: _prompt_file_default("quiz"),
+        alias="QUIZ_PROMPT_TEMPLATE",
+    )
+
     # --- F23: веб-админка (Фаза 5) ---
     # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
     # секретов ключом из той же БД не защищало бы ни от чего). Генерируются

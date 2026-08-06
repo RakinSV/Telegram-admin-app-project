@@ -28,11 +28,13 @@
 from __future__ import annotations
 
 import enum
+from datetime import date as date_type
 from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Enum,
     Float,
@@ -721,6 +723,105 @@ class AuditLog(Base):
     target: Mapped[str | None] = mapped_column(String(255), nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Quiz(Base):
+    """Викторина по опубликованному посту (F43, геймификация).
+
+    Механика владельца: бот выдаёт контент, а ЧЕРЕЗ ВРЕМЯ спрашивает по нему.
+    Очки — за правильный ответ, а не за количество сообщений: те превращаются
+    в ферму флуда («+», «ок»), а тут очки идут за то, что человек реально
+    прочитал.
+
+    Вопрос делает LLM из УЖЕ проверенного материала: текст статьи извлечён
+    (trafilatura, F16), факты сверены редактором (F40) — поэтому вопрос
+    опирается на реальный текст, а не на выдумку модели.
+
+    Публикуется как нативный quiz-poll: Telegram сам проверяет ответ, показывает
+    верный вариант с пояснением и не даёт переголосовать. Ноль LLM-вызовов на
+    проверку ответов и ноль споров «я это и имел в виду».
+
+    ВАЖНО: работает только в ГРУППАХ. В канале у постов нет авторов-участников,
+    и `poll_answer` от читателей канала не приходит — для канала это его
+    discussion-группа.
+    """
+
+    __tablename__ = "quizzes"
+    __table_args__ = (
+        # Горячий путь публикации: «какие квизы пора отправить».
+        Index("ix_quizzes_pending", "published_at"),
+        # poll_answer приходит с poll_id — по нему ищем квиз.
+        Index("ix_quizzes_poll", "poll_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Из какого поста сделан вопрос. NULL допустим: пост могли удалить, а
+    # статистика ответов должна пережить это.
+    post_id: Mapped[int | None] = mapped_column(
+        ForeignKey("posts.id"), nullable=True, index=True,
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    question: Mapped[str] = mapped_column(Text)
+    # JSON-массив вариантов. Не отдельная таблица: варианты не живут своей
+    # жизнью, всегда читаются и пишутся целиком вместе с вопросом.
+    options_json: Mapped[str] = mapped_column(Text)
+    correct_index: Mapped[int] = mapped_column(Integer)
+    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Заполняются при публикации. `poll_id` — строка (Telegram даёт его именно
+    # строкой), по ней сопоставляется входящий poll_answer.
+    poll_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # NULL — ещё не опубликован (ждёт своей паузы после поста).
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class QuizAnswer(Base):
+    """Ответ участника на викторину (F43). Одна попытка на человека —
+    Telegram и сам не даёт переголосовать в quiz-режиме, но уникальный индекс
+    защищает от дубля при повторной доставке апдейта."""
+
+    __tablename__ = "quiz_answers"
+    __table_args__ = (
+        UniqueConstraint("quiz_id", "user_id", name="uq_quiz_answer"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    option_index: Mapped[int] = mapped_column(Integer)
+    is_correct: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class UserActivity(Base):
+    """Очки участника в чате (F43). Уровень НЕ хранится — он вычисляется из
+    очков (`level_for_points`), иначе смена формулы потребовала бы миграции
+    данных."""
+
+    __tablename__ = "user_activity"
+    __table_args__ = (
+        Index("ix_user_activity_chat_user", "chat_id", "user_id", unique=True),
+        # Лидерборд: «топ по очкам в этом чате».
+        Index("ix_user_activity_leaderboard", "chat_id", "points"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    correct_answers: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_answers: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Серия дней подряд с правильным ответом — считается по ДАТЕ, а не по
+    # времени: человек не должен терять серию из-за того, что вчера отвечал
+    # утром, а сегодня вечером.
+    streak_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_correct_date: Mapped[date_type | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
