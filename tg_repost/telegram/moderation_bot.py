@@ -12,11 +12,13 @@ from io import BytesIO
 from pathlib import Path
 
 from telegram import (
+    ChatMember,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
     Update,
 )
+from telegram.constants import ChatMemberStatus
 from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
@@ -33,6 +35,7 @@ from tg_repost import (
     discovered_chats_repo,
     invites_repo,
     languages,
+    member_origins_repo,
     post_variants_repo,
     targets_repo,
 )
@@ -659,6 +662,61 @@ async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     targets_repo.sync_can_post(chat.id, can_post)
 
 
+# Статусы, при которых человек РЕАЛЬНО находится в чате. `RESTRICTED` в этот
+# список не входит безусловно: ограниченный участник может быть как в чате
+# (is_member=True), так и уже вне его — проверяется отдельно ниже.
+_PRESENT_STATUSES = frozenset({
+    ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER,
+})
+
+
+def _is_present(member: ChatMember) -> bool:
+    """Находится ли участник в чате прямо сейчас."""
+    if member.status in _PRESENT_STATUSES:
+        return True
+    if member.status == ChatMemberStatus.RESTRICTED:
+        # У ограниченного статус сам по себе ничего не говорит о присутствии.
+        return bool(getattr(member, "is_member", False))
+    return False
+
+
+async def _on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """F41: вступление/уход УЧАСТНИКА — источник данных для атрибуции рекламы.
+
+    Не путать с `my_chat_member` ниже: там меняется статус САМОГО бота, здесь —
+    любого участника. Апдейт приходит, только если бот админ в чате и
+    `allowed_updates` включает `chat_member` (у нас ALL_TYPES, см. supervisor).
+
+    Именно здесь Telegram отдаёт `invite_link` — по какой ссылке человек
+    пришёл. До F41 это поле молча выбрасывалось.
+    """
+    del context
+    membership = update.chat_member
+    if membership is None:
+        return
+    was_present = _is_present(membership.old_chat_member)
+    is_present = _is_present(membership.new_chat_member)
+    if was_present == is_present:
+        return  # смена роли внутри чата (дали админку и т.п.) — не наш случай
+
+    chat_id = membership.chat.id
+    user_id = membership.new_chat_member.user.id
+    if is_present:
+        link = membership.invite_link
+        member_origins_repo.record_join(
+            chat_id, user_id,
+            invite_link=link.invite_link if link is not None else None,
+            invite_name=link.name if link is not None else None,
+        )
+        logger.info(
+            "Вступление в чат %s: user=%s, ссылка=%s",
+            chat_id, user_id, (link.name or link.invite_link) if link is not None else "без ссылки",
+        )
+    else:
+        member_origins_repo.record_leave(chat_id, user_id)
+        logger.info("Уход из чата %s: user=%s", chat_id, user_id)
+
+
 async def _on_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """F32: заявка на вступление в группу с подтверждением админом —
     приходит ТОЛЬКО если у чата включена настройка "одобрять новых
@@ -668,8 +726,12 @@ async def _on_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TY
     request = update.chat_join_request
     if request is None:
         return
+    # F41: по какой ссылке подана заявка. Telegram отдаёт это здесь же —
+    # сохраняем, чтобы источник не потерялся к моменту одобрения.
+    request_link = request.invite_link
     invites_repo.record_join_request(
         request.chat.id, request.from_user.id, request.from_user.username, request.bio,
+        invite_link=request_link.invite_link if request_link is not None else None,
     )
     pending = invites_repo.list_pending_join_requests(request.chat.id)
     record = next((r for r in pending if r.user_id == request.from_user.id), None)
@@ -761,5 +823,8 @@ def build_application() -> Application:
         MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _on_text)
     )
     application.add_handler(ChatMemberHandler(_on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
+    # F41: вступления/уходы УЧАСТНИКОВ — атрибуция рекламы (кто по какой
+    # ссылке пришёл). Отдельный тип от MY_CHAT_MEMBER выше.
+    application.add_handler(ChatMemberHandler(_on_chat_member, ChatMemberHandler.CHAT_MEMBER))
     application.add_handler(ChatJoinRequestHandler(_on_chat_join_request))
     return application

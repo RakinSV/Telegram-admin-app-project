@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from tg_repost import invites_repo, targets_repo
+from tg_repost import invites_repo, member_origins_repo, targets_repo
 from tg_repost.telegram.invites import (
     approve_join_request,
     create_invite_link,
@@ -40,6 +40,9 @@ def _context(error: str | None = None) -> dict:
         "targets": targets,
         "links_by_chat": links_by_chat,
         "pending_requests": invites_repo.list_pending_join_requests(),
+        # F41: откуда пришли подписчики — сколько привела каждая ссылка,
+        # сколько из них осталось и во что обошёлся один оставшийся (CPA).
+        "origin_stats": member_origins_repo.origin_stats(),
         "error": error,
     }
 
@@ -80,6 +83,32 @@ def build_invites_router() -> APIRouter:
             creates_join_request=bool(creates_join_request),
         )
         audit.record_audit("invite_link_create", target=f"chat {chat_id}", detail=link.invite_link)
+        return RedirectResponse(url="/invites", status_code=303)
+
+    @router.post("/{link_id}/cost")
+    async def invites_set_cost(
+        request: Request, link_id: int,
+        cost: str = Form(""), currency: str = Form("RUB"),
+    ) -> Response:
+        """F41: стоимость размещения → цена привлечённого подписчика (CPA).
+
+        Пустое значение стирает цену: размещение могло быть по бартеру, и
+        показывать CPA=0 было бы враньём.
+        """
+        del request
+        raw = cost.strip().replace(",", ".")
+        parsed: float | None = None
+        if raw:
+            try:
+                parsed = float(raw)
+            except ValueError:
+                # Опечатку молча превращать в «бесплатно» нельзя — просто не
+                # трогаем сохранённое и возвращаем страницу как есть.
+                return RedirectResponse(url="/invites", status_code=303)
+            if parsed < 0:
+                return RedirectResponse(url="/invites", status_code=303)
+        if invites_repo.set_link_cost(link_id, parsed, currency):
+            audit.record_audit("invite_link_cost", target=f"#{link_id}", detail=raw or "(стёрта)")
         return RedirectResponse(url="/invites", status_code=303)
 
     @router.post("/{link_id}/revoke")

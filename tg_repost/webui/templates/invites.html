@@ -38,7 +38,8 @@
   <table>
     <tr>
       <th>{{ t('invites.col_chat') }}</th><th>{{ t('invites.col_link') }}</th>
-      <th>{{ t('invites.col_name') }}</th><th>{{ t('invites.col_status') }}</th><th></th>
+      <th>{{ t('invites.col_name') }}</th><th>{{ t('invites.col_status') }}</th>
+      <th>{{ t('invites.col_cost') }}</th><th></th>
     </tr>
     {% for chat_id, links in links_by_chat.items() %}
       {% for link in links %}
@@ -53,6 +54,15 @@
           <span class="badge ok">{{ t('invites.active') }}</span>
           {% endif %}
         </td>
+        {# F41: стоимость размещения — из неё считается цена подписчика. #}
+        <td>
+          <form method="post" action="/invites/{{ link.id }}/cost" class="inline-form">
+            <input type="text" name="cost" value="{{ link.cost if link.cost is not none else '' }}"
+                   placeholder="0" size="7">
+            <input type="text" name="currency" value="{{ link.cost_currency }}" size="4">
+            <button type="submit" class="secondary small">{{ t('common.save') }}</button>
+          </form>
+        </td>
         <td>
           {% if not link.is_revoked %}
           {{ m.confirm_form('/invites/%d/revoke'|format(link.id), t('invites.revoke'), confirm_key='common.confirm_deactivate') }}
@@ -61,7 +71,45 @@
       </tr>
       {% endfor %}
     {% else %}
-    <tr><td colspan="5" class="muted">{{ t('common.empty_list') }}</td></tr>
+    <tr><td colspan="6" class="muted">{{ t('common.empty_list') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{# F41 — откуда пришли подписчики. Данные Telegram присылает сам в апдейтах
+   chat_member/chat_join_request; до этой фичи они выбрасывались. #}
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('invites.origins_title') }}</h2>
+  <p class="muted" style="margin: -4px 0 10px; font-size: 13px;">{{ t('invites.origins_desc') }}</p>
+  <table>
+    <tr>
+      <th>{{ t('invites.col_origin') }}</th>
+      <th>{{ t('invites.col_joined') }}</th>
+      <th>{{ t('invites.col_still_here') }}</th>
+      <th>{{ t('invites.col_left') }}</th>
+      <th>{{ t('invites.col_retention7') }}</th>
+      <th>{{ t('invites.col_retention30') }}</th>
+      <th>{{ t('invites.col_cpa') }}</th>
+    </tr>
+    {% for s in origin_stats %}
+    <tr>
+      <td>
+        {% if s.invite_link %}
+          <strong>{{ s.invite_name or '—' }}</strong><br>
+          <code style="font-size:11px;">{{ s.invite_link }}</code>
+        {% else %}
+          <span class="muted">{{ t('invites.origin_direct') }}</span>
+        {% endif %}
+      </td>
+      <td>{{ s.joined }}</td>
+      <td><strong>{{ s.still_here }}</strong></td>
+      <td>{{ s.left }}</td>
+      <td>{{ '%.0f%%'|format(s.retention_7d * 100) if s.retention_7d is not none else '—' }}</td>
+      <td>{{ '%.0f%%'|format(s.retention_30d * 100) if s.retention_30d is not none else '—' }}</td>
+      <td>{{ '%s %s'|format(s.cpa, s.cost_currency) if s.cpa is not none else '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">{{ t('invites.origins_empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

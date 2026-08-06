@@ -15,11 +15,17 @@ def _clean() -> None:
         session.query(JoinRequestRecord).delete()
 
 
-def _fake_join_request(chat_id: int, user_id: int, username: str | None, bio: str | None):
+def _fake_join_request(
+    chat_id: int, user_id: int, username: str | None, bio: str | None,
+    invite_link: str | None = None,
+):
     return SimpleNamespace(
         chat=SimpleNamespace(id=chat_id, title="Test Group"),
         from_user=SimpleNamespace(id=user_id, username=username, full_name="Test User"),
         bio=bio,
+        # У настоящего ChatJoinRequest поле есть ВСЕГДА (может быть None) —
+        # фейк без него не отражал реальность и скрывал бы регрессии (F41).
+        invite_link=SimpleNamespace(invite_link=invite_link) if invite_link else None,
     )
 
 
@@ -101,3 +107,31 @@ async def test_decide_join_request_missing_shows_error():
 
     bot.approve_chat_join_request.assert_not_awaited()
     assert "не найдена" in query.edit_message_text.call_args.args[0]
+
+
+async def test_join_request_saves_invite_link_for_attribution():
+    """F41: Telegram сообщает, по какой ссылке подана заявка — сохраняем, иначе
+    источник потеряется к моменту одобрения."""
+    _clean()
+    update = SimpleNamespace(
+        chat_join_request=_fake_join_request(
+            -100111, 777, "adman", None, invite_link="https://t.me/+campaignA",
+        ),
+    )
+    await _on_chat_join_request(update, SimpleNamespace(bot=AsyncMock()))
+
+    saved = invites_repo.list_pending_join_requests(-100111)
+    assert len(saved) == 1
+    assert saved[0].invite_link == "https://t.me/+campaignA"
+
+
+async def test_join_request_without_link_stores_none():
+    """Заявка без ссылки — нормальный случай (нашёл поиском), не падаем."""
+    _clean()
+    update = SimpleNamespace(
+        chat_join_request=_fake_join_request(-100111, 778, "someone", None),
+    )
+    await _on_chat_join_request(update, SimpleNamespace(bot=AsyncMock()))
+
+    saved = invites_repo.list_pending_join_requests(-100111)
+    assert saved[0].invite_link is None

@@ -57,10 +57,29 @@ def mark_revoked(link_id: int) -> bool:
         return True
 
 
+def set_link_cost(link_id: int, cost: float | None, currency: str = "RUB") -> bool:
+    """Записать стоимость размещения, ради которого создана ссылка (F41).
+
+    `cost=None` — стереть (размещение оказалось бесплатным/по бартеру): тогда
+    CPA просто не показывается, а не считается как ноль.
+    """
+    with session_scope() as session:
+        link = session.get(InviteLink, link_id)
+        if link is None:
+            return False
+        link.cost = cost
+        if cost is not None:
+            link.cost_currency = (currency or "RUB").strip().upper()[:8]
+        return True
+
+
 # --- Заявки на вступление ---
 
 
-def record_join_request(chat_id: int, user_id: int, username: str | None, bio: str | None) -> None:
+def record_join_request(
+    chat_id: int, user_id: int, username: str | None, bio: str | None,
+    invite_link: str | None = None,
+) -> None:
     """Апсерт: если у этого пользователя уже есть PENDING заявка в этот
     чат — обновляем bio/время (Telegram может прислать `chat_join_request`
     снова, если пользователь отменил и переотправил заявку до решения),
@@ -78,11 +97,13 @@ def record_join_request(chat_id: int, user_id: int, username: str | None, bio: s
         if existing is not None:
             existing.username = username
             existing.bio = bio
+            existing.invite_link = invite_link
             existing.requested_at = _utcnow()
             return
         session.add(
             JoinRequestRecord(
                 chat_id=chat_id, user_id=user_id, username=username, bio=bio,
+                invite_link=invite_link,
             )
         )
 

@@ -557,7 +557,48 @@ class InviteLink(Base):
     member_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     creates_join_request: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Сколько стоило размещение, ради которого создана ссылка (F41). Вместе с
+    # числом реально пришедших по ней даёт цену подписчика (CPA). Валюта — как
+    # у AdRevenue, без конвертации: считаем отдельно по каждой.
+    cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_currency: Mapped[str] = mapped_column(
+        String(8), default="RUB", server_default="RUB", nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class MemberOrigin(Base):
+    """Откуда пришёл участник — атрибуция рекламы (F41).
+
+    Telegram САМ сообщает использованную инвайт-ссылку в `chat_member` и
+    `chat_join_request` (поле `invite_link`) — до F41 эти данные приходили в
+    наши хендлеры и молча выбрасывались. Одна строка на пару (чат, участник):
+    повторное вступление после ухода перезаписывает запись, потому что
+    интересует АКТУАЛЬНЫЙ источник, а не вся история метаний.
+
+    `invite_link` = NULL — пришёл не по нашей ссылке (нашёл поиском, добавлен
+    админом, вступил по ссылке, созданной вручную в Telegram).
+    """
+
+    __tablename__ = "member_origins"
+    __table_args__ = (
+        # Горячий путь — апсерт по паре: на каждое вступление/уход.
+        Index("ix_member_origins_chat_user", "chat_id", "user_id", unique=True),
+        # Статистика «сколько привела ссылка» — группировка по ней.
+        Index("ix_member_origins_link", "invite_link"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    invite_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Имя ссылки НА МОМЕНТ вступления: ссылку могут переименовать или отозвать,
+    # а отчёт по кампании должен остаться читаемым.
+    invite_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # NULL — участник всё ещё в чате. Заполняется по `chat_member`-апдейту об
+    # уходе/бане: без этого retention считать не из чего.
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class JoinRequestRecord(Base):
@@ -581,6 +622,9 @@ class JoinRequestRecord(Base):
     # заявка не решена, но защита на уровне БД дешевле, чем полагаться на
     # это поведение). approved/declined-записи копятся как история.
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    # По какой ссылке подана заявка (F41). Telegram отдаёт это в апдейте;
+    # пригодится, когда заявку одобрят — тогда источник переедет в MemberOrigin.
+    invite_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

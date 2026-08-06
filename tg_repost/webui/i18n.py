@@ -795,6 +795,38 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "The member limit must be a positive integer or blank.",
     },
     "invites.links_title": {"ru": "Инвайт-ссылки", "en": "Invite links"},
+    "invites.origins_title": {
+        "ru": "Откуда пришли подписчики", "en": "Where subscribers came from",
+    },
+    "invites.origins_desc": {
+        "ru": "Заведи отдельную ссылку под каждое размещение и впиши его "
+        "стоимость выше — тогда видно, сколько людей оно принесло, сколько из "
+        "них осталось и во что обошёлся один оставшийся. Считается только по "
+        "вступлениям после включения этой функции: Telegram не отдаёт историю "
+        "задним числом.",
+        "en": "Create a separate link per ad placement and enter its cost above "
+        "— then you can see how many people it brought, how many stayed and "
+        "what one remaining subscriber cost. Counts only joins after this "
+        "feature was enabled: Telegram does not provide history retroactively.",
+    },
+    "invites.origins_empty": {
+        "ru": "Пока никто не вступал (или бот ещё не админ в группе — без прав "
+        "администратора Telegram не сообщает о вступлениях).",
+        "en": "Nobody has joined yet (or the bot is not an admin in the group — "
+        "without admin rights Telegram does not report joins).",
+    },
+    "invites.origin_direct": {
+        "ru": "Без ссылки (поиск, приглашение админом)",
+        "en": "No link (search, added by an admin)",
+    },
+    "invites.col_origin": {"ru": "Источник", "en": "Source"},
+    "invites.col_joined": {"ru": "Пришло", "en": "Joined"},
+    "invites.col_still_here": {"ru": "Осталось", "en": "Still here"},
+    "invites.col_left": {"ru": "Ушло", "en": "Left"},
+    "invites.col_retention7": {"ru": "Через 7д", "en": "After 7d"},
+    "invites.col_retention30": {"ru": "Через 30д", "en": "After 30d"},
+    "invites.col_cpa": {"ru": "Цена подписчика", "en": "Cost per subscriber"},
+    "invites.col_cost": {"ru": "Стоимость размещения", "en": "Placement cost"},
     "invites.active": {"ru": "активна", "en": "active"},
     "invites.revoked": {"ru": "отозвана", "en": "revoked"},
     "invites.revoke": {"ru": "Отозвать", "en": "Revoke"},
