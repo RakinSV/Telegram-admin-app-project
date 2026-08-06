@@ -399,6 +399,12 @@ class Settings(BaseSettings):
     # раздражает (см. contests_repo.py).
     contests_enabled: bool = Field(False, alias="CONTESTS_ENABLED")
 
+    # --- F46/F47: онбординг новичка и предложка (бот Engage) ---
+    # Предложенный пост попадает в ТУ ЖЕ очередь модерации, что и рерайты, —
+    # владелец решает, публиковать ли (см. engage/handlers/suggest.py).
+    suggestions_enabled: bool = Field(False, alias="SUGGESTIONS_ENABLED")
+    onboarding_enabled: bool = Field(False, alias="ONBOARDING_ENABLED")
+
     # --- F23: веб-админка (Фаза 5) ---
     # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
     # секретов ключом из той же БД не защищало бы ни от чего). Генерируются

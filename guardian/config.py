@@ -140,6 +140,15 @@ class GuardianSettings(BaseSettings):
     rules_reminder_hours: int = Field(24, alias="RULES_REMINDER_HOURS")
     rules_reminder_text: str = Field("", alias="RULES_REMINDER_TEXT")
 
+    # --- Автоответчик по ключевым словам (F45) ---
+    # Снимает рутину: «как купить», «где правила» спрашивают каждый день.
+    # Правила — JSON-массив: [{"triggers": ["правила"], "reply": "В закрепе"}].
+    autoreply_enabled: bool = Field(False, alias="AUTOREPLY_ENABLED")
+    autoreply_rules: str = Field("", alias="AUTOREPLY_RULES")
+    # Пауза на правило и чат: если десять человек подряд спросят одно и то же,
+    # бот ответит один раз, а не десять.
+    autoreply_cooldown_seconds: int = Field(600, alias="AUTOREPLY_COOLDOWN_SECONDS")
+
     # --- Рерайт/AI (переиспользует те же ключи, что и репост-бот, G09) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")

@@ -23,7 +23,7 @@ from guardian import settings_store, trusted_repo
 from guardian.config import get_guardian_settings
 from guardian.db.models import Member, StopWord, TrustedUser
 from guardian.db.session import session_scope
-from guardian.handlers import admin, chat_member, hygiene, join, messages, stats
+from guardian.handlers import admin, autoreply, chat_member, hygiene, join, messages, stats
 from guardian.logging_conf import get_logger, setup_logging
 from guardian.services import daily_stats_repo, raid_detector
 from guardian.services.warn_system import reset_expired_warns
@@ -340,6 +340,8 @@ async def main() -> None:
     dp.include_router(messages.router)
     # F48: чистка служебных сообщений. Строго ПОСЛЕ messages.router —
     # обычное общение должно сначала пройти антиспам.
+    # F45: автоответчик — после антиспама (сначала фильтры), до гигиены.
+    dp.include_router(autoreply.router)
     dp.include_router(hygiene.router)
 
     scheduler = AsyncIOScheduler()

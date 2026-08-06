@@ -88,8 +88,9 @@ async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
             await handle_contest_start(bot, link.value, user, message)
             return  # ответ уже отправлен обработчиком конкурса
     elif link.kind == PAYLOAD_SUGGEST:
-        # F47 подключится сюда: открыть приём поста от подписчика.
         logger.info("Deep-link предложки от %s", user_id)
+        await message.answer(f"{_WELCOME}\n\nЧтобы предложить пост: /suggest")
+        return
     else:
         # Ссылку могли скопировать из старого поста — молчать нельзя.
         logger.info("Неизвестный deep-link '%s' от %s", link.kind, user_id)

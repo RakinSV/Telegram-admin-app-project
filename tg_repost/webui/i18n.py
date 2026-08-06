@@ -2111,6 +2111,27 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.contests_enabled.label": {
         "ru": "Включить конкурсы", "en": "Enable contests",
     },
+    "settings.group.suggestions.title": {
+        "ru": "Предложка и онбординг", "en": "Submissions and onboarding",
+    },
+    "settings.group.suggestions.desc": {
+        "ru": "Предложенный подписчиком пост попадает в ТУ ЖЕ очередь модерации, "
+        "что и рерайты — ты решаешь, публиковать ли. Автор виден в карточке "
+        "поста. Онбординг пишет новичку короткую памятку в личку, но ТОЛЬКО "
+        "тем, кто уже стартовал бота: Telegram не даёт писать первым. Обе фичи "
+        "работают через бота Engage.",
+        "en": "A post submitted by a subscriber lands in the SAME moderation "
+        "queue as rewrites — you decide whether to publish. The author is shown "
+        "on the post card. Onboarding sends a short primer to a newcomer's DM, "
+        "but ONLY to those who already started the bot: Telegram does not allow "
+        "writing first. Both features run through the Engage bot.",
+    },
+    "settings.field.suggestions_enabled.label": {
+        "ru": "Принимать посты от подписчиков", "en": "Accept subscriber posts",
+    },
+    "settings.field.onboarding_enabled.label": {
+        "ru": "Онбординг новичка в личку", "en": "Onboard newcomers in DM",
+    },
     "settings.group.engage_bot.title": {
         "ru": "Engage — бот вовлечения", "en": "Engage — engagement bot",
     },
@@ -2232,6 +2253,33 @@ STRINGS: dict[str, dict[str, str]] = {
         "math — не банят и не отклоняют автоматически.",
         "en": "Suspicious signals on a new account escalate the captcha "
         "to math — never auto-bans or auto-rejects.",
+    },
+    "guardian.settings.group.autoreply.title": {
+        "ru": "Автоответчик", "en": "Auto-reply",
+    },
+    "guardian.settings.group.autoreply.desc": {
+        "ru": "Снимает рутину: «как купить», «где правила» спрашивают каждый "
+        "день. Правила — JSON-массив вида "
+        "[{\"triggers\": [\"правила\"], \"reply\": \"В закрепе\"}]. "
+        "Срабатывает по СЛОВУ целиком, а не по подстроке («стрим» не стрельнет "
+        "на «экстримальный»). Пауза не даёт отвечать десять раз подряд на один "
+        "вопрос от разных людей. Другим ботам не отвечает — иначе два бота "
+        "устроят бесконечный обмен.",
+        "en": "Removes routine: “how to buy”, “where are the rules” get asked "
+        "daily. Rules are a JSON array like "
+        "[{\"triggers\": [\"rules\"], \"reply\": \"See the pinned message\"}]. "
+        "Matches WHOLE WORDS, not substrings. The cooldown prevents ten replies "
+        "in a row to the same question from different people. Never replies to "
+        "other bots — otherwise two bots start an endless exchange.",
+    },
+    "guardian.settings.field.autoreply_enabled.label": {
+        "ru": "Включить автоответчик", "en": "Enable auto-reply",
+    },
+    "guardian.settings.field.autoreply_rules.label": {
+        "ru": "Правила (JSON)", "en": "Rules (JSON)",
+    },
+    "guardian.settings.field.autoreply_cooldown_seconds.label": {
+        "ru": "Пауза на правило, сек", "en": "Per-rule cooldown, sec",
     },
     "guardian.settings.group.hygiene.title": {
         "ru": "Гигиена группы", "en": "Group hygiene",
