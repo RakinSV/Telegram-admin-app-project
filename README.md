@@ -2,25 +2,25 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
-║                                                                    ║
+║                                                                  ║
 ║   ████████╗ ██████╗     ██████╗ ███████╗██████╗  ██████╗ ███████╗║
 ║   ╚══██╔══╝██╔════╝     ██╔══██╗██╔════╝██╔══██╗██╔═══██╗██╔════╝║
 ║      ██║   ██║  ███╗    ██████╔╝█████╗  ██████╔╝██║   ██║███████╗║
 ║      ██║   ██║   ██║    ██╔══██╗██╔══╝  ██╔═══╝ ██║   ██║╚════██║║
 ║      ██║   ╚██████╔╝    ██║  ██║███████╗██║     ╚██████╔╝███████║║
 ║      ╚═╝    ╚═════╝     ╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ ╚══════╝║
-║                                                                    ║
-║        + G U A R D I A N  ·  AI group-chat moderation             ║
+║                                                                  ║
+║   + G U A R D I A N  · moderation   + E N G A G E · gamification ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-**An automated Telegram content pipeline: scrape → LLM rewrite → moderate → publish — plus a standalone AI moderator bot for your group chat.**
-Two independent bots, one web admin panel, all self-hosted.
+**An automated Telegram content pipeline: scrape → two-agent AI editorial desk → moderate → publish — plus an AI group moderator and an audience-engagement bot.**
+Three independent bots, one web admin panel, all self-hosted.
 
 🇬🇧 **English** &nbsp;|&nbsp; 🇷🇺 [Русский](README.ru.md) &nbsp;|&nbsp; 📖 [Wiki (full docs, FAQ, troubleshooting)](../../wiki)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/RakinSV/Telegram-admin-app-project/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-537%20passing-brightgreen?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1252%20passing-brightgreen?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-red?style=flat-square)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/type--checked-mypy-blue?style=flat-square)](https://mypy-lang.org/)
@@ -36,13 +36,19 @@ Two independent bots, one web admin panel, all self-hosted.
 A Telegram channel owner usually picks between two bad options: manually
 rewrite other people's posts every day, or just forward them and risk
 plagiarism complaints and audience loss. This project automates the whole
-path from source post to publication — LLM rewriting, duplicate detection,
-pre-publish moderation, and stats on what actually resonates with your
-audience. A separate **Guardian** bot protects the group at the same time,
-so the audience the first bot grows doesn't get drowned by spam, bots, and
-raids.
+path from source post to publication — but the interesting part isn't the
+automation, it's the **editorial quality**: a journalist agent writes the
+draft, an editor agent fact-checks it against the sources, disputed claims
+get verified against the open web, and the journalist rewrites. You watch
+that argument happen live in a Telegram chat.
 
-Both bots are production-ready: Alembic migrations from day one, 537 tests,
+Around that pipeline sit two more bots. **Guardian** protects the group from
+spam, bots, and raids, so the audience the first bot grows doesn't drown.
+**Engage** turns readers into participants — quizzes generated from the posts
+themselves, a referral programme with real anti-fraud, and verifiable
+contest draws.
+
+All three are production-ready: Alembic migrations from day one, 1252 tests,
 CI running lint/type-check/security-scan on every push, Docker packaging for
 VPS/Proxmox deployment, and a single web admin panel instead of poking at
 `.env` files and a database by hand.
@@ -64,8 +70,10 @@ are in Russian).
 ## Contents
 
 - [What's inside](#whats-inside)
+- [The editorial desk — two AI agents](#the-editorial-desk--two-ai-agents)
 - [Repost bot — features](#repost-bot--features)
 - [Guardian — AI group moderator](#guardian--ai-group-moderator)
+- [Engage — turning readers into participants](#engage--turning-readers-into-participants)
 - [Web admin panel](#web-admin-panel)
 - [Proxies](#proxies)
 - [Stack](#stack)
@@ -92,15 +100,22 @@ are in Russian).
 │  keyword filter → hash dedup → semantic dedup check (embeddings)          │
 │         │                                                                 │
 │         ▼                                                                 │
-│  LLM rewrite (style profile per post type) + source enrichment (Brave)    │
-│  + RU/EN version comparison + auto cover image (Unsplash/ComfyUI)         │
+│  ╭─ editorial desk ──────────────────────────────────────────────╮       │
+│  │ journalist writes draft → editor fact-checks against sources  │       │
+│  │      ▲                              │                          │       │
+│  │      └── rewrite ◀── web-verify disputed claims ◀─────────────┘       │
+│  ╰───────────────────────────────────────────────────────────────╯       │
+│         │  (the whole argument is streamed to a Telegram chat)           │
+│         ▼                                                                 │
+│  + source enrichment (Brave) + RU/EN version comparison                  │
+│  + auto cover image (Unsplash / ComfyUI / OpenAI-compatible)             │
 │         │                                                                 │
 │         ▼                                                                 │
 │  manual moderation via DM (✅/❌/✏️) OR scheduled auto-posting             │
 │         │                                                                 │
 │         ▼                                                                 │
 │  publish to N groups → collect stats → auto-digest / native ads /         │
-│  smart scheduling / growth tracker                                        │
+│  smart scheduling / growth tracker / join attribution                    │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────── Guardian ──────────────────────────────────┐
@@ -116,12 +131,76 @@ are in Russian).
 │  Join spike → anti-raid (chat lockdown) → auto-unlock                     │
 │  30 clean days → auto-trust (bypasses filters)                            │
 └─────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────── Engage ───────────────────────────────────┐
+│                                                                             │
+│  Post published → LLM writes a quiz about it → published as a native       │
+│                   Telegram quiz-poll after a reading delay → points,       │
+│                   streaks, levels, leaderboard                             │
+│                                                                             │
+│  Personal invite link → invitee joins + writes + survives N days →         │
+│                          only then the referral counts (anti-fraud)        │
+│                                                                             │
+│  Contest → seed published up front → verifiable draw → protocol posted     │
+│  Keyword triggers → auto-replies · DM onboarding · reader submissions      │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-Both processes live in one repository but are **independent bots** — their
-own tokens, their own databases (`tg_repost.db` / `guardian.db`), their own
-Alembic migration chains. One crashing or being redeployed doesn't touch the
-other. Both are managed from a single web panel.
+All three processes live in one repository but are **independent bots** —
+their own tokens, their own restart cycles. The repost bot and Engage share
+one database (`tg_repost.db`) because quizzes are derived from posts and
+referrals resolve against the same members; Guardian keeps its own
+(`guardian.db`) with a separate Alembic chain. One crashing or being
+redeployed doesn't touch the others, and all three are managed from a single
+web panel.
+
+---
+
+## The editorial desk — two AI agents
+
+Most "AI rewrite" tools are synonym shufflers: one model call, one output,
+nobody checks it. This one runs an actual editorial process, because the
+failure mode that matters isn't clumsy phrasing — it's **confidently
+publishing something false**.
+
+```
+① journalist  → writes the draft (20-years-experience copywriter persona,
+                 one of 5 style profiles)
+② editor      → fact-checks the draft against the ORIGINAL source text,
+                 returns a verdict (OK / NEEDS WORK) plus a list of claims
+                 it could not confirm
+③ web check   → those specific claims are searched on the open web
+④ journalist  → rewrites, addressing each note
+```
+
+- **The editor is not the same voice as the journalist.** It runs on its own
+  prompt at temperature 0.2 — deterministic on purpose. A creative
+  fact-checker is a contradiction.
+- **It writes notes like a human editor would**: *"this is wrong, check
+  against this link"* — attached to the specific claim, not a vague score.
+- **Configurable rounds** (`editorial_max_rounds`) — one round is the
+  default. Each round costs LLM calls, so this is one of the two most
+  expensive knobs in the system (the other is variant count).
+- **The notes are saved** on the post variant and shown in the moderation UI,
+  so you can see *why* the final text differs from the draft.
+- **Costs are visible, not hidden**: minimum config is 1 LLM call per post,
+  typical (editorial on) is 3, everything enabled is ~10. Multiply by
+  variants × languages before you turn it all on.
+
+### Watch the argument live
+
+Both agents can stream their exchange to a Telegram chat of your choosing —
+you see the draft, the editor's objections, the web-verification result, and
+the final text, as it happens. Three verbosity modes:
+
+| Mode | What lands in the chat |
+|---|---|
+| `all` | Every step — full transparency, noisy |
+| `problems` | Only threads where the editor actually objected |
+| `summary` | One line per post: verdict and round count |
+
+Messages are threaded per post and sent silently (`disable_notification`), so
+the newsroom never buzzes your phone at 3am.
 
 ---
 
@@ -160,6 +239,11 @@ other. Both are managed from a single web panel.
   channel's own voice, rotating through briefs.
 - **Growth tracker** — subscriber-count snapshots plus per-style post
   counts, so you can see what's actually growing the channel.
+- **Join attribution — which ad actually paid off.** Every invite link can
+  carry a label and a cost. Telegram tells you which link each member came
+  through, so the panel shows joins, leaves, 7/30-day retention and **cost
+  per member who is still here** — not cost per click. An ad that brings 100
+  people who all leave in a week is correctly reported as a failure.
 - **Negative-reaction auto-response** — counts 👎/💩/😡 reactions, notifies
   the owner and optionally deletes the post past a threshold (with
   brigading protection — a cap on auto-deletes per hour).
@@ -225,6 +309,13 @@ cuts a legitimate message.
   violation) and soft (log only, no deletion) modes.
 - **Auto-trust** — members with no violations for N days automatically
   bypass filters, cutting AI load on an active, already-vetted audience.
+- **Service-message hygiene** — auto-deletes the "X joined the group" /
+  "Y pinned a message" clutter, keeps a night mode that silences the bot's
+  own replies during quiet hours, and posts a periodic rules reminder.
+- **Keyword auto-replies** — rule-based answers to recurring questions
+  ("when's the stream?", "where are the rules?"), matched on word
+  boundaries so "cat" never fires on "category", with a per-rule cooldown
+  so the bot can't be turned into a flood machine.
 - **Log channel** — every moderation action, manual or automatic, is
   written to a private channel with inline buttons for a quick admin
   response.
@@ -236,9 +327,78 @@ cuts a legitimate message.
 
 ---
 
+## Engage — turning readers into participants
+
+The third bot, also on `aiogram`. Guardian keeps bad actors *out*; Engage
+gives the good ones a reason to *stay*. Every mechanic here was built around
+one rule: **rewards must be hard to farm**, or the leaderboard becomes a
+list of whoever ran the most fake accounts.
+
+### Quizzes generated from your own posts
+
+After a post is published, the LLM writes a multiple-choice question about
+it. The question goes out as a **native Telegram quiz-poll** after a reading
+delay — Telegram checks the answer itself, shows the correct option with an
+explanation, and won't let anyone re-vote.
+
+- **No LLM call to grade answers**, and no arguing about "that's what I
+  meant" — the platform is the referee.
+- The question is built from **already fact-checked material** (the article
+  text was extracted, the editor verified it), so the quiz can't invent
+  something the post never said.
+- Points: **10** per correct answer, plus a daily-streak bonus of **5**
+  (capped at **25**) — streaks count by *calendar date*, so you can't farm
+  them by answering twice in one evening.
+- `/me` shows your points, accuracy and streak; `/top` shows the leaderboard.
+
+### Referral programme with real anti-fraud
+
+Each member gets a personal invite link (`/invite`). The referral counts only
+when the invited person has **joined, written at least one message, and
+stayed N days**.
+
+- **Self-referral is rejected**, and once someone is credited to an inviter,
+  nobody can steal them — first inviter wins, so there's no "poach the
+  referral" race.
+- The "wrote a message" condition is the one that matters: throwaway accounts
+  will join for a reward, but they won't talk.
+- **50 points** per confirmed referral — deliberately worth more than a quiz
+  answer, because bringing a live human is worth more than answering one
+  question.
+
+### Contests you can prove weren't rigged
+
+The problem with channel giveaways is that nobody can verify the winner
+wasn't the owner's friend. So the draw is **reproducible**:
+
+1. A random seed is generated **when the contest is created** — before a
+   single participant exists — and published up front.
+2. Participants are sorted by user ID (a stable order nobody controls).
+3. The winners are drawn from that seed, and a protocol with the seed,
+   the algorithm and the full participant list is posted afterwards.
+
+Anyone can re-run the draw and get the same winners. The unpredictability
+comes from the seed being generated with `secrets`; the *draw itself* is
+deliberately deterministic, because a cryptographically random draw would be
+unverifiable — which defeats the entire point.
+
+### Plus the small stuff that keeps a group alive
+
+- **DM onboarding** — a new member gets a private welcome walking them
+  through the rules and what the channel is for, instead of a wall-of-text
+  pinned post nobody reads.
+- **Reader submissions (UGC)** — `/suggest` lets members send you posts;
+  they land in the same moderation queue as everything else, with `/cancel`
+  to back out mid-submission.
+- Everything is **off by default** (`QUIZ_ENABLED`, `REFERRALS_ENABLED`,
+  `CONTESTS_ENABLED`, `SUGGESTIONS_ENABLED`, `ONBOARDING_ENABLED`) — turn on
+  only the mechanics you actually want.
+
+---
+
 ## Web admin panel
 
-A single FastAPI panel for both bots, embedded in the same process as
+A single FastAPI panel for all three bots, embedded in the same process as
 `main.py` (not a separate service) — settings apply live, logs stream to
 the browser without any inter-process syncing.
 
@@ -278,7 +438,7 @@ what to route through it. There are three types and three usage toggles:
 - **Types:** **MTProto** (Telegram-specific fake-TLS proxy, Telethon only,
   uses a *secret* instead of login/password), **SOCKS5**, and **HTTP(S)**
   (both plain tunnels — usable for Telethon, the Bot API, and the AI calls).
-- **Usage toggles:** *Telegram* (Telethon reading + both bots' Bot API),
+- **Usage toggles:** *Telegram* (Telethon reading + every bot's Bot API),
   *rewrite AI*, *image AI*.
 
 | Setting | Secret? | Notes |
@@ -517,12 +677,20 @@ python -m tg_repost.tools.backup --keep 14
 /stats /growth                                      — moderation stats
 ```
 
+**Engage** (any member, in the group or in DM):
+```
+/me        — your points, accuracy and current streak
+/top       — leaderboard
+/invite    — your personal referral link
+/suggest   — send the channel a post idea  (/cancel to abort)
+```
+
 ---
 
 ## Tests and code quality
 
 ```bash
-pytest                                            # 537 tests
+pytest                                            # 1252 tests
 ruff check tg_repost guardian                     # linter
 mypy tg_repost guardian                           # static typing — 0 errors
 bandit -r tg_repost guardian -c pyproject.toml     # security scanner, documented baseline
@@ -555,41 +723,58 @@ they're backed up together. The archive file is chmod'd `0600`; don't sync
 
 ```
 tg_repost/              # repost bot
-  webui/                 # web admin panel for both bots (FastAPI + Jinja2)
-  telegram/               # Telethon listener, publisher, moderation bot
-  rewriter/                # LLM client: rewriting, styles, embeddings
+  webui/                 # web admin panel for all three bots (FastAPI + Jinja2)
+  telegram/               # Telethon listener, publisher, moderation bot, newsroom
+  rewriter/                # LLM client: editorial desk, styles, quizzes, embeddings
   dedup/                    # hash + semantic dedup check
-  enrichment/                # Brave Search source enrichment
-  covers/                     # Unsplash / ComfyUI auto covers
+  enrichment/                # Brave Search enrichment + article extraction
+  covers/                     # Unsplash / ComfyUI / OpenAI-compatible covers
   ads/                         # native advertising
   scheduler/                    # APScheduler jobs: posting, stats, digest, growth
-  db/                            # ORM + Alembic migrations
+  db/                            # ORM + Alembic migrations (27)
   tools/                          # gen_session, check_telethon, backup
 
 guardian/                # AI group moderator (separate bot, own database)
-  handlers/                # join (CAPTCHA), messages (spam filter), admin, stats
+  handlers/                # join (CAPTCHA), messages, admin, hygiene, autoreply
   filters/                   # keyword / ai / heuristics / link / flood
   services/                   # warn_system, captcha, raid_detector, profile_analyzer
   db/                           # own ORM + Alembic chain
 
-tests/                   # 537 tests — pytest + pytest-asyncio
+engage/                  # audience engagement bot (shares tg_repost's database)
+  handlers/                # quiz, referral, contest, suggest, start (deep links)
+
+tests/                   # 1252 tests — pytest + pytest-asyncio
 .github/workflows/       # CI: ruff, mypy, pytest, bandit, pip-audit
 ```
+
+Engage deliberately has **no database of its own**: quizzes are derived from
+posts, referral links are the same invite links the repost bot creates, and
+referred members land in the same attribution table. A separate database
+would mean syncing all three across process boundaries.
 
 ---
 
 ## Implementation status
 
-- ✅ **Repost bot** — Phases 0–6 complete: collection, rewriting, dedup,
-  moderation, publishing, stats, style profiles, source enrichment, auto
-  covers, smart scheduling, digest, native ads, growth tracker, session
-  rotation, web admin panel (full CRUD + audit log + live logs), Docker
-  packaging.
-- ✅ **Guardian** — all phases G0–G17: CAPTCHA, welcome, three spam-filter
-  modes, warns, anti-flood, anti-raid, profile analysis, quiet hours,
-  auto-trust, stats, config via commands and the web panel.
+**46 of 50 planned features are implemented.** The remaining 4 are deferred
+on purpose, not unfinished — see the bottom of this section.
+
+- ✅ **Repost bot** — collection, rewriting, dedup, moderation, publishing,
+  stats, style profiles, source enrichment, article extraction, auto covers,
+  smart scheduling, digest, native ads, growth tracker, session rotation,
+  join attribution, web admin panel (full CRUD + audit log + live logs),
+  Docker packaging.
+- ✅ **Editorial desk (two agents)** — journalist → editor fact-check → web
+  verification of disputed claims → revision, with notes saved per variant
+  and the whole exchange optionally streamed to a Telegram chat.
+- ✅ **Guardian** — CAPTCHA, welcome, three spam-filter modes, warns,
+  anti-flood, anti-raid, profile analysis, quiet hours, auto-trust, service
+  hygiene, keyword auto-replies, stats, per-group configuration.
+- ✅ **Engage** — quizzes from published posts, points/streaks/leaderboard,
+  referrals with anti-fraud, verifiable contest draws, DM onboarding, reader
+  submissions.
 - ✅ **CI/CD** — GitHub Actions on every push/PR, fully clean
-  mypy/ruff/bandit/pip-audit across both packages.
+  mypy/ruff/bandit/pip-audit across all three packages.
 - ✅ **Auto-backup** — `.env` + both databases + logs in one script.
 - ✅ **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, per-type
   enable + per-traffic usage toggles (Telegram / rewrite AI / image AI),
@@ -598,39 +783,43 @@ tests/                   # 537 tests — pytest + pytest-asyncio
 - ✅ **Production deployment proven** — an LXC on Proxmox (Docker inside an
   unprivileged container with nesting enabled), a full `docker compose up`
   run end to end.
-- ⬜ **Real production tokens** — purely an operational step at this point:
-  fill in real `TG_*`/`GUARDIAN_BOT_TOKEN`/`GUARDIAN_GROUP_ID` values and
-  add Guardian to a group as an administrator.
-- 💭 **Deliberately out of scope for now** — a multi-tenant SaaS version
-  for other channel owners; a dedicated web panel for Guardian rather than
-  a section inside the shared admin panel; live restart for Guardian
-  without a full process restart (currently only the repost bot has this,
-  see `/components`).
+- ⬜ **Real production tokens** — purely an operational step: create the
+  Guardian and Engage bots with @BotFather, add them to `/settings`, and add
+  Guardian to the group as an administrator. Until then those two processes
+  won't start (by design — they refuse rather than run half-configured).
+- 💭 **Deferred by choice** — multi-tenant SaaS (a separate product, not a
+  feature); cross-posting to VK/Instagram (out of scope); paid access via
+  Telegram Stars (recorded as an idea, needs a payment flow); role-based
+  admin accounts for the panel (skipped — there is one user).
 
 ---
 
 ## Support the project
 
 This project is written and maintained in spare time, with no grant and no
-company behind it. If it's been useful to you, a coffee helps keep the
+company behind it — three bots, 1252 tests and 50 documented features, built
+evenings and weekends. If it's been useful to you, a coffee helps keep the
 feature work going:
 
-**Bitcoin:**
+**Bitcoin (BTC):**
 ```
 bc1qwnkyez3nv86dry54dqfjjtav29qqq72h69pevw
 ```
 
 A star on the repository costs nothing but helps other people find the
-project.
+project — and telling me what you built with it is worth more than the
+coffee.
 
 ---
 
 <div align="center">
 
 *Keywords: telegram bot · telegram repost bot · telegram auto-posting ·
-telegram channel automation · rewrite bot AI · openai rewriter · content
-repost automation · telegram moderation bot · anti-spam telegram bot ·
-telegram chat moderator · captcha verification bot · anti-raid telegram ·
+telegram channel automation · rewrite bot AI · openai rewriter · AI
+fact-checking · multi-agent LLM pipeline · content repost automation ·
+telegram moderation bot · anti-spam telegram bot · telegram chat moderator ·
+captcha verification bot · anti-raid telegram · telegram gamification bot ·
+telegram quiz bot · telegram referral bot · telegram giveaway bot ·
 telethon userbot · aiogram bot · python telegram automation · self-hosted
 telegram bot · fastapi admin panel · telegram channel growth · AI content
 pipeline*
