@@ -1317,6 +1317,40 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.editorial_revise_prompt_template.label": {
         "ru": "Промпт правки по замечаниям", "en": "Revision prompt",
     },
+    "settings.field.editorial_newsroom_enabled.label": {
+        "ru": "Транслировать ход редакции в чат",
+        "en": "Broadcast the editorial process to a chat",
+    },
+    "settings.field.editorial_newsroom_enabled.hint": {
+        "ru": "«Редакционная кухня»: видно, что журналист написал, к чему "
+        "придрался редактор и что получилось после правки. Инструмент отладки: "
+        "при плохом тексте сразу видно, на каком шаге сломалось.",
+        "en": "The “newsroom”: see what the journalist wrote, what the editor "
+        "objected to and what came out after the revision. A debugging tool — "
+        "when the text is bad, you see which step broke.",
+    },
+    "settings.field.editorial_newsroom_chat_id.label": {
+        "ru": "Чат «редакционной кухни» (id)", "en": "Newsroom chat (id)",
+    },
+    "settings.field.editorial_newsroom_chat_id.hint": {
+        "ru": "Отдельная приватная группа. Можно указать свой user_id и получать "
+        "в личку, но НЕ рекомендуется: 4–5 сообщений на пост забьют ту же личку, "
+        "где кнопки одобрения.",
+        "en": "A separate private group. You can put your own user_id and get it "
+        "in DM, but that is NOT recommended: 4–5 messages per post will bury the "
+        "same DM where the approval buttons live.",
+    },
+    "settings.field.editorial_newsroom_verbosity.label": {
+        "ru": "Что транслировать", "en": "What to broadcast",
+    },
+    "settings.field.editorial_newsroom_verbosity.hint": {
+        "ru": "all — весь ход; problems — только когда редактор нашёл замечания "
+        "(по умолчанию: пачка из 5 постов в режиме all даёт ~25 сообщений за "
+        "тик); summary — одна строка-итог на пост.",
+        "en": "all — the whole exchange; problems — only when the editor found "
+        "something (default: a batch of 5 posts in “all” mode means ~25 messages "
+        "per tick); summary — a single summary line per post.",
+    },
     "settings.group.filtering.title": {"ru": "Фильтрация по словам", "en": "Word filtering"},
     "settings.group.filtering.desc": {
         "ru": "Через запятую. Стоп-слово — пост отфильтровывается; "

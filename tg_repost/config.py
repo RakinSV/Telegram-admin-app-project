@@ -352,6 +352,19 @@ class Settings(BaseSettings):
         default_factory=lambda: _prompt_file_default("journalist_revise"),
         alias="EDITORIAL_REVISE_PROMPT_TEMPLATE",
     )
+    # F50 «редакционная кухня»: трансляция хода редакции в отдельный чат, чтобы
+    # видеть, на каком шаге испортился текст (см. telegram/newsroom.py). Шлёт
+    # существующий репост-бот, отдельный бот не нужен.
+    editorial_newsroom_enabled: bool = Field(False, alias="EDITORIAL_NEWSROOM_ENABLED")
+    # Можно поставить свой user_id и получать в личку, но НЕ рекомендуется: 4-5
+    # сообщений на пост забьют ту же личку, где кнопки одобрения.
+    editorial_newsroom_chat_id: int = Field(0, alias="EDITORIAL_NEWSROOM_CHAT_ID")
+    # all — весь ход; problems — только когда редактор нашёл замечания (по
+    # умолчанию: пачка из 5 постов в режиме all даёт ~25 сообщений за тик);
+    # summary — одна строка-итог на пост.
+    editorial_newsroom_verbosity: str = Field(
+        "problems", alias="EDITORIAL_NEWSROOM_VERBOSITY",
+    )
 
     # --- F23: веб-админка (Фаза 5) ---
     # Бутстрап-ключи живут ТОЛЬКО в .env (никогда в БД — иначе шифрование
@@ -636,7 +649,9 @@ class Settings(BaseSettings):
             return [str(s).strip() for s in value if str(s).strip()]
         return []
 
-    @field_validator("tg_api_id", "tg_owner_user_id", mode="before")
+    @field_validator(
+        "tg_api_id", "tg_owner_user_id", "editorial_newsroom_chat_id", mode="before",
+    )
     @classmethod
     def _blank_int_to_zero(cls, value: object) -> object:
         """Пустая строка (`TG_API_ID=` — обычный плейсхолдер из .env.example,

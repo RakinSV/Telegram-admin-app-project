@@ -37,6 +37,7 @@ from tg_repost.rewriter.editorial import editorial_rewrite
 from tg_repost.telegraph.article import publish_article
 from tg_repost.telegraph.client import TelegraphError
 from tg_repost.telegram.moderation_bot import send_pending_for_approval
+from tg_repost.telegram.newsroom import build_newsroom_callback
 from tg_repost.telegram.publisher import (
     publish_post,
     resolve_target_languages_for_post,
@@ -88,8 +89,16 @@ def effective_source_chars(original: str, link_text: str) -> int:
     return len("".join(stripped.split())) + len((link_text or "").strip())
 
 
-async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
-    """Рерайтнуть посты со статусом `new` (F06)."""
+async def rewrite_new_posts(
+    rewriter: RewriterClient, batch: int = 5,
+    application: Application | None = None,
+) -> None:
+    """Рерайтнуть посты со статусом `new` (F06).
+
+    `application` нужен ТОЛЬКО для трансляции хода редакции в чат «кухни»
+    (F50) — без него рерайт работает ровно как раньше, поэтому параметр
+    необязательный (его нет у существующих вызовов в тестах).
+    """
     with session_scope() as session:
         post_ids = [
             row[0]
@@ -226,9 +235,17 @@ async def rewrite_new_posts(rewriter: RewriterClient, batch: int = 5) -> None:
             for _ in range(rewrite_count):
                 try:
                     if editorial_on:
+                        # F50: трансляция хода в чат «кухни». None, если
+                        # выключено или бота нет — тогда editorial не тратит
+                        # вызовов на callback вовсе.
+                        on_step = (
+                            build_newsroom_callback(application, post_id)
+                            if application is not None else None
+                        )
                         ed = await editorial_rewrite(
                             rewriter, original=original, link_content=link_text,
                             prompt_name=prompt_name, language=language,
+                            on_step=on_step,
                         )
                         variant_text, variant_tokens, variant_notes = (
                             ed.text, ed.tokens, ed.notes or None,
@@ -381,7 +398,7 @@ async def pipeline_tick(rewriter: RewriterClient, application: Application) -> N
     """Один проход пайплайна: рерайт + реклама (F21) + (модерация | авто-постинг)."""
     settings = get_settings()
     try:
-        await rewrite_new_posts(rewriter)
+        await rewrite_new_posts(rewriter, application=application)
         await inject_native_ad(rewriter)
         if settings.auto_post_enabled:
             await _auto_publish_rewritten(application)

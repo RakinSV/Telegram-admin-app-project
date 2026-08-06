@@ -21,6 +21,7 @@ from tg_repost.config import (
     invalidate_settings_cache,
 )
 from tg_repost.db.models import AppSetting, Secret, TelethonSession
+from tg_repost.telegram import newsroom
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 
@@ -169,6 +170,13 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("editorial_web_verify_max_claims", "Потолок веб-запросов на пост", "int"),
             SettingField("editorial_prompt_template", "Промпт редактора-фактчекера", "text"),
             SettingField("editorial_revise_prompt_template", "Промпт правки по замечаниям", "text"),
+            # F50 «редакционная кухня» — трансляция хода редакции в чат.
+            SettingField("editorial_newsroom_enabled", "Транслировать ход редакции в чат", "bool"),
+            SettingField("editorial_newsroom_chat_id", "Чат «редакционной кухни» (id)", "int"),
+            SettingField(
+                "editorial_newsroom_verbosity", "Что транслировать", "str",
+                choices=newsroom.VERBOSITY_CHOICES,
+            ),
         ),
         "Профессиональный рерайт: журналист пишет черновик, редактор-фактчекер "
         "сверяет его с источниками и пишет замечания, журналист переписывает по "

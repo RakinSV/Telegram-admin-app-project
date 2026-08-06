@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from tg_repost import languages
@@ -46,6 +47,30 @@ _VERDICT_OK_RE = re.compile(r"ВЕРДИКТ\s*:?\s*OK", re.IGNORECASE)
 _CHECK_HEADER_RE = re.compile(r"^\s*ПРОВЕРИТЬ\s*:?\s*$", re.IGNORECASE)
 
 _APPROVED_NOTE = "✓ Редактор одобрил без правок."
+
+# Трансляция хода редакции наружу (F50, «редакционная кухня»): callback
+# получает (стадия, текст). Стадии — константы ниже. Модуль намеренно НЕ знает,
+# куда это уходит: в Telegram-чат, в лог или в список в тесте — решает
+# вызывающий (`scheduler/jobs.py`). Так editorial.py остаётся свободен от
+# зависимостей на Telegram и БД.
+StepCallback = Callable[[str, str], Awaitable[None]]
+
+STEP_DRAFT = "draft"
+STEP_REVIEW = "review"
+STEP_WEB_FINDINGS = "web_findings"
+STEP_REVISION = "revision"
+STEP_VERDICT = "verdict"
+
+
+async def _emit(on_step: StepCallback | None, stage: str, text: str) -> None:
+    """Отдать шаг наружу. Сбой трансляции НИКОГДА не влияет на рерайт — это
+    диагностика, а не часть пайплайна (упавший Telegram не должен стоить поста)."""
+    if on_step is None:
+        return
+    try:
+        await on_step(stage, text)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Трансляция шага '%s' не удалась: %s", stage, exc)
 
 
 @dataclass
@@ -128,10 +153,15 @@ async def _web_findings(claims: list[str], max_claims: int) -> str:
 async def editorial_rewrite(
     client: RewriterClient, *, original: str, link_content: str,
     prompt_name: str, language: str | None,
+    on_step: StepCallback | None = None,
 ) -> EditorialResult:
     """Полный редакционный цикл для одного варианта. Черновик обязателен —
     ошибка на нём пробрасывается (как и в обычном рерайте). Дальше рецензия и
-    правка best-effort: сбой оставляет лучший из полученных текстов."""
+    правка best-effort: сбой оставляет лучший из полученных текстов.
+
+    `on_step` — необязательная трансляция хода наружу (F50): вызывается после
+    каждого шага с (стадия, текст). Её сбой не влияет на результат.
+    """
     settings = get_settings()
     total_tokens = 0
 
@@ -141,6 +171,7 @@ async def editorial_rewrite(
     )
     draft = draft_result.text
     total_tokens += draft_result.total_tokens
+    await _emit(on_step, STEP_DRAFT, draft)
 
     max_rounds = max(0, settings.editorial_max_rounds)
     sources = _build_sources(original, link_content)
@@ -167,14 +198,18 @@ async def editorial_rewrite(
         approved, critique, claims = _parse_editor_output(review.text)
         if approved:
             notes = _APPROVED_NOTE
+            await _emit(on_step, STEP_VERDICT, _APPROVED_NOTE)
             break
         if not critique:
             break  # редактор не сказал ничего внятного — не крутим цикл впустую
+        await _emit(on_step, STEP_REVIEW, critique)
 
         # 3. Веб-сверка спорных фактов (не критично: пусто → правим без находок).
         findings = ""
         if settings.editorial_web_verify_enabled and claims:
             findings = await _web_findings(claims, settings.editorial_web_verify_max_claims)
+            if findings:
+                await _emit(on_step, STEP_WEB_FINDINGS, findings)
 
         # 4. Журналист переписывает по замечаниям и находкам.
         try:
@@ -192,9 +227,17 @@ async def editorial_rewrite(
 
         if revised.text.strip():
             draft = revised.text
+            await _emit(on_step, STEP_REVISION, draft)
         notes = critique
         rounds_used += 1
 
-    return EditorialResult(
+    result = EditorialResult(
         text=draft, tokens=total_tokens, rounds_used=rounds_used, notes=notes.strip(),
     )
+    # Итоговая строка — она же единственное, что видно в режиме `summary`.
+    if rounds_used:
+        await _emit(
+            on_step, STEP_VERDICT,
+            f"Готово: раундов правки {rounds_used}, токенов {total_tokens}.",
+        )
+    return result

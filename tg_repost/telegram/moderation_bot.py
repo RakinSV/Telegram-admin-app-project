@@ -45,6 +45,7 @@ from tg_repost.moderation import approve_post, edit_post_text, reject_post
 from tg_repost.retry import retry_async
 from tg_repost.telegram.invites import approve_join_request, decline_join_request
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
+from tg_repost.telegram.text_utils import clip, tg_len
 
 logger = get_logger(__name__)
 
@@ -90,29 +91,11 @@ def forget_send_failures(post_id: int) -> None:
     _send_failures.pop(post_id, None)
 
 
-def _tg_len(text: str) -> int:
-    """Длина строки так, как её считает Telegram, — в UTF-16 code units.
-
-    Эмодзи вне BMP занимают ДВЕ единицы, поэтому подпись из 1000 «питоновских»
-    символов с эмодзи спокойно перебирает лимит в 1024 и API отвечает
-    `Message caption is too long`. Считать `len()` тут недостаточно.
-    """
-    return len(text.encode("utf-16-le")) // 2
-
-
-def _clip(text: str, budget: int) -> str:
-    """Обрезать до `budget` единиц в мере Telegram, не разорвав эмодзи."""
-    if budget <= 0:
-        return ""
-    if _tg_len(text) <= budget:
-        return text
-    raw = text.encode("utf-16-le")[: budget * 2]
-    while raw:
-        try:
-            return raw.decode("utf-16-le")
-        except UnicodeDecodeError:
-            raw = raw[:-2]  # отрезали половину суррогатной пары — сдаём назад
-    return ""
+# Реализация переехала в `telegram/text_utils.py` — те же правила понадобились
+# трансляции редакционного диалога (F50). Здесь оставлены псевдонимы: на них
+# завязаны все вызовы в этом модуле и тесты.
+_tg_len = tg_len
+_clip = clip
 
 # Статусы ChatMember, при которых бот реально состоит в чате (F08-доп.) —
 # остальные ("left", "kicked", "restricted" без прав) значат, что бота
