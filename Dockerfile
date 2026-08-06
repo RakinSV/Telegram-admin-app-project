@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY tg_repost ./tg_repost
 COPY guardian ./guardian
+# Третий процесс — бот вовлечения (F42-F47). Образ у всех трёх сервисов один,
+# различаются только entrypoint'ом (см. docker-compose.yml), поэтому пакет
+# должен попасть в образ, даже когда собирают «для tg_repost».
+COPY engage ./engage
 COPY alembic.ini alembic_guardian.ini .
 COPY docker-entrypoint.sh docker-entrypoint-guardian.sh .
 RUN chmod +x docker-entrypoint.sh docker-entrypoint-guardian.sh
