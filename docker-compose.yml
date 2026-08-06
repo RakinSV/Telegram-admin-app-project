@@ -48,6 +48,26 @@ services:
       - ./.env:/app/.env
       - ./data/db:/app/db
       - ./data/logs:/app/logs
+
+  engage:
+    # Третий бот: говорит с УЧАСТНИКАМИ (викторины по постам, конкурсы,
+    # рефералы, предложка) — см. engage/config.py про разделение по
+    # собеседнику. БД ОБЩАЯ с tg_repost (квиз делается из поста, реферальная
+    # ссылка — это InviteLink), поэтому DATABASE_URL тот же и своих миграций
+    # у Engage нет: таблицы живут в цепочке tg_repost.
+    build: .
+    entrypoint: ["python", "-m", "engage.bot"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "sqlite:///db/tg_repost.db"
+    volumes:
+      - ./.env:/app/.env
+      - ./data/db:/app/db
+      - ./data/logs:/app/logs
+    depends_on:
+      - tg_repost
       - ./data/media:/app/media
 
   searxng:

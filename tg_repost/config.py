@@ -710,6 +710,9 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     "proxy_socks5_password",
     "proxy_http_password",
     "guardian_bot_token",
+    # Токен ОТДЕЛЬНОГО бота вовлечения (F42-F47, см. engage/config.py) —
+    # как и guardian_bot_token, не атрибут Settings: читает его свой процесс.
+    "engage_bot_token",
     # Не вводится руками: выдаётся автоматически при первой публикации
     # статьи (`telegraph/client.py::get_or_create_token`) и сохраняется сюда.
     # Секрет, потому что даёт право править все опубликованные статьи.

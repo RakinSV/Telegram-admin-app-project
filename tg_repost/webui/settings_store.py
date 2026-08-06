@@ -21,9 +21,9 @@ from tg_repost.config import (
     invalidate_settings_cache,
 )
 from tg_repost.db.models import AppSetting, Secret, TelethonSession
-from tg_repost.telegram import newsroom
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
+from tg_repost.telegram import newsroom
 
 logger = get_logger(__name__)
 
@@ -431,6 +431,16 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "меню, здесь только его токен (секрет).",
         secret_keys=("guardian_bot_token",),
     ),
+    SettingsGroup(
+        "engage_bot", "Engage — токен бота вовлечения",
+        (),
+        "ОТДЕЛЬНЫЙ бот, который говорит с УЧАСТНИКАМИ: викторины по постам, "
+        "конкурсы, реферальные приглашения, предложка. Не тот же бот, что "
+        "публикует посты, и не Guardian. Получить: @BotFather → /newbot. "
+        "Engage — отдельный процесс: после сохранения токена его нужно "
+        "перезапустить (`docker compose restart engage`).",
+        secret_keys=("engage_bot_token",),
+    ),
 )
 
 SECRET_LABELS: dict[str, str] = {
@@ -444,6 +454,7 @@ SECRET_LABELS: dict[str, str] = {
     "proxy_socks5_password": "SOCKS5: пароль",
     "proxy_http_password": "HTTP(S): пароль",
     "guardian_bot_token": "Guardian Bot Token",
+    "engage_bot_token": "Engage Bot Token",
     "telegraph_access_token": "Telegraph Access Token",
 }
 
@@ -483,6 +494,12 @@ SECRET_HINTS: dict[str, str] = {
     "proxy_http_password": (
         "Пароль HTTP(S)-прокси. Адрес и логин — в полях выше. Оставь пустым, "
         "если прокси без авторизации."
+    ),
+    "engage_bot_token": (
+        "Токен ОТДЕЛЬНОГО бота вовлечения (викторины по постам, конкурсы, "
+        "рефералы, предложка) — НЕ тот бот, что публикует посты, и не Guardian. "
+        "Получить: @BotFather → /newbot. Engage — отдельный процесс: после "
+        "сохранения нужно `docker compose restart engage`."
     ),
     "guardian_bot_token": (
         "Токен ОТДЕЛЬНОГО бота-модератора Guardian — НЕ тот же бот, что "

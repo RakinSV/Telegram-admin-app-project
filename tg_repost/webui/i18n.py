@@ -2024,6 +2024,32 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Пароль HTTP(S)-прокси. Оставь пустым, если прокси без авторизации.",
         "en": "HTTP(S) proxy password. Leave blank if the proxy needs no authentication.",
     },
+    "settings.group.engage_bot.title": {
+        "ru": "Engage — бот вовлечения", "en": "Engage — engagement bot",
+    },
+    "settings.group.engage_bot.desc": {
+        "ru": "ОТДЕЛЬНЫЙ бот, который говорит с УЧАСТНИКАМИ: викторины по "
+        "постам, конкурсы, реферальные приглашения, предложка. Не тот же бот, "
+        "что публикует посты, и не Guardian. Получить: @BotFather → /newbot. "
+        "Engage — отдельный процесс: после сохранения токена его нужно "
+        "перезапустить (`docker compose restart engage`).",
+        "en": "A SEPARATE bot that talks to MEMBERS: post quizzes, contests, "
+        "referral invites, user submissions. Not the bot that publishes posts, "
+        "and not Guardian. Get one from @BotFather → /newbot. Engage is a "
+        "separate process: after saving the token restart it "
+        "(`docker compose restart engage`).",
+    },
+    "secrets.field.engage_bot_token.label": {
+        "ru": "Engage Bot Token", "en": "Engage Bot Token",
+    },
+    "secrets.field.engage_bot_token.hint": {
+        "ru": "Токен ОТДЕЛЬНОГО бота вовлечения — не тот, что публикует посты, "
+        "и не Guardian. @BotFather → /newbot. Отдельный процесс: после "
+        "сохранения нужен `docker compose restart engage`.",
+        "en": "Token of the SEPARATE engagement bot — not the one publishing "
+        "posts, and not Guardian. @BotFather → /newbot. Separate process: after "
+        "saving run `docker compose restart engage`.",
+    },
     "secrets.field.guardian_bot_token.label": {
         "ru": "Guardian Bot Token", "en": "Guardian Bot Token",
     },
