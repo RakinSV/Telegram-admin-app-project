@@ -48,6 +48,7 @@ services:
       - ./.env:/app/.env
       - ./data/db:/app/db
       - ./data/logs:/app/logs
+      - ./data/media:/app/media
 
   engage:
     # Третий бот: говорит с УЧАСТНИКАМИ (викторины по постам, конкурсы,
@@ -66,9 +67,11 @@ services:
       - ./.env:/app/.env
       - ./data/db:/app/db
       - ./data/logs:/app/logs
+    # Своих миграций у Engage нет — таблицы создаёт entrypoint tg_repost.
+    # Порядок старта поэтому не косметика: без него первый запуск Engage
+    # упёрся бы в отсутствующие таблицы.
     depends_on:
       - tg_repost
-      - ./data/media:/app/media
 
   searxng:
     # Свой метапоисковик для добора источников (F16, SEARCH_PROVIDER=searxng).

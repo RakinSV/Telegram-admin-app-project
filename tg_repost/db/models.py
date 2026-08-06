@@ -863,6 +863,68 @@ class Referral(Base):
     )
 
 
+class Contest(Base):
+    """Конкурс/розыгрыш среди участников (F44).
+
+    ПРОЗРАЧНОСТЬ РОЗЫГРЫША — не украшение, а условие работоспособности: если
+    аудитория не верит, что победителя не выбрали «своим», конкурс не
+    вовлекает, а раздражает. Поэтому `draw_seed` генерируется и ПУБЛИКУЕТСЯ
+    ЗАРАНЕЕ, вместе с условиями, а после розыгрыша сохраняется протокол
+    (`draw_protocol`): список участников в том порядке, в каком их видел
+    алгоритм, и выбранные победители. Имея seed, список и описание алгоритма,
+    любой желающий воспроизводит результат.
+    """
+
+    __tablename__ = "contests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    prize: Mapped[str] = mapped_column(Text)
+    winners_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    # --- Условия участия (0/пусто = условие не проверяется) ---
+    # CSV из chat_id каналов, на которые надо быть подписанным. Проверяется
+    # через getChatMember — бот должен быть админом в каждом из них.
+    require_subscribed_chat_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    require_min_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    require_min_referrals: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # --- Прозрачность ---
+    # Публикуется ВМЕСТЕ с конкурсом, до того как известен состав участников.
+    draw_seed: Mapped[str] = mapped_column(String(64))
+    # Заполняется после розыгрыша: кто участвовал и кто выиграл.
+    draw_protocol: Mapped[str | None] = mapped_column(Text, nullable=True)
+    drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ContestEntry(Base):
+    """Заявка на участие в конкурсе (F44).
+
+    Условия проверяются ДВАЖДЫ: при записи (чтобы сразу сказать человеку, чего
+    не хватает) и при розыгрыше (чтобы нельзя было выполнить условие, записаться
+    и тут же отписаться от канала).
+    """
+
+    __tablename__ = "contest_entries"
+    __table_args__ = (
+        UniqueConstraint("contest_id", "user_id", name="uq_contest_entry"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    contest_id: Mapped[int] = mapped_column(ForeignKey("contests.id"), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_winner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
     """Разобрать CSV из chat_id (поле `Source.target_chat_ids`) в список int."""
     if not raw:

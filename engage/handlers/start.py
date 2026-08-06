@@ -82,8 +82,11 @@ async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
         if targets and user_id:
             await handle_referral_start(bot, link.value, user_id, targets[0].chat_id)
     elif link.kind == PAYLOAD_CONTEST:
-        # F44 подключится сюда: записать участника в конкурс.
-        logger.info("Deep-link конкурса %s от %s", link.value, user_id)
+        from engage.handlers.contest import handle_contest_start
+
+        if user is not None:
+            await handle_contest_start(bot, link.value, user, message)
+            return  # ответ уже отправлен обработчиком конкурса
     elif link.kind == PAYLOAD_SUGGEST:
         # F47 подключится сюда: открыть приём поста от подписчика.
         logger.info("Deep-link предложки от %s", user_id)

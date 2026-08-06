@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from engage.config import get_engage_settings
-from engage.handlers import quiz, referral, start
+from engage.handlers import contest, quiz, referral, start
 from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
@@ -64,6 +64,7 @@ async def main() -> None:
     dp.include_router(start.router)
     dp.include_router(quiz.router)
     dp.include_router(referral.router)
+    dp.include_router(contest.router)
 
     # Публикация созревших викторин (F43). Минутный тик: сама задержка
     # после поста задаётся настройкой quiz_delay_minutes, здесь только
@@ -78,6 +79,12 @@ async def main() -> None:
     scheduler.add_job(
         referral.confirm_referrals_job, IntervalTrigger(hours=1),
         id="confirm_referrals",
+    )
+    # F44: розыгрыш конкурсов, у которых вышел срок. Раз в 5 минут —
+    # опоздание с итогами читается как «организатор тянет время».
+    scheduler.add_job(
+        contest.draw_due_contests, IntervalTrigger(minutes=5),
+        args=[bot], id="draw_contests",
     )
     scheduler.start()
 

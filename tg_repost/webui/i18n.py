@@ -2090,6 +2090,27 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Together with the “posted at least one message” requirement this "
         "is the entire anti-fraud protection.",
     },
+    "settings.group.contests.title": {
+        "ru": "Конкурсы и розыгрыши", "en": "Contests and giveaways",
+    },
+    "settings.group.contests.desc": {
+        "ru": "Розыгрыш ВОСПРОИЗВОДИМЫЙ: seed генерируется при создании "
+        "конкурса (до появления участников) и публикуется вместе с условиями, "
+        "а после розыгрыша публикуется протокол — участники и победители. "
+        "Имея seed, список и алгоритм, результат перепроверяет любой. Условия "
+        "проверяются ДВАЖДЫ: при записи и при розыгрыше — иначе можно "
+        "подписаться, записаться и сразу отписаться. Проводит бот Engage.",
+        "en": "The draw is REPRODUCIBLE: the seed is generated when the contest "
+        "is created (before any participant exists) and published with the "
+        "rules; after the draw a protocol is published — participants and "
+        "winners. Given the seed, the list and the algorithm anyone can verify "
+        "the result. Conditions are checked TWICE: on entry and at draw time — "
+        "otherwise one could subscribe, enter and unsubscribe right away. Run "
+        "by the Engage bot.",
+    },
+    "settings.field.contests_enabled.label": {
+        "ru": "Включить конкурсы", "en": "Enable contests",
+    },
     "settings.group.engage_bot.title": {
         "ru": "Engage — бот вовлечения", "en": "Engage — engagement bot",
     },
