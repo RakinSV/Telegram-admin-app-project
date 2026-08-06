@@ -66,7 +66,6 @@ def parse_payload(payload: str | None) -> DeepLink | None:
 @router.message(CommandStart())
 async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
     """Приветствие + маршрутизация deep-link."""
-    del bot  # понадобится обработчикам фич ниже
     link = parse_payload(command.args)
     user = message.from_user
     user_id = user.id if user is not None else 0
@@ -76,8 +75,12 @@ async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
         return
 
     if link.kind == PAYLOAD_REFERRAL:
-        # F42 подключится сюда: засчитать приглашение и выдать ссылку группы.
-        logger.info("Deep-link реферала: пригласил %s, пришёл %s", link.value, user_id)
+        from engage.handlers.referral import handle_referral_start
+        from tg_repost import targets_repo
+
+        targets = [t for t in targets_repo.list_targets() if t.is_active]
+        if targets and user_id:
+            await handle_referral_start(bot, link.value, user_id, targets[0].chat_id)
     elif link.kind == PAYLOAD_CONTEST:
         # F44 подключится сюда: записать участника в конкурс.
         logger.info("Deep-link конкурса %s от %s", link.value, user_id)

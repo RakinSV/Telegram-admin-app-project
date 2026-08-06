@@ -2063,6 +2063,33 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.quiz_prompt_template.label": {
         "ru": "Промпт составителя вопроса", "en": "Quiz author prompt",
     },
+    "settings.group.referrals.title": {
+        "ru": "Реферальная программа", "en": "Referral programme",
+    },
+    "settings.group.referrals.desc": {
+        "ru": "Участник берёт у бота Engage персональную ссылку (/invite) и "
+        "получает очки за приведённых. АНТИНАКРУТКА встроена: реферал "
+        "засчитывается, только когда приглашённый прожил в группе указанное "
+        "число дней И написал хотя бы одно сообщение. Без этого механика за "
+        "день превращается в ферму мультиаккаунтов.",
+        "en": "A member gets a personal link from the Engage bot (/invite) and "
+        "earns points for people they bring. ANTI-FRAUD is built in: a referral "
+        "counts only after the invited person has stayed in the group for the "
+        "configured number of days AND posted at least one message. Without "
+        "that the mechanic becomes a multi-account farm within a day.",
+    },
+    "settings.field.referrals_enabled.label": {
+        "ru": "Включить рефералы", "en": "Enable referrals",
+    },
+    "settings.field.referral_min_days.label": {
+        "ru": "Дней в группе до зачёта", "en": "Days in group before counting",
+    },
+    "settings.field.referral_min_days.hint": {
+        "ru": "Вместе с требованием «написал хотя бы одно сообщение» это и есть "
+        "вся защита от накрутки.",
+        "en": "Together with the “posted at least one message” requirement this "
+        "is the entire anti-fraud protection.",
+    },
     "settings.group.engage_bot.title": {
         "ru": "Engage — бот вовлечения", "en": "Engage — engagement bot",
     },

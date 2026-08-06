@@ -824,6 +824,45 @@ class UserActivity(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class Referral(Base):
+    """Кто кого привёл (F42, реферальная программа).
+
+    Приглашённый приходит по deep-link `t.me/<bot>?start=ref_<user_id>` — бот
+    Engage получает payload первым же сообщением и знает пригласившего.
+
+    АНТИНАКРУТКА — главное в этой таблице. Без неё механика мгновенно
+    превращается в ферму мультиаккаунтов: завёл десять аккаунтов, прошёл по
+    своей же ссылке, собрал награды. Поэтому реферал считается «подтверждённым»
+    (`confirmed_at`) только когда приглашённый ПРОЖИЛ в группе N дней И написал
+    хотя бы одно сообщение. Награда выдаётся за подтверждённых, а не за
+    пришедших.
+    """
+
+    __tablename__ = "referrals"
+    __table_args__ = (
+        # Один пригласивший на приглашённого: первый, кто привёл, тот и привёл.
+        UniqueConstraint("invited_user_id", name="uq_referral_invited"),
+        Index("ix_referrals_inviter", "inviter_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inviter_user_id: Mapped[int] = mapped_column(BigInteger)
+    invited_user_id: Mapped[int] = mapped_column(BigInteger)
+    # В какой чат приглашали — награды и лидерборды считаются по чату.
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # Вступил ли приглашённый в группу (пришёл по ссылке — ещё не значит вступил).
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Написал ли хоть что-то — вторая половина антинакрутки.
+    first_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    # Оба условия выполнены и выдержан срок: реферал засчитан и оплачен.
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
+
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
     """Разобрать CSV из chat_id (поле `Source.target_chat_ids`) в список int."""
     if not raw:
