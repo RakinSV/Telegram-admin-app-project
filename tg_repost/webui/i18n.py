@@ -2120,6 +2120,64 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Suspicious signals on a new account escalate the captcha "
         "to math — never auto-bans or auto-rejects.",
     },
+    "guardian.settings.group.hygiene.title": {
+        "ru": "Гигиена группы", "en": "Group hygiene",
+    },
+    "guardian.settings.group.hygiene.desc": {
+        "ru": "Мелочи, которые обычно делают руками каждый день. Чистка "
+        "служебных сообщений: в активной группе «вошёл/вышел» забивают ленту "
+        "сильнее самого общения. ВНИМАНИЕ по ночному режиму: Telegram не хранит "
+        "прежние права чата — при открытии выставляется стандартный набор "
+        "(писать / медиа / опросы / приглашать), а не «как было». Если у группы "
+        "кастомные ограничения, не включай. Время — UTC.",
+        "en": "The small things admins otherwise do by hand every day. Service "
+        "message cleanup: in an active group “joined/left” clutter the feed more "
+        "than the conversation itself. NOTE on night mode: Telegram does not "
+        "store the chat's previous permissions — on reopening a standard set is "
+        "applied (text / media / polls / invites), not “as it was”. Do not "
+        "enable it if the group has custom restrictions. Times are UTC.",
+    },
+    "guardian.settings.field.delete_join_leave_messages.label": {
+        "ru": "Удалять «вошёл/вышел»", "en": "Delete “joined/left” messages",
+    },
+    "guardian.settings.field.delete_pin_notifications.label": {
+        "ru": "Удалять «закрепил сообщение»", "en": "Delete “pinned a message”",
+    },
+    "guardian.settings.field.delete_pin_notifications.hint": {
+        "ru": "Отдельно от остальных: иногда это единственный способ участнику "
+        "узнать о закреплённом.",
+        "en": "Separate from the rest: sometimes this is the only way a member "
+        "learns about the pinned message.",
+    },
+    "guardian.settings.field.delete_service_messages.label": {
+        "ru": "Удалять прочую служебку", "en": "Delete other service messages",
+    },
+    "guardian.settings.field.delete_service_messages.hint": {
+        "ru": "Смена названия/аватара группы, видеочаты.",
+        "en": "Group title/photo changes, video chats.",
+    },
+    "guardian.settings.field.night_mode_enabled.label": {
+        "ru": "Ночной режим (закрывать чат)", "en": "Night mode (close the chat)",
+    },
+    "guardian.settings.field.night_mode_start_hour.label": {
+        "ru": "Закрывать в час UTC", "en": "Close at hour (UTC)",
+    },
+    "guardian.settings.field.night_mode_end_hour.label": {
+        "ru": "Открывать в час UTC", "en": "Open at hour (UTC)",
+    },
+    "guardian.settings.field.rules_reminder_enabled.label": {
+        "ru": "Напоминать правила", "en": "Remind the rules",
+    },
+    "guardian.settings.field.rules_reminder_enabled.hint": {
+        "ru": "Правила в закрепе никто не открывает.",
+        "en": "Nobody opens the rules in the pinned message.",
+    },
+    "guardian.settings.field.rules_reminder_hours.label": {
+        "ru": "Раз в сколько часов", "en": "Every N hours",
+    },
+    "guardian.settings.field.rules_reminder_text.label": {
+        "ru": "Текст напоминания", "en": "Reminder text",
+    },
     "guardian.settings.group.quiet_hours.title": {"ru": "Тихие часы / строгость", "en": "Quiet hours / strictness"},
     "guardian.settings.group.quiet_hours.desc": {
         "ru": "Строгий режим — варн за любое нарушение. Мягкий — ссылки "

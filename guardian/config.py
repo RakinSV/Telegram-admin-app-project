@@ -112,6 +112,34 @@ class GuardianSettings(BaseSettings):
     quiet_hours_start_hour: int = Field(22, alias="QUIET_HOURS_START_HOUR")  # UTC, 0-23
     quiet_hours_end_hour: int = Field(8, alias="QUIET_HOURS_END_HOUR")  # UTC, 0-23
 
+    # --- Служебная гигиена группы (F48) ---
+    # Чистка служебных сообщений: в активной группе «вошёл/вышел» забивают
+    # ленту сильнее самого общения.
+    delete_join_leave_messages: bool = Field(False, alias="DELETE_JOIN_LEAVE_MESSAGES")
+    # Уведомление о закрепе — отдельной настройкой: иногда это единственный
+    # способ участнику узнать о закреплённом, и чистить его не всегда верно.
+    delete_pin_notifications: bool = Field(False, alias="DELETE_PIN_NOTIFICATIONS")
+    # Прочая служебка: смена названия/аватара, видеочаты.
+    delete_service_messages: bool = Field(False, alias="DELETE_SERVICE_MESSAGES")
+
+    # Ночной режим: на ночь чат закрывается на запись, утром открывается.
+    # ВНИМАНИЕ: Telegram не хранит прежние права чата — при открытии
+    # выставляется стандартный набор (писать/медиа/опросы/приглашать), а не
+    # «как было». Если у группы кастомные ограничения, включать не стоит.
+    night_mode_enabled: bool = Field(False, alias="NIGHT_MODE_ENABLED")
+    night_mode_start_hour: int = Field(23, alias="NIGHT_MODE_START_HOUR")  # UTC, 0-23
+    night_mode_end_hour: int = Field(7, alias="NIGHT_MODE_END_HOUR")  # UTC, 0-23
+    # Служебное: закрыт ли чат ПРЯМО СЕЙЧАС ночным режимом. Пишется джобой, не
+    # руками (в /settings не выводится). Хранится в БД, а не в памяти: рестарт
+    # контейнера посреди ночи не должен приводить к тому, что утренний переход
+    # не сработает, потому что процесс «забыл», что закрывал чат.
+    night_mode_closed_now: bool = Field(False, alias="NIGHT_MODE_CLOSED_NOW")
+
+    # Напоминание правил: правила в закрепе никто не открывает.
+    rules_reminder_enabled: bool = Field(False, alias="RULES_REMINDER_ENABLED")
+    rules_reminder_hours: int = Field(24, alias="RULES_REMINDER_HOURS")
+    rules_reminder_text: str = Field("", alias="RULES_REMINDER_TEXT")
+
     # --- Рерайт/AI (переиспользует те же ключи, что и репост-бот, G09) ---
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")

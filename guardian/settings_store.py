@@ -160,6 +160,27 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "ссылки вне whitelist только логируются, не удаляются. Время — "
         "UTC, без поправки на твой часовой пояс.",
     ),
+    SettingsGroup(
+        "hygiene",
+        "Гигиена группы (F48)",
+        (
+            SettingField("delete_join_leave_messages", "Удалять «вошёл/вышел»", "bool"),
+            SettingField("delete_pin_notifications", "Удалять «закрепил сообщение»", "bool"),
+            SettingField("delete_service_messages", "Удалять прочую служебку", "bool"),
+            SettingField("night_mode_enabled", "Ночной режим (закрывать чат)", "bool"),
+            SettingField("night_mode_start_hour", "Закрывать в час UTC", "int"),
+            SettingField("night_mode_end_hour", "Открывать в час UTC", "int"),
+            SettingField("rules_reminder_enabled", "Напоминать правила", "bool"),
+            SettingField("rules_reminder_hours", "Раз в сколько часов", "int"),
+            SettingField("rules_reminder_text", "Текст напоминания", "text"),
+        ),
+        "Мелочи, которые обычно делают руками каждый день. Чистка служебных "
+        "сообщений: в активной группе «вошёл/вышел» забивают ленту сильнее "
+        "самого общения. ВНИМАНИЕ по ночному режиму: Telegram не хранит "
+        "прежние права чата — при открытии выставляется стандартный набор "
+        "(писать / медиа / опросы / приглашать), а не «как было». Если у "
+        "группы кастомные ограничения, не включай. Время — UTC.",
+    ),
 )
 
 

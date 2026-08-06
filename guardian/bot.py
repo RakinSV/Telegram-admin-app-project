@@ -23,7 +23,7 @@ from guardian import settings_store, trusted_repo
 from guardian.config import get_guardian_settings
 from guardian.db.models import Member, StopWord, TrustedUser
 from guardian.db.session import session_scope
-from guardian.handlers import admin, chat_member, join, messages, stats
+from guardian.handlers import admin, chat_member, hygiene, join, messages, stats
 from guardian.logging_conf import get_logger, setup_logging
 from guardian.services import daily_stats_repo, raid_detector
 from guardian.services.warn_system import reset_expired_warns
@@ -73,6 +73,43 @@ def _apply_quiet_hours_schedule() -> None:
     start, end = settings.quiet_hours_start_hour, settings.quiet_hours_end_hour
     is_quiet_hours = start <= hour < end if start <= end else hour >= start or hour < end
     settings_store.save_setting("strict_mode", is_quiet_hours, "bool", updated_by="schedule")
+
+
+async def _apply_night_mode(bot: Bot) -> None:
+    """F48: закрыть чат на ночь и открыть утром.
+
+    Состояние (закрыт/открыт) держится в настройке `night_mode_closed_now`, а
+    не в памяти: рестарт контейнера посреди ночи не должен приводить к тому,
+    что чат откроется утром «сам по себе» (переход не сработает, если мы
+    забыли, что закрывали).
+    """
+    settings = get_guardian_settings()
+    if not settings.night_mode_enabled or not settings.protected_chat_ids:
+        return
+    hour = datetime.now(timezone.utc).hour
+    should_be_closed = hygiene.is_night_now(
+        hour, settings.night_mode_start_hour, settings.night_mode_end_hour,
+    )
+    if should_be_closed == settings.night_mode_closed_now:
+        return  # состояние уже нужное — не дёргаем API каждые 15 минут
+
+    changed_any = False
+    for chat_id in settings.protected_chat_ids:
+        if await hygiene.set_night_mode(bot, chat_id, closed=should_be_closed):
+            changed_any = True
+    if changed_any:
+        settings_store.save_setting(
+            "night_mode_closed_now", should_be_closed, "bool", updated_by="schedule",
+        )
+
+
+async def _send_rules_reminders(bot: Bot) -> None:
+    """F48: напоминание правил по расписанию во все защищаемые чаты."""
+    settings = get_guardian_settings()
+    if not settings.rules_reminder_enabled or not settings.protected_chat_ids:
+        return
+    for chat_id in settings.protected_chat_ids:
+        await hygiene.send_rules_reminder(bot, chat_id, settings.rules_reminder_text)
 
 
 def _auto_trust_eligible_members() -> None:
@@ -301,6 +338,9 @@ async def main() -> None:
     dp.include_router(admin.router)
     dp.include_router(stats.router)
     dp.include_router(messages.router)
+    # F48: чистка служебных сообщений. Строго ПОСЛЕ messages.router —
+    # обычное общение должно сначала пройти антиспам.
+    dp.include_router(hygiene.router)
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
@@ -325,6 +365,16 @@ async def main() -> None:
     )
     scheduler.add_job(
         _apply_quiet_hours_schedule, IntervalTrigger(minutes=15), id="quiet_hours"
+    )
+    # F48: ночной режим проверяется чаще тихих часов — закрытие/открытие
+    # чата заметно участникам, и опоздание на 15 минут выглядит как сбой.
+    scheduler.add_job(
+        _apply_night_mode, IntervalTrigger(minutes=5), args=[bot], id="night_mode"
+    )
+    scheduler.add_job(
+        _send_rules_reminders,
+        IntervalTrigger(hours=max(1, get_guardian_settings().rules_reminder_hours)),
+        args=[bot], id="rules_reminder",
     )
     scheduler.start()
 
