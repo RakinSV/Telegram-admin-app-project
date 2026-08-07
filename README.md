@@ -14,12 +14,15 @@
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-**An automated Telegram content pipeline: scrape → two-agent AI editorial desk → moderate → publish — plus an AI group moderator and an audience-engagement bot.**
+# Self-Hosted Telegram Automation — Repost Bot + Guardian Moderation + Engage Gamification
+
+**An automated Telegram repost bot with a two-agent AI editorial desk: scrape → rewrite & fact-check → moderate → publish — plus an AI group moderator (Guardian) and an audience-engagement bot (Engage).**
 Three independent bots, one web admin panel, all self-hosted.
 
 🇬🇧 **English** &nbsp;|&nbsp; 🇷🇺 [Русский](README.ru.md) &nbsp;|&nbsp; 📖 [Wiki (full docs, FAQ, troubleshooting)](../../wiki)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/RakinSV/Telegram-admin-app-project/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/RakinSV/Telegram-admin-app-project?style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/stargazers)
 [![Tests](https://img.shields.io/badge/tests-1252%20passing-brightgreen?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-red?style=flat-square)](https://github.com/astral-sh/ruff)
@@ -53,29 +56,30 @@ CI running lint/type-check/security-scan on every push, Docker packaging for
 VPS/Proxmox deployment, and a single web admin panel instead of poking at
 `.env` files and a database by hand.
 
-This README is the overview and quick start. For a **beginner-friendly,
-step-by-step deployment walkthrough with FAQ and troubleshooting**, see the
-**[Wiki](../../wiki)** — if you've never run a Docker container before,
-start there, not here. For deep implementation-level context and
-architecture decisions (written for contributors/maintainers, not end
-users), see [CLAUDE.md](CLAUDE.md), the repost bot's feature backlog in
-[FEATURES.md](FEATURES.md), the phased implementation plan in
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), and Guardian's own docs in
-[guardian/GUARDIAN.md](guardian/GUARDIAN.md) and
-[guardian/GUARDIAN_FEATURES.md](guardian/GUARDIAN_FEATURES.md) (these four
-are in Russian).
+This README is the overview and quick start.
+
+- **New to Docker, or just want it running?** Start with the
+  **[Wiki](../../wiki)** — a beginner-friendly, step-by-step walkthrough with
+  FAQ and troubleshooting.
+- **Contributing or exploring the code?** See [CLAUDE.md](CLAUDE.md)
+  (architecture decisions), [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) (system
+  passport), [FEATURES.md](FEATURES.md) (feature backlog),
+  [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (phased plan), and
+  Guardian's own [GUARDIAN.md](guardian/GUARDIAN.md) /
+  [GUARDIAN_FEATURES.md](guardian/GUARDIAN_FEATURES.md) — note: these are
+  written in Russian.
 
 ---
 
 ## Contents
 
 - [What's inside](#whats-inside)
-- [The editorial desk — two AI agents](#the-editorial-desk--two-ai-agents)
+- [The editorial desk — two AI agents](#the-editorial-desk--two-ai-agents-draft--fact-check)
 - [Repost bot — features](#repost-bot--features)
-- [Guardian — AI group moderator](#guardian--ai-group-moderator)
-- [Engage — turning readers into participants](#engage--turning-readers-into-participants)
+- [Guardian — AI group moderator](#guardian--ai-group-moderator-captcha-spam-filter-anti-raid)
+- [Engage — turning readers into participants](#engage--turning-readers-into-participants-quizzes-referrals-contests)
 - [Web admin panel](#web-admin-panel)
-- [Proxies](#proxies)
+- [Proxies](#proxies-mtproto--socks5--http)
 - [Stack](#stack)
 - [Quick start (no Docker)](#quick-start-no-docker)
 - [Docker deployment](#docker-deployment)
@@ -156,7 +160,7 @@ web panel.
 
 ---
 
-## The editorial desk — two AI agents
+## The editorial desk — two AI agents (draft + fact-check)
 
 Most "AI rewrite" tools are synonym shufflers: one model call, one output,
 nobody checks it. This one runs an actual editorial process, because the
@@ -164,7 +168,7 @@ failure mode that matters isn't clumsy phrasing — it's **confidently
 publishing something false**.
 
 ```
-① journalist  → writes the draft (20-years-experience copywriter persona,
+① journalist  → writes the draft (a copywriter persona with 20 years of experience,
                  one of 5 style profiles)
 ② editor      → fact-checks the draft against the ORIGINAL source text,
                  returns a verdict (OK / NEEDS WORK) plus a list of claims
@@ -261,12 +265,12 @@ the newsroom never buzzes your phone at 3am.
   search).
 - **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, enable a
   type and tick what to route through it (Telegram, rewrite AI, image AI);
-  see [Proxies](#proxies) below — **and read the Wiki's Proxy Guide before
-  you configure this, there's an important limitation.**
+  see [Proxies](#proxies-mtproto--socks5--http) below — **and read the Wiki's Proxy Guide before
+  you configure this — there's an important limitation.**
 
 ---
 
-## Guardian — AI group moderator
+## Guardian — AI group moderator (CAPTCHA, spam filter, anti-raid)
 
 A separate bot on `aiogram`. Its job isn't to review content — it's to
 **protect the real people in your group** from spam, bots, and toxicity
@@ -277,7 +281,7 @@ while your audience grows.
   channel-topic question) → restrictions lifted on a correct answer.
 - No answer within N minutes → auto-kick.
 - The "who answered first" race and "who is actually the new member vs. who
-  invited them" confusion are closed via explicit `user_id` addressing
+  invited them" confusion are both resolved by explicit `user_id` addressing
   rather than aiogram FSM context (a real security bug found and fixed —
   see commit history).
 - **Profile analysis** — no username/photo, suspicious bio, brand-new
@@ -319,7 +323,7 @@ cuts a legitimate message.
 - **Log channel** — every moderation action, manual or automatic, is
   written to a private channel with inline buttons for a quick admin
   response.
-- **SOCKS5/HTTP proxy support for the Bot API** — see [Proxies](#proxies) below.
+- **SOCKS5/HTTP proxy support for the Bot API** — see [Proxies](#proxies-mtproto--socks5--http) below.
 - **21 admin commands** — `/warn /mute /unmute /ban /unban /kick /check
   /addword /delword /listwords /trust /untrust /addomain /deldomain
   /listdomains /setmode /setcaptcha /setwarn /setmutime /mode /stats
@@ -327,7 +331,7 @@ cuts a legitimate message.
 
 ---
 
-## Engage — turning readers into participants
+## Engage — turning readers into participants (quizzes, referrals, contests)
 
 The third bot, also on `aiogram`. Guardian keeps bad actors *out*; Engage
 gives the good ones a reason to *stay*. Every mechanic here was built around
@@ -429,7 +433,7 @@ Argon2id.
 
 ---
 
-## Proxies
+## Proxies (MTProto / SOCKS5 / HTTP)
 
 One unified proxy section on `/settings` → **Proxy**. You enable one or more
 **types**, fill in each one's address (and optional credentials), then tick
@@ -448,7 +452,7 @@ what to route through it. There are three types and three usage toggles:
 | Usage toggles | plain checkboxes | pick per-traffic: Telegram / rewrite AI / image AI |
 
 Precedence when several types are enabled: for **Telegram**, SOCKS5 → HTTP →
-MTProto; for the **AIs**, HTTP → SOCKS5 (MTProto is Telegram-only). Leave
+MTProto; for **AI traffic**, HTTP → SOCKS5 (MTProto is Telegram-only). Leave
 every type disabled for a direct connection (the default).
 
 Guardian's Bot API proxy is **separate** (`.env` only,
@@ -632,7 +636,7 @@ outside the image, in bind-mounted volumes.
 | `permission denied ... docker.sock` | Group membership from `usermod -aG docker` not applied yet | Log out/in, or `newgrp docker` |
 | `.env` created as a directory | `docker compose up` ran before `.env` existed | `docker compose down`, `rmdir .env` (it's empty), `cp .env.example .env`, retry |
 | `/guardian*` pages 500 with "no such table" | `GUARDIAN_DATABASE_URL` mismatch between services, or a stale image before a fix landed | `docker compose up -d --build` to rebuild both services from the current `docker-compose.yml` |
-| Telethon login hangs or fails with a garbled error | MTProto proxy in fake-TLS mode — unsupported, see [Proxies](#proxies) above | Read the [Wiki's Proxy Guide](../../wiki/Proxy-Guide) |
+| Telethon login hangs or fails with a garbled error | MTProto proxy in fake-TLS mode — unsupported, see [Proxies](#proxies-mtproto--socks5--http) above | Read the [Wiki's Proxy Guide](../../wiki/Proxy-Guide) |
 
 More scenarios, with real error text, live in the **[Wiki
 FAQ](../../wiki/FAQ)**.
@@ -778,7 +782,7 @@ on purpose, not unfinished — see the bottom of this section.
 - ✅ **Auto-backup** — `.env` + both databases + logs in one script.
 - ✅ **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, per-type
   enable + per-traffic usage toggles (Telegram / rewrite AI / image AI),
-  configured on `/settings` (see [Proxies](#proxies) — and read the fake-TLS
+  configured on `/settings` (see [Proxies](#proxies-mtproto--socks5--http) — and read the fake-TLS
   caveat).
 - ✅ **Production deployment proven** — an LXC on Proxmox (Docker inside an
   unprivileged container with nesting enabled), a full `docker compose up`
@@ -798,7 +802,7 @@ on purpose, not unfinished — see the bottom of this section.
 
 This project is written and maintained in spare time, with no grant and no
 company behind it — three bots, 1252 tests and 50 documented features, built
-evenings and weekends. If it's been useful to you, a coffee helps keep the
+nights and weekends. If it's been useful to you, a coffee helps keep the
 feature work going:
 
 **Bitcoin (BTC):**
@@ -806,9 +810,8 @@ feature work going:
 bc1qwnkyez3nv86dry54dqfjjtav29qqq72h69pevw
 ```
 
-A star on the repository costs nothing but helps other people find the
-project — and telling me what you built with it is worth more than the
-coffee.
+**⭐ Starring the repo costs nothing but helps other people find it** — and
+telling me what you built with it is worth more than the coffee.
 
 ---
 
