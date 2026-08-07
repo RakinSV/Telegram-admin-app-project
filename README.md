@@ -805,10 +805,15 @@ company behind it — three bots, 1252 tests and 50 documented features, built
 nights and weekends. If it's been useful to you, a coffee helps keep the
 feature work going:
 
-**Bitcoin (BTC):**
+**Bitcoin (BTC)** — native SegWit (bech32), Bitcoin mainnet only:
+
 ```
 bc1qwnkyez3nv86dry54dqfjjtav29qqq72h69pevw
 ```
+
+[**Open this address on mempool.space →**](https://mempool.space/address/bc1qwnkyez3nv86dry54dqfjjtav29qqq72h69pevw)
+— check it against the block explorer before sending anything. Never trust an
+address pasted into a chat, including by me.
 
 **⭐ Starring the repo costs nothing but helps other people find it** — and
 telling me what you built with it is worth more than the coffee.
