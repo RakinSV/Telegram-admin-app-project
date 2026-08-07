@@ -23,7 +23,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/RakinSV/Telegram-admin-app-project/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/RakinSV/Telegram-admin-app-project?style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/stargazers)
-[![Tests](https://img.shields.io/badge/tests-1252%20passing-brightgreen?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1253%20passing-brightgreen?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-red?style=flat-square)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/type--checked-mypy-blue?style=flat-square)](https://mypy-lang.org/)
@@ -50,7 +50,7 @@
 викторины по самим постам, реферальная программа с настоящей антинакруткой
 и конкурсы с проверяемым розыгрышем.
 
-Все три — production-ready: alembic-миграции с первого дня, 1252 теста,
+Все три — production-ready: alembic-миграции с первого дня, 1253 теста,
 CI с линтером/тайпчекером/security-сканером на каждый пуш, Docker-упаковка
 для деплоя на VPS/Proxmox и единая веб-панель управления вместо ковыряния
 в `.env` и БД руками.
@@ -689,7 +689,7 @@ python -m tg_repost.tools.backup --keep 14
 ## Тесты и качество кода
 
 ```bash
-pytest                                    # 1252 теста
+pytest                                    # 1253 теста
 ruff check tg_repost guardian             # линтер
 mypy tg_repost guardian                   # статическая типизация — 0 ошибок
 bandit -r tg_repost guardian -c pyproject.toml   # security-сканер, задокументированный baseline
@@ -742,7 +742,7 @@ guardian/                # AI-модератор группы (отдельны�
 engage/                  # бот вовлечения аудитории (делит БД с tg_repost)
   handlers/                # quiz, referral, contest, suggest, start (deep-links)
 
-tests/                   # 1252 теста — pytest + pytest-asyncio
+tests/                   # 1253 теста — pytest + pytest-asyncio
 .github/workflows/       # CI: ruff, mypy, pytest, bandit, pip-audit
 ```
 
@@ -794,7 +794,7 @@ tests/                   # 1252 теста — pytest + pytest-asyncio
 ## Поддержать проект
 
 Проект пишется и поддерживается в свободное время, без гранта и без компании
-за спиной — три бота, 1252 теста и 50 задокументированных фич, собранные по
+за спиной — три бота, 1253 теста и 50 задокументированных фич, собранные по
 вечерам и выходным. Если он оказался полезен — можно закинуть на кофе, это
 помогает продолжать доделывать функционал:
 

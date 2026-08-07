@@ -132,6 +132,27 @@ async def test_cooldown_prevents_spam(monkeypatch):
     second.reply.assert_not_awaited()
 
 
+async def test_replies_right_after_machine_boot(monkeypatch):
+    """Первый ответ не должен зависеть от аптайма машины.
+
+    `time.monotonic()` считается от старта системы, поэтому сразу после
+    загрузки он сам по себе меньше кулдауна. Пока «ещё не отвечали»
+    кодировалось нулём, проверка `monotonic() - 0 < cooldown` была истиной и
+    бот молчал первые 10 минут после каждого рестарта. На машине с большим
+    аптаймом этого не видно — баг поймал CI на свежем раннере.
+    """
+    monkeypatch.setenv("AUTOREPLY_ENABLED", "true")
+    monkeypatch.setenv("AUTOREPLY_RULES", RULES_JSON)
+    monkeypatch.setenv("AUTOREPLY_COOLDOWN_SECONDS", "600")
+    invalidate_settings_cache()
+    # Машина поднялась 30 секунд назад — меньше кулдауна в 600 секунд.
+    monkeypatch.setattr(autoreply.time, "monotonic", lambda: 30.0)
+
+    message = _msg("где правила?")
+    await autoreply.on_message(message, AsyncMock())
+    message.reply.assert_awaited_once()
+
+
 async def test_ignores_other_bots(monkeypatch):
     """Иначе два бота устроят бесконечный обмен репликами."""
     monkeypatch.setenv("AUTOREPLY_ENABLED", "true")

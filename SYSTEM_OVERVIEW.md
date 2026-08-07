@@ -246,7 +246,7 @@ ModerationLog, BotConfig, DailyStats.
   важнее церемоний, но с тестами и миграциями.
 - Type hints везде, async для Telethon/aiogram/HTTP, pydantic BaseSettings,
   структурное логирование, промпты в файлах (не хардкод).
-- Перед сдачей: `pytest` + `ruff` + `mypy` зелёные. Сейчас **1252 теста**.
+- Перед сдачей: `pytest` + `ruff` + `mypy` зелёные. Сейчас **1253 теста**.
 
 ---
 
@@ -339,7 +339,7 @@ ModerationLog, BotConfig, DailyStats.
 |---|---|
 | Строк Python (без тестов) | ~24 600 |
 | Строк тестов | ~15 700 |
-| Тестов | 1252 (+1 skipped) |
+| Тестов | 1253 (+1 skipped на Windows) |
 | Миграций БД (tg_repost / guardian) | 27 / 2 |
 | Фич в бэклоге F01–F50 | 50: реализовано 46, отложено 4 (F27/F37/F39/F49) |
 | Telegram-ботов | 3 (репост + Guardian + Engage) |

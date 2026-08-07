@@ -93,8 +93,14 @@ def find_match(text: str, rules: list[Rule]) -> Rule | None:
 
 def _cooldown_passed(chat_id: int, trigger: str, cooldown_seconds: int) -> bool:
     key = (chat_id, trigger)
-    last = _last_reply.get(key, 0.0)
-    if time.monotonic() - last < cooldown_seconds:
+    # Отсутствие ключа — это «ещё ни разу не отвечали», и его нельзя
+    # подменять нулём: time.monotonic() отсчитывается от старта машины, и
+    # сразу после загрузки он сам по себе меньше кулдауна. С нулём по
+    # умолчанию `monotonic() - 0 < cooldown` было бы истиной, и бот молчал
+    # бы первые cooldown_seconds (по умолчанию 10 минут) после каждого
+    # рестарта — по всем правилам сразу.
+    last = _last_reply.get(key)
+    if last is not None and time.monotonic() - last < cooldown_seconds:
         return False
     _last_reply[key] = time.monotonic()
     return True
