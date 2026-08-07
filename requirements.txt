@@ -34,7 +34,8 @@ uvicorn[standard]==0.49.0
 itsdangerous==2.2.0           # подпись cookie-сессий (через Starlette SessionMiddleware)
 jinja2==3.1.6                 # серверный рендеринг шаблонов
 python-multipart==0.0.32      # form/file data (форма setup-визарда)
-cryptography==49.0.0          # Fernet — шифрование секретов at rest
+cryptography==50.0.0          # Fernet — шифрование секретов at rest
+                              # 49.0.0 имела PYSEC-2026-3552 (нашёл pip-audit в CI)
 passlib[argon2]==1.7.4        # хэширование пароля админа
 argon2-cffi==25.1.0
 sse-starlette==3.4.5          # живые логи (Server-Sent Events)
