@@ -32,6 +32,7 @@ from telegram.ext import (
 )
 
 from tg_repost import (
+    clusters_repo,
     discovered_chats_repo,
     invites_repo,
     languages,
@@ -181,12 +182,18 @@ def _format_preview(
     else:
         targets_line = ""
 
+    # F51 — сколько независимых источников подтвердили новость. Владельцу это
+    # важнее, чем факт «был дубль»: пост, собранный по трём источникам, и
+    # доверия заслуживает больше, и в фактчек ушёл богаче.
+    cluster_size = clusters_repo.size_of(post.cluster_id)
+    story_line = f"\n🧩 Сюжет: {cluster_size} источника(ов)" if cluster_size > 1 else ""
+
     # Лимит Telegram считается по ВСЕМУ сообщению, а не по одному телу поста.
     # Раньше тело резалось по `limit`, а шапка, ссылка-источник и список
     # целевых групп добавлялись сверху — и подпись стабильно вылезала за 1024
     # («Message caption is too long», пост навсегда застревал в `rewritten`).
     header = f"📝 Пост #{post.id} на модерацию:{kind_line}\n\n"
-    tail = f"{src}{targets_line}"
+    tail = f"{src}{story_line}{targets_line}"
     # Обвязка сама может съесть весь лимит (целевых групп бывает много) —
     # тогда режем её, а не превью поста.
     tail = _clip(tail, limit - _tg_len(header) - _MIN_BODY_LEN)

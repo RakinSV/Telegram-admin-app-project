@@ -23,7 +23,7 @@ Three independent bots, one web admin panel, all self-hosted.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/RakinSV/Telegram-admin-app-project/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/RakinSV/Telegram-admin-app-project?style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/stargazers)
-[![Tests](https://img.shields.io/badge/tests-1253%20passing-brightgreen?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-1266%20passing-brightgreen?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-red?style=flat-square)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/type--checked-mypy-blue?style=flat-square)](https://mypy-lang.org/)
@@ -51,7 +51,7 @@ spam, bots, and raids, so the audience the first bot grows doesn't drown.
 themselves, a referral programme with real anti-fraud, and verifiable
 contest draws.
 
-All three are production-ready: Alembic migrations from day one, 1253 tests,
+All three are production-ready: Alembic migrations from day one, 1266 tests,
 CI running lint/type-check/security-scan on every push, Docker packaging for
 VPS/Proxmox deployment, and a single web admin panel instead of poking at
 `.env` files and a database by hand.
@@ -215,9 +215,16 @@ the newsroom never buzzes your phone at 3am.
   public/accessible channel, not just ones where the bot is an admin.
 - **Keyword filtering** — global or per-channel stop-/required-words,
   applied before a post ever enters the queue.
-- **Two-layer deduplication** — fast exact-match hashing plus optional
-  semantic dedup via embeddings (catches paraphrased copies from other
-  channels).
+- **Two-layer deduplication** — fast exact-match hashing plus semantic dedup
+  via embeddings, which is what catches "the same event, different wording"
+  from another outlet. Both Telegram and RSS go through one shared ingest
+  path, so the rules can't drift apart.
+- **Story clustering — a repeat becomes evidence, not noise.** When the same
+  news arrives from an *independent* source, it isn't discarded: it attaches
+  to the first post as an extra source and feeds the editor's fact-check.
+  One post still gets published; the rest live under it as confirmation.
+  Literal copy-paste is excluded on purpose — counting it as a "second
+  source" would lie to the editor about how many confirmations exist.
 - **Rewrite style profiles** — news / opinion / instruction / humor, each
   with its own prompt template, per-source or auto-selected by the LLM.
 - **Source enrichment** — Brave Search finds 2-3 relevant links (RU + EN) on
@@ -694,7 +701,7 @@ python -m tg_repost.tools.backup --keep 14
 ## Tests and code quality
 
 ```bash
-pytest                                            # 1253 tests
+pytest                                            # 1266 tests
 ruff check tg_repost guardian                     # linter
 mypy tg_repost guardian                           # static typing — 0 errors
 bandit -r tg_repost guardian -c pyproject.toml     # security scanner, documented baseline
@@ -735,7 +742,7 @@ tg_repost/              # repost bot
   covers/                     # Unsplash / ComfyUI / OpenAI-compatible covers
   ads/                         # native advertising
   scheduler/                    # APScheduler jobs: posting, stats, digest, growth
-  db/                            # ORM + Alembic migrations (27)
+  db/                            # ORM + Alembic migrations (28)
   tools/                          # gen_session, check_telethon, backup
 
 guardian/                # AI group moderator (separate bot, own database)
@@ -747,7 +754,7 @@ guardian/                # AI group moderator (separate bot, own database)
 engage/                  # audience engagement bot (shares tg_repost's database)
   handlers/                # quiz, referral, contest, suggest, start (deep links)
 
-tests/                   # 1253 tests — pytest + pytest-asyncio
+tests/                   # 1266 tests — pytest + pytest-asyncio
 .github/workflows/       # CI: ruff, mypy, pytest, bandit, pip-audit
 ```
 
@@ -801,7 +808,7 @@ on purpose, not unfinished — see the bottom of this section.
 ## Support the project
 
 This project is written and maintained in spare time, with no grant and no
-company behind it — three bots, 1253 tests and 50 documented features, built
+company behind it — three bots, 1266 tests and 50 documented features, built
 nights and weekends. If it's been useful to you, a coffee helps keep the
 feature work going:
 

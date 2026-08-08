@@ -114,6 +114,32 @@ def sources_for(
     ]
 
 
+# Сколько чужих материалов и по сколько символов отдаём в рерайт. Ограничение
+# не косметическое: сюжет из десяти лент раздул бы промпт и счёт за токены, а
+# пользы после третьего-четвёртого пересказа того же события уже почти нет.
+MAX_SOURCES_IN_PROMPT = 4
+MAX_CHARS_PER_SOURCE = 1500
+
+
+def build_sources_block(cluster_id: int | None, *, exclude_post_id: int | None = None) -> str:
+    """Материалы сюжета одним текстовым блоком для промпта. "" — сюжета нет.
+
+    Уходит в тот же параметр, что и текст статьи по ссылке, поэтому его видит
+    и журналист, и редактор-фактчекер.
+    """
+    sources = sources_for(cluster_id, exclude_post_id=exclude_post_id)
+    if not sources:
+        return ""
+
+    parts = ["=== Другие источники об этом же событии ==="]
+    for i, src in enumerate(sources[:MAX_SOURCES_IN_PROMPT], 1):
+        head = src.source_title or "источник"
+        if src.link:
+            head = f"{head} — {src.link}"
+        parts.append(f"[{i}] {head}\n{src.text[:MAX_CHARS_PER_SOURCE]}")
+    return "\n\n".join(parts)
+
+
 def size_of(cluster_id: int | None) -> int:
     """Сколько источников в сюжете. 0 — сюжета нет (новость пришла одна)."""
     if cluster_id is None:

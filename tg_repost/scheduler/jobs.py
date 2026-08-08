@@ -11,11 +11,12 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from telegram.ext import Application
 
-from tg_repost import languages
+from tg_repost import clusters_repo, languages
 from tg_repost.ads.injector import inject_native_ad
 from tg_repost.config import get_settings
 from tg_repost.covers.dispatcher import generate_cover
@@ -99,11 +100,17 @@ async def rewrite_new_posts(
     (F50) — без него рерайт работает ровно как раньше, поэтому параметр
     необязательный (его нет у существующих вызовов в тестах).
     """
+    # F51: даём сюжету собраться. Одна и та же новость приходит из разных
+    # источников не одновременно, и если хватать первый же пост сразу, то
+    # подтверждения подтянутся уже после рерайта — фактчек их не увидит.
+    grace_minutes = max(0, get_settings().cluster_grace_minutes)
+    ripe_before = datetime.now(timezone.utc) - timedelta(minutes=grace_minutes)
+
     with session_scope() as session:
         post_ids = [
             row[0]
             for row in session.query(Post.id)
-            .filter(Post.status == PostStatus.NEW)
+            .filter(Post.status == PostStatus.NEW, Post.created_at <= ripe_before)
             .order_by(Post.created_at.asc())
             .limit(batch)
             .all()
@@ -123,6 +130,7 @@ async def rewrite_new_posts(
             source_media_path = post.media_path
             has_media = bool(source_media_path)
             post_format = (post.source.post_format if post.source else None) or "post"
+            cluster_id = post.cluster_id
 
         prompt_name = resolve_style_prompt(style)
 
@@ -145,6 +153,14 @@ async def rewrite_new_posts(
                     link_image_url = link_content.image_url
                     link_url = link_content.url
                     break
+
+        # F51 — материалы других источников по ЭТОМУ ЖЕ событию. Идут в тот же
+        # блок, что и текст статьи по ссылке, поэтому их видит и журналист, и
+        # редактор-фактчекер: несколько независимых источников — это ровно то,
+        # на чём фактчек и работает, в отличие от сверки поста с самим собой.
+        cluster_block = clusters_repo.build_sources_block(cluster_id, exclude_post_id=post_id)
+        if cluster_block:
+            link_text = f"{link_text}\n\n{cluster_block}" if link_text else cluster_block
 
         # Страж от выдумок: если по ссылке НЕ прочитана статья, а в оригинале
         # только заголовок — рерайтить нечего, и модель начинает изобретать

@@ -15,10 +15,12 @@ import pytest
 
 from tg_repost import clusters_repo, ingest, sources_repo
 from tg_repost.config import invalidate_settings_cache
-from tg_repost.db.models import Post, PostStatus, Source, StoryCluster
+from tg_repost.db.models import Post, PostKind, PostStatus, Source, StoryCluster
 from tg_repost.db.session import session_scope
+from tg_repost.rewriter.client import RewriteResult
 from tg_repost.rss import poller as rss_poller
 from tg_repost.rss.feed import parse_feed
+from tg_repost.scheduler import jobs
 from tg_repost.webui import settings_store
 
 
@@ -28,6 +30,7 @@ def _reset() -> None:
     больно: чужое стоп-слово молча отфильтровывает наши новости."""
     settings_store.save_setting("filter_stop_words", "", "str")
     settings_store.save_setting("filter_required_words", "", "str")
+    settings_store.save_setting("cluster_grace_minutes", 0, "int")
     invalidate_settings_cache()
     with session_scope() as s:
         # Порядок важен: Post ссылается и на Source, и на StoryCluster.
@@ -188,3 +191,81 @@ def test_sources_for_returns_other_members_only():
 def test_size_of_without_cluster_is_zero():
     """Новость пришла из одного места — сюжета нет, и это норма, не ошибка."""
     assert clusters_repo.size_of(None) == 0
+
+
+# --- блок источников для промпта ---
+
+
+def test_sources_block_is_empty_without_cluster():
+    """Пустая строка, а не заголовок без содержимого: иначе редактор увидел бы
+    «Другие источники» и ни одного источника под ним."""
+    assert clusters_repo.build_sources_block(None) == ""
+
+
+def test_sources_block_lists_other_sources_with_links():
+    first = _ingest("Банк поднял ставку", [1.0, 0.5], "https://a/6")
+    second = _ingest("Ставка банка повышена", [1.0, 0.5], "https://b/6")
+
+    block = clusters_repo.build_sources_block(
+        second.cluster_id, exclude_post_id=first.post_id
+    )
+
+    assert "Другие источники" in block
+    assert "https://b/6" in block
+    assert "Ставка банка повышена" in block
+
+
+def test_sources_block_is_capped():
+    """Сюжет из десяти лент раздул бы промпт и счёт за токены, а пользы после
+    третьего пересказа того же события почти нет."""
+    ids = [_ingest(f"Событие, версия {i}", [1.0, 0.25], f"https://s{i}/7") for i in range(7)]
+    block = clusters_repo.build_sources_block(ids[-1].cluster_id)
+
+    # Каждый источник начинается с маркера «[N]» на новой строке.
+    assert block.count("\n[") == clusters_repo.MAX_SOURCES_IN_PROMPT
+    assert "[5]" not in block
+
+
+# --- пауза на сбор сюжета ---
+
+
+class _FakeRewriter:
+    async def rewrite(self, *args, **kwargs):
+        return RewriteResult(text="рерайт", prompt_tokens=1, completion_tokens=1)
+
+
+def _plain_post(text: str) -> int:
+    with session_scope() as session:
+        post = Post(kind=PostKind.SOURCE, original_text=text, status=PostStatus.NEW)
+        session.add(post)
+        session.flush()
+        return post.id
+
+
+def _status(post_id: int) -> PostStatus:
+    with session_scope() as session:
+        return session.get(Post, post_id).status
+
+
+@pytest.mark.asyncio
+async def test_grace_period_holds_a_fresh_post():
+    """Смысл паузы: не хватать пост раньше, чем подтянутся другие источники."""
+    settings_store.save_setting("cluster_grace_minutes", 10, "int")
+    invalidate_settings_cache()
+    post_id = _plain_post("Только что пришедшая новость")
+
+    await jobs.rewrite_new_posts(_FakeRewriter(), batch=5)
+
+    assert _status(post_id) == PostStatus.NEW, "свежий пост не должен уйти в рерайт"
+
+
+@pytest.mark.asyncio
+async def test_without_grace_post_is_taken_immediately():
+    """Ноль — это именно «без ожидания», а не «ждать вечно»."""
+    settings_store.save_setting("cluster_grace_minutes", 0, "int")
+    invalidate_settings_cache()
+    post_id = _plain_post("Новость, которую можно брать сразу")
+
+    await jobs.rewrite_new_posts(_FakeRewriter(), batch=5)
+
+    assert _status(post_id) != PostStatus.NEW

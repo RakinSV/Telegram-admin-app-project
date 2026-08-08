@@ -1411,12 +1411,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "If enabled, approved posts go out on a schedule instead of "
         "instantly. Time is UTC.",
     },
-    "settings.group.semantic_dedup.title": {"ru": "Семантический дубль-чек", "en": "Semantic dedup"},
+    "settings.group.semantic_dedup.title": {
+        "ru": "Дубли и сюжеты", "en": "Duplicates and stories",
+    },
     "settings.group.semantic_dedup.desc": {
-        "ru": "Ловит перефразированные повторы через эмбеддинги — тратит "
-        "токены на каждый пост, поэтому выключено по умолчанию.",
-        "en": "Catches paraphrased duplicates via embeddings — costs "
-        "tokens per post, off by default.",
+        "ru": "Ловит перефразированные повторы через эмбеддинги — хэш видит "
+        "только дословный копипаст. Повтор из другого источника не "
+        "выбрасывается, а цепляется к первому посту в «сюжет» и идёт в "
+        "фактчек как подтверждение. Пауза на сбор — задержка перед рерайтом, "
+        "чтобы источники успели подтянуться; 0 — без ожидания.",
+        "en": "Catches paraphrased duplicates via embeddings — a hash only "
+        "sees literal copy-paste. A repeat from another source is not "
+        "discarded but attached to the first post as a story, and feeds the "
+        "fact-check as confirmation. The grace period delays the rewrite so "
+        "sources can arrive; 0 means no waiting.",
     },
     "settings.group.stats.title": {"ru": "Статистика", "en": "Stats"},
     "settings.group.stats.desc": {
@@ -1680,6 +1688,9 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.posting_slots.label": {"ru": "Слоты (HH:MM)", "en": "Slots (HH:MM)"},
     "settings.field.posting_batch_per_slot.label": {"ru": "Постов за слот", "en": "Posts per slot"},
     "settings.field.semantic_dedup_enabled.label": {"ru": "Включён", "en": "Enabled"},
+    "settings.field.cluster_grace_minutes.label": {
+        "ru": "Пауза на сбор сюжета, мин", "en": "Story grace period, min",
+    },
     "settings.field.openai_embedding_model.label": {"ru": "Модель эмбеддингов", "en": "Embedding model"},
     "settings.field.semantic_similarity_threshold.label": {"ru": "Порог сходства", "en": "Similarity threshold"},
     "settings.field.dedup_window_days.label": {"ru": "Окно сравнения, дней", "en": "Comparison window, days"},
