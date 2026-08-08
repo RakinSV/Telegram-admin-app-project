@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 from guardian import settings_store as guardian_settings_store
 
 from tg_repost import (
+    clusters_repo,
     discovered_chats_repo,
     post_targets_repo,
     post_variants_repo,
@@ -108,11 +109,20 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
          if v.variant_index == active_idx and v.editorial_notes),
         None,
     )
+    # F51: другие источники этого же сюжета. Владельцу важно видеть не факт
+    # «был дубль», а сколько НЕЗАВИСИМЫХ источников подтвердили новость: на
+    # них же работал фактчек редакции. Пустой список — сюжета нет (новость
+    # пришла из одного места), блок в шаблоне тогда не рисуется.
+    cluster_sources = (
+        clusters_repo.sources_for(post.cluster_id, exclude_post_id=post_id)
+        if post is not None else []
+    )
     return {
         "post": post,
         "error": error,
         "rewrite_variants": rewrite_variants,
         "active_editorial_notes": active_editorial_notes,
+        "cluster_sources": cluster_sources,
         "cover_variants": post_variants_repo.list_cover_variants(post_id),
         "target_labels": target_labels,
         # F29: список целей публикации с их message_id — только полезно

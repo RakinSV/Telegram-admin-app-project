@@ -9,14 +9,26 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
+
 
 from tg_repost import quiz_repo
 from tg_repost.db.models import Quiz, QuizAnswer, UserActivity
 from tg_repost.db.session import session_scope
 from tg_repost.rewriter.quiz import parse_quiz_json
+
+
+def _utc_today():
+    """Сегодня по UTC — так же, как считает `quiz_repo`.
+
+    Не `date.today()`: та берёт ЛОКАЛЬНУЮ дату, и в часы, когда локальная дата
+    уже перевалила за полночь, а UTC ещё нет (для UTC+3 это вечер), «вчера» в
+    тесте совпадало с «сегодня» в коде — серия не росла, и тест падал. На CI
+    это не проявлялось никогда: там таймзона UTC.
+    """
+    return datetime.now(timezone.utc).date()
 
 CHAT = -100555
 
@@ -155,7 +167,7 @@ def _set_last_correct(user_id: int, day: date, streak: int) -> None:
 def test_streak_grows_on_consecutive_days():
     _make_quiz("p1")
     quiz_repo.record_answer(poll_id="p1", user_id=1, option_index=2)
-    _set_last_correct(1, date.today() - timedelta(days=1), streak=1)
+    _set_last_correct(1, _utc_today() - timedelta(days=1), streak=1)
 
     _make_quiz("p2")
     _, earned = quiz_repo.record_answer(poll_id="p2", user_id=1, option_index=2)  # type: ignore[misc]
@@ -168,7 +180,7 @@ def test_streak_grows_on_consecutive_days():
 def test_streak_resets_after_gap():
     _make_quiz("p1")
     quiz_repo.record_answer(poll_id="p1", user_id=1, option_index=2)
-    _set_last_correct(1, date.today() - timedelta(days=5), streak=4)
+    _set_last_correct(1, _utc_today() - timedelta(days=5), streak=4)
 
     _make_quiz("p2")
     quiz_repo.record_answer(poll_id="p2", user_id=1, option_index=2)
@@ -180,7 +192,7 @@ def test_streak_resets_after_gap():
 def test_wrong_answer_breaks_streak():
     _make_quiz("p1")
     quiz_repo.record_answer(poll_id="p1", user_id=1, option_index=2)
-    _set_last_correct(1, date.today() - timedelta(days=1), streak=3)
+    _set_last_correct(1, _utc_today() - timedelta(days=1), streak=3)
 
     _make_quiz("p2")
     quiz_repo.record_answer(poll_id="p2", user_id=1, option_index=0)
@@ -193,7 +205,7 @@ def test_streak_bonus_is_capped():
     """Потолок бонуса не даёт «старожилам» оторваться навсегда."""
     _make_quiz("p1")
     quiz_repo.record_answer(poll_id="p1", user_id=1, option_index=2)
-    _set_last_correct(1, date.today() - timedelta(days=1), streak=100)
+    _set_last_correct(1, _utc_today() - timedelta(days=1), streak=100)
 
     _make_quiz("p2")
     _, earned = quiz_repo.record_answer(poll_id="p2", user_id=1, option_index=2)  # type: ignore[misc]

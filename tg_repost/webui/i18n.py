@@ -645,6 +645,15 @@ STRINGS: dict[str, dict[str, str]] = {
     "moderation_detail.editorial_notes": {
         "ru": "Замечания редактора", "en": "Editor's notes",
     },
+    "moderation_detail.story_sources": {
+        "ru": "Источников по сюжету", "en": "Sources for this story",
+    },
+    "moderation_detail.story_hint": {
+        "ru": "Эту новость подтвердили несколько независимых источников — "
+        "они же были у редактора-фактчекера при проверке текста.",
+        "en": "Several independent sources reported this story — the same "
+        "ones the fact-checking editor had when verifying the text.",
+    },
     "moderation_detail.active": {"ru": "Активен", "en": "Active"},
     "moderation_detail.select": {"ru": "Выбрать", "en": "Select"},
     "moderation_detail.confirm_reject": {

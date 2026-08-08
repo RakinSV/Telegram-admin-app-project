@@ -89,6 +89,30 @@
 </div>
 {% endif %}
 
+{# F51: другие источники этого же сюжета. Показываем не «был дубль», а
+   сколько НЕЗАВИСИМЫХ источников подтвердили новость — на них же работал
+   фактчек редакции. Пусто — сюжета нет, блок не рисуем. #}
+{% if cluster_sources %}
+<div class="card">
+  <h2 style="margin-top:0;">{{ t('moderation_detail.story_sources') }} ({{ cluster_sources|length + 1 }})</h2>
+  <p class="muted" style="margin-top:0; font-size:13px;">
+    {{ t('moderation_detail.story_hint') }}
+  </p>
+  <ul style="margin:0; padding-left:18px;">
+    {% for src in cluster_sources %}
+    <li style="margin-bottom:6px;">
+      {% if src.link %}
+      <a href="{{ src.link }}" target="_blank" rel="noopener noreferrer">{{ src.source_title or src.link }}</a>
+      {% else %}
+      {{ src.source_title or ('#' ~ src.post_id) }}
+      {% endif %}
+      <span class="muted" style="font-size:12px;"> — {{ src.text[:160] }}{% if src.text|length > 160 %}…{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 {% if post.media_path %}
 <div class="card">
   <img src="/media/{{ post.media_path.split('/')[-1] }}" alt="" style="max-width:100%; border-radius:6px;">
