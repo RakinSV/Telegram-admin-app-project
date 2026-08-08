@@ -318,6 +318,17 @@ class Post(Base):
     # семантического дубль-чека. NULL, если эмбеддинги выключены.
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
+    # F51: сюжет, к которому относится пост. Одна новость приходит из многих
+    # источников; вместо того чтобы выбрасывать повторы, мы собираем их в
+    # кластер. NULL — пост пока сам по себе (сюжет заводится только со
+    # второго участника, плодить кластеры из одного поста бессмысленно).
+    cluster_id: Mapped[int | None] = mapped_column(
+        ForeignKey("story_clusters.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    cluster: Mapped["StoryCluster | None"] = relationship(
+        back_populates="posts", foreign_keys=[cluster_id]
+    )
+
     # Путь к скачанному медиа (если есть).
     media_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
@@ -401,6 +412,51 @@ class Post(Base):
         self.status = target
         if reason is not None:
             self.status_reason = reason
+
+
+class StoryCluster(Base):
+    """Сюжет — одна новость, пришедшая из нескольких источников (F51).
+
+    Раньше повтор просто помечался `duplicate` и пропадал. Но повтор из
+    НЕЗАВИСИМОГО источника — это не мусор, а подтверждение: именно на нём
+    работает фактчек редакции (F40) и сравнение версий (F24). Поэтому
+    повторы не выбрасываются, а собираются вокруг первого пришедшего поста.
+
+    Кластер заводится только со ВТОРОГО участника: пока новость пришла из
+    одного места, сюжета ещё нет, и строка в таблице была бы шумом.
+    """
+
+    __tablename__ = "story_clusters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # Пост, который пришёл первым и идёт в публикацию. Остальные участники
+    # живут при нём как источники.
+    #
+    # Намеренно БЕЗ ForeignKey, хотя ссылается на posts.id: обратная связь
+    # posts.cluster_id -> story_clusters.id уже есть, и пара FK замкнула бы
+    # цикл, на котором SQLAlchemy роняет create_all (разорвать его можно
+    # только через use_alter, а SQLite не умеет ALTER ... ADD CONSTRAINT).
+    # Целостность тут и так обеспечена: значение проставляется в одном месте
+    # (`clusters_repo.attach_to_cluster`) из id только что сохранённого поста.
+    primary_post_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    # Денормализованный счётчик участников (включая главный). Держим полем, а
+    # не COUNT(*) на каждый показ: карточка модерации дёргает его на каждый
+    # пост, а растёт он строго на единицу в одном месте.
+    member_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    # Момент прихода последнего участника — по нему видно, «остыл» ли сюжет.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="cluster", foreign_keys="Post.cluster_id"
+    )
 
 
 class PostStat(Base):

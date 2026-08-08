@@ -6,11 +6,10 @@
 
 from __future__ import annotations
 
+from tg_repost import ingest
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStatus, Source
 from tg_repost.db.session import session_scope
-from tg_repost.dedup.hash_dedup import content_hash
-from tg_repost.filtering import check_keywords
 from tg_repost.logging_conf import get_logger
 from tg_repost.rss.feed import FeedItem, fetch_feed
 
@@ -43,28 +42,31 @@ def _has_any_post(source_id: int) -> bool:
         return session.query(Post.id).filter(Post.source_id == source_id).first() is not None
 
 
-def _create_post(source_id: int, item: FeedItem) -> bool:
-    """Завести пост по записи ленты. False — если фильтры её отсеяли."""
-    settings = get_settings()
+async def _create_post(source_id: int, item: FeedItem) -> bool:
+    """Завести пост по записи ленты. False — отсеяна фильтром или это повтор.
+
+    Приём общий с Telegram-веткой (`tg_repost.ingest`). Раньше здесь жила
+    своя урезанная копия правил: `content_hash` считался, но НИ РАЗУ не
+    сверялся, а семантического дубль-чека не было вовсе — поэтому одна и та
+    же новость из пяти лент давала пять постов. `_known_guids` эту дыру не
+    закрывает: он сравнивает guid ВНУТРИ одной ленты, то есть отвечает на
+    вопрос «я уже забирал эту запись?», а не «эта новость уже была?».
+    """
     text = item.as_post_text()
-    result = check_keywords(
-        text, settings.filter_stop_words, settings.filter_required_words,
-    )
+    # Эмбеддинг — сетевой вызов, поэтому до открытия транзакции.
+    embedding = await ingest.compute_embedding(text)
     with session_scope() as session:
-        post = Post(
+        result = ingest.ingest_post(
+            session,
             source_id=source_id,
+            text=text,
             # Ссылка записи служит и ключом дедупликации (см. _known_guids),
             # поэтому кладём именно guid, а не item.link: они совпадают не
             # всегда, а уникален по контракту ленты именно guid.
             source_link=item.guid,
-            original_text=text,
-            content_hash=content_hash(text),
-            status=PostStatus.NEW,
+            embedding=embedding,
         )
-        if not result.passed:
-            post.set_status(PostStatus.FILTERED_OUT, reason=result.reason)
-        session.add(post)
-    return result.passed
+    return result.queued
 
 
 async def poll_one_source(
@@ -99,7 +101,13 @@ async def poll_one_source(
             title or feed_url, len(fresh), len(items),
         )
 
-    created = sum(1 for item in fresh if _create_post(source_id, item))
+    # Последовательно, а не gather: приём смотрит на уже сохранённые посты
+    # (хэш, сходство), и параллельная обработка двух одинаковых записей
+    # прошла бы мимо друг друга — оба увидели бы пустую историю.
+    created = 0
+    for item in fresh:
+        if await _create_post(source_id, item):
+            created += 1
     if fresh:
         logger.info(
             "RSS «%s»: %d новых записей, в очередь попало %d",

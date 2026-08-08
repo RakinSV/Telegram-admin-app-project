@@ -26,17 +26,14 @@ from sqlalchemy import or_
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
+from tg_repost import ingest
 from tg_repost import proxy as proxy_module
 from tg_repost import telethon_sessions_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
 from tg_repost.config import Settings, get_settings
-from tg_repost.db.models import Post, PostStatus, Source
+from tg_repost.db.models import Post, Source
 from tg_repost.db.session import session_scope
-from tg_repost.dedup.hash_dedup import content_hash
-from tg_repost.dedup.semantic import find_similar_post, pack_embedding
-from tg_repost.filtering import check_keywords
 from tg_repost.logging_conf import get_logger
-from tg_repost.rewriter.client import get_rewriter
 from tg_repost.rss.poller import SOURCE_KIND_RSS
 from tg_repost.telegram.message_text import expand_hidden_links
 from tg_repost.text_sanitize import strip_bidi_control_chars
@@ -222,25 +219,17 @@ async def _process_message(client: TelegramClient, chat: Any, message: Any) -> N
         logger.debug("Пропуск пустого/медиа-без-текста сообщения %s", message.id)
         return
 
-    digest = content_hash(text)
     source_link = f"https://t.me/{username}/{message.id}" if username else None
 
-    # F03 — фильтр ключевых слов (чистая функция, до обращения к БД и эмбеддингам).
-    filter_result = check_keywords(
-        text, settings.filter_stop_words, settings.filter_required_words
-    )
-
-    # F13 — эмбеддинг считаем только если он понадобится (фильтр прошёл и включён
-    # семантический дубль-чек), чтобы не тратить токены зря.
-    embedding: list[float] | None = None
-    if settings.semantic_dedup_enabled and filter_result.passed:
-        try:
-            embedding = await get_rewriter().embed(text)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Не удалось получить эмбеддинг поста %s: %s", message.id, exc)
+    # Эмбеддинг — сетевой вызов, поэтому считаем ДО открытия транзакции и не
+    # держим соединение с БД на время похода к провайдеру. Внутри учтено,
+    # что для поста, который отсеет фильтр слов, платить не нужно.
+    embedding = await ingest.compute_embedding(text)
 
     with session_scope() as session:
         # Анти-дубль по (source_id, message_id) — уже видели это сообщение.
+        # Единственная проверка, которая остаётся здесь: у RSS ключ другой
+        # (guid ленты), поэтому в общий приём она не выносится.
         exists = (
             session.query(Post.id)
             .filter(Post.source_id == source_id, Post.source_message_id == message.id)
@@ -249,66 +238,20 @@ async def _process_message(client: TelegramClient, chat: Any, message: Any) -> N
         if exists:
             return
 
-        post = Post(
+        # Фильтр, дедуп и сборка сюжета — общие с RSS (см. tg_repost/ingest.py).
+        result = ingest.ingest_post(
+            session,
             source_id=source_id,
-            source_message_id=message.id,
+            text=text,
             source_link=source_link,
-            original_text=text,
-            content_hash=digest,
-            status=PostStatus.NEW,
+            source_message_id=message.id,
+            embedding=embedding,
         )
-        if embedding is not None:
-            post.embedding = pack_embedding(embedding)
-
-        if not filter_result.passed:
-            post.set_status(PostStatus.FILTERED_OUT, reason=filter_result.reason)
-            session.add(post)
-            logger.info("Пост %s отфильтрован: %s", message.id, filter_result.reason)
+        if not result.queued:
+            logger.info("Пост %s не в очереди: %s", message.id, result.reason)
             return
 
-        # F04 — хэш-дедупликация (точный дубль из другого источника).
-        dup = (
-            session.query(Post.id)
-            .filter(
-                Post.content_hash == digest,
-                Post.status != PostStatus.DUPLICATE,
-                Post.status != PostStatus.FILTERED_OUT,
-            )
-            .first()
-        )
-        if dup:
-            post.set_status(PostStatus.DUPLICATE, reason="точный дубль по хэшу")
-            session.add(post)
-            logger.info("Пост %s — дубль (хэш), пропущен", message.id)
-            return
-
-        # F13 — семантический дубль-чек (перефразированный повтор).
-        if embedding is not None:
-            similar = find_similar_post(
-                session,
-                embedding,
-                threshold=settings.semantic_similarity_threshold,
-                window_days=settings.dedup_window_days,
-            )
-            if similar is not None:
-                sim_id, sim_score = similar
-                post.set_status(
-                    PostStatus.DUPLICATE,
-                    reason=f"семантический дубль #{sim_id} (sim={sim_score:.3f})",
-                )
-                session.add(post)
-                logger.info(
-                    "Пост %s — семантический дубль #%s (sim=%.3f)",
-                    message.id, sim_id, sim_score,
-                )
-                return
-
-        # Пост-кипер. Сохраняем сразу, БЕЗ медиа: скачивание медиа и ожидание
-        # почасового лимита (может спать долго) выносим за пределы транзакции,
-        # чтобы не держать соединение с БД открытым во время сетевого I/O.
-        session.add(post)
-        session.flush()
-        post_id = post.id
+        post_id = result.post_id
         logger.info("Новый пост в очереди: source_id=%s msg=%s", source_id, message.id)
 
     # Скачивание медиа вне сессии (F17: под почасовым лимитом «тяжёлых» действий,
