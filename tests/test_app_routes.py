@@ -641,6 +641,70 @@ def test_source_update_checkboxes_map_to_target_chat_ids():
     assert set(updated.target_chat_ids.split(",")) == {"-1003333", "-1004444"}
 
 
+def test_source_update_saves_word_filters():
+    """F54 — стоп-слова и обязательные слова сохраняются из формы источника."""
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@f54_route_src")
+
+    r = client.post(
+        f"/sources/{src.id}",
+        data={"style_profile": "", "enrich_mode": "default",
+              "filter_stop_words": "реклама, промо",
+              "required_override": "1", "filter_required_words": "крипта"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    updated = sources_repo.get_source(src.id)
+    assert updated.filter_stop_words == "реклама, промо"
+    assert updated.filter_required_words == "крипта"
+
+
+def test_source_update_required_override_unchecked_falls_back_to_global():
+    """Галочка снята — сохраняем NULL, то есть «следовать глобальному списку».
+
+    Текст в поле при этом игнорируется намеренно: галочка, а не поле,
+    отвечает за то, переопределяет источник глобальные слова или нет.
+    """
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@f54_route_src2")
+
+    r = client.post(
+        f"/sources/{src.id}",
+        data={"style_profile": "", "enrich_mode": "default",
+              "filter_required_words": "останется без эффекта"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert sources_repo.get_source(src.id).filter_required_words is None
+
+
+def test_source_update_required_override_with_empty_field_means_no_requirement():
+    """Галочка стоит, поле пустое — «требования нет совсем», а НЕ «как глобально».
+
+    Ровно то состояние, которое обычное текстовое поле выразить не может:
+    пустая строка сохраняется как пустая строка, не как NULL.
+    """
+    from tg_repost import sources_repo
+    client = _client()
+    _bootstrap(client)
+    src, _ = sources_repo.add_source("@f54_route_src3")
+
+    r = client.post(
+        f"/sources/{src.id}",
+        data={"style_profile": "", "enrich_mode": "default",
+              "required_override": "1", "filter_required_words": ""},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    updated = sources_repo.get_source(src.id)
+    assert updated.filter_required_words == ""
+    assert updated.filter_required_words is not None
+
+
 def test_source_update_no_checkboxes_clears_targets_to_all():
     """Ни одна цель не отмечена — target_chat_ids очищается (публикация во
     все активные), а не остаётся старое значение."""

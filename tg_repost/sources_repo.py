@@ -140,6 +140,28 @@ def set_source_enrich(source_id: int, mode: str) -> bool:
         return True
 
 
+def set_source_filters(
+    source_id: int,
+    *,
+    stop_words: str | None,
+    required_words: str | None,
+) -> bool:
+    """F54 — фильтр слов на источник. `None` = следовать глобальному списку.
+
+    Пустая строка и `None` — РАЗНЫЕ значения для обязательных слов: пустой
+    список снимает требование совсем, `None` возвращает к глобальному. Для
+    стоп-слов разницы нет (они складываются с глобальными), но хранить их
+    единообразно проще, чем помнить про исключение.
+    """
+    with session_scope() as session:
+        source = session.get(Source, source_id)
+        if source is None:
+            return False
+        source.filter_stop_words = stop_words
+        source.filter_required_words = required_words
+        return True
+
+
 def set_source_targets(source_id: int, chat_ids_csv: str | None) -> bool:
     """F12 — переопределение целевых групп. Пустая строка/None — очистить
     (публикация во все активные). Бросает ValueError, если CSV содержит

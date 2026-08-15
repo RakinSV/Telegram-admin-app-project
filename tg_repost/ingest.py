@@ -24,10 +24,10 @@ from sqlalchemy.orm import Session
 
 from tg_repost import clusters_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostStatus
+from tg_repost.db.models import Post, PostStatus, Source
 from tg_repost.dedup.hash_dedup import content_hash
 from tg_repost.dedup.semantic import find_similar_post, pack_embedding
-from tg_repost.filtering import check_keywords
+from tg_repost.filtering import check_keywords, resolve_filters
 from tg_repost.logging_conf import get_logger
 
 logger = get_logger(__name__)
@@ -48,7 +48,26 @@ class IngestResult:
         return self.status == PostStatus.NEW
 
 
-async def compute_embedding(text: str) -> list[float] | None:
+def filters_for_source(source_id: int | None) -> tuple[list[str], list[str]]:
+    """Итоговые списки слов для источника (F54): глобальные + его собственные.
+
+    Открывает собственную короткую сессию — вызывается из `compute_embedding`,
+    то есть ДО основной транзакции и вне её.
+    """
+    settings = get_settings()
+    if source_id is None:
+        return settings.filter_stop_words, settings.filter_required_words
+
+    from tg_repost.db.session import session_scope
+
+    with session_scope() as session:
+        source = session.get(Source, source_id)
+        return resolve_filters(
+            source, settings.filter_stop_words, settings.filter_required_words
+        )
+
+
+async def compute_embedding(text: str, source_id: int | None = None) -> list[float] | None:
     """Эмбеддинг оригинала для семантического дубль-чека, если он включён.
 
     Отдельная функция, потому что вызывать её надо ДО открытия транзакции:
@@ -65,9 +84,13 @@ async def compute_embedding(text: str) -> list[float] | None:
     # это сознательно: он чистый и дешёвый, а платный вызов эмбеддингов для
     # поста, который всё равно отсеется по стоп-слову, — выброшенные деньги.
     # Раньше такая экономия была только в Telegram-ветке; теперь она общая.
-    if not check_keywords(
-        text, settings.filter_stop_words, settings.filter_required_words
-    ).passed:
+    #
+    # Списки берутся С УЧЁТОМ источника (F54). Если бы здесь остались только
+    # глобальные, экономия перестала бы работать ровно для тех лент, ради
+    # которых фича и делалась: шумной ленте задали свои стоп-слова, а деньги
+    # за эмбеддинги её постов продолжали бы уходить.
+    stop_words, required_words = filters_for_source(source_id)
+    if not check_keywords(text, stop_words, required_words).passed:
         return None
     # Импорт внутри: модуль рерайтера тянет за собой http-клиент, а `ingest`
     # импортируется и там, где рерайт не нужен (например, в тестах приёма).
@@ -112,10 +135,13 @@ def ingest_post(
     if embedding is not None:
         post.embedding = pack_embedding(embedding)
 
-    # F03 — фильтр ключевых слов.
-    filter_result = check_keywords(
-        text, settings.filter_stop_words, settings.filter_required_words
+    # F03 + F54 — фильтр ключевых слов: глобальные списки плюс собственные
+    # списки источника, если он их задал.
+    source = session.get(Source, source_id) if source_id is not None else None
+    stop_words, required_words = resolve_filters(
+        source, settings.filter_stop_words, settings.filter_required_words
     )
+    filter_result = check_keywords(text, stop_words, required_words)
     if not filter_result.passed:
         post.set_status(PostStatus.FILTERED_OUT, reason=filter_result.reason)
         session.add(post)

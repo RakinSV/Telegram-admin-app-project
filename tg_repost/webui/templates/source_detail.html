@@ -64,6 +64,28 @@
         <option value="off" {{ 'selected' if source.enrich_sources == False else '' }}>{{ t('source_detail.enrich_off') }}</option>
       </select>
     </div>
+    <div class="field-row">
+      <label for="filter_stop_words">{{ t('source_detail.stop_words_label') }}</label>
+      <div style="flex:1;">
+        <input type="text" id="filter_stop_words" name="filter_stop_words"
+               value="{{ source.filter_stop_words or '' }}" style="width:100%;">
+        <div class="hint">{{ t('source_detail.stop_words_hint') }}</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <label for="filter_required_words">{{ t('source_detail.required_words_label') }}</label>
+      <div style="flex:1;">
+        <label class="check-item" style="margin-bottom:6px;">
+          <input type="checkbox" name="required_override" value="1"
+                 {{ 'checked' if source.filter_required_words is not none else '' }}>
+          <span>{{ t('source_detail.required_override_label') }}</span>
+        </label>
+        <input type="text" id="filter_required_words" name="filter_required_words"
+               value="{{ source.filter_required_words if source.filter_required_words is not none else '' }}"
+               style="width:100%;">
+        <div class="hint">{{ t('source_detail.required_words_hint') }}</div>
+      </div>
+    </div>
     <div class="field-row" style="align-items: flex-start;">
       <label>{{ t('source_detail.targets_label') }}</label>
       <div style="flex:1;">

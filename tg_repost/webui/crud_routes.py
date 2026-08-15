@@ -362,6 +362,20 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
         sources_repo.set_source_post_format(source_id, post_format)
+
+        # F54 — фильтр слов на источник. Стоп-слова: пусто = NULL, потому что
+        # для них «пусто» и «следовать глобальным» дают один результат
+        # (они складываются). У обязательных слов это РАЗНЫЕ вещи — пустой
+        # список снимает требование совсем, — и текстовое поле три состояния
+        # выразить не может, поэтому рядом стоит галочка «переопределить».
+        stop_raw = str(form.get("filter_stop_words", "")).strip()
+        required_override = bool(form.get("required_override"))
+        required_raw = str(form.get("filter_required_words", "")).strip()
+        sources_repo.set_source_filters(
+            source_id,
+            stop_words=stop_raw or None,
+            required_words=required_raw if required_override else None,
+        )
         # Чекбоксы шлют список выбранных chat_id; пусто — публикация во все
         # активные цели (target_chat_ids=None). Собираем в тот же CSV-формат,
         # что и раньше — set_source_targets валидирует, что всё числовое.
@@ -380,7 +394,9 @@ def build_crud_router() -> APIRouter:
         audit.record_audit(
             "source_update", target=f"#{source_id}",
             detail=f"style={style or 'default'}, enrich={enrich_mode}, "
-                   f"targets={csv or 'все'}",
+                   f"targets={csv or 'все'}, "
+                   f"стоп={stop_raw or 'глобальные'}, "
+                   f"обяз={required_raw if required_override else 'глобальные'}",
         )
         return RedirectResponse(url=f"/sources/{source_id}", status_code=303)
 

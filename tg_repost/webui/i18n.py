@@ -449,6 +449,33 @@ STRINGS: dict[str, dict[str, str]] = {
     "source_detail.enrich_default": {"ru": "по глобальной настройке", "en": "use global setting"},
     "source_detail.enrich_on": {"ru": "включён", "en": "on"},
     "source_detail.enrich_off": {"ru": "выключен", "en": "off"},
+    # F54 — фильтр слов на уровне источника.
+    "source_detail.stop_words_label": {"ru": "Стоп-слова источника", "en": "Source stop-words"},
+    "source_detail.stop_words_hint": {
+        "ru": "Через запятую. ДОБАВЛЯЮТСЯ к глобальным, а не заменяют их — "
+              "источник не может молча отключить общую защиту. "
+              "Пусто — только глобальные.",
+        "en": "Comma-separated. ADDED to the global list, not replacing it — "
+              "a source cannot silently disable shared protection. "
+              "Empty means global only.",
+    },
+    "source_detail.required_words_label": {
+        "ru": "Обязательные слова источника", "en": "Source required words",
+    },
+    "source_detail.required_override_label": {
+        "ru": "Переопределить глобальный список",
+        "en": "Override the global list",
+    },
+    "source_detail.required_words_hint": {
+        "ru": "Через запятую. ЗАМЕЩАЮТ глобальные: срабатывает «хотя бы одно», "
+              "поэтому объединение списков не ужесточило бы фильтр, а ослабило. "
+              "Галочка снята — берутся глобальные. Галочка стоит, поле пустое — "
+              "требования нет совсем (берём из ленты всё подряд).",
+        "en": "Comma-separated. REPLACES the global list: the rule is "
+              "«at least one match», so merging lists would loosen the filter, "
+              "not tighten it. Unchecked means global. Checked with an empty "
+              "field means no topic requirement at all.",
+    },
     "source_detail.targets_label": {"ru": "Куда публиковать", "en": "Where to publish"},
     "source_detail.targets_hint": {
         "ru": "Отметь целевые группы для этого источника. Ничего не "

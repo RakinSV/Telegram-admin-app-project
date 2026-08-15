@@ -224,7 +224,7 @@ async def _process_message(client: TelegramClient, chat: Any, message: Any) -> N
     # Эмбеддинг — сетевой вызов, поэтому считаем ДО открытия транзакции и не
     # держим соединение с БД на время похода к провайдеру. Внутри учтено,
     # что для поста, который отсеет фильтр слов, платить не нужно.
-    embedding = await ingest.compute_embedding(text)
+    embedding = await ingest.compute_embedding(text, source_id=source_id)
 
     with session_scope() as session:
         # Анти-дубль по (source_id, message_id) — уже видели это сообщение.

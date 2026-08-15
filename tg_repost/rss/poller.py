@@ -54,7 +54,7 @@ async def _create_post(source_id: int, item: FeedItem) -> bool:
     """
     text = item.as_post_text()
     # Эмбеддинг — сетевой вызов, поэтому до открытия транзакции.
-    embedding = await ingest.compute_embedding(text)
+    embedding = await ingest.compute_embedding(text, source_id=source_id)
     with session_scope() as session:
         result = ingest.ingest_post(
             session,
