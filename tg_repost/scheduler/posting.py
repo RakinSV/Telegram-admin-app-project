@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from telegram.ext import Application
 
 from tg_repost.config import get_settings
@@ -44,11 +46,21 @@ async def publish_slot(application: Application) -> None:
     settings = get_settings()
     batch = max(1, settings.posting_batch_per_slot)
 
+    today = datetime.now(timezone.utc).date()
     with session_scope() as session:
         post_ids = [
             row[0]
             for row in session.query(Post.id)
-            .filter(Post.status == PostStatus.APPROVED)
+            .filter(
+                Post.status == PostStatus.APPROVED,
+                # F72: «не раньше даты». NULL — прежнее поведение: пост уходит
+                # в ближайший слот. Пропустить эту проверку значило бы
+                # опубликовать анонс до события, ради которого его писали.
+                (Post.scheduled_for.is_(None)) | (Post.scheduled_for <= today),
+                # F72: одобрено редактором, но ждёт владельца. Флаг, а не
+                # статус — см. миграцию 0039.
+                Post.needs_owner_approval.is_(False),
+            )
             .order_by(Post.created_at.asc())
             .limit(batch)
             .all()

@@ -356,6 +356,26 @@ class Post(Base):
         ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
+    # F72: «не раньше этой даты». NULL — как было всегда: пост уходит в
+    # ближайший слот расписания. Это НЕ точное время публикации: конкретный
+    # час по-прежнему выбирают слоты (F11) и умное расписание (F19), а здесь
+    # хранится только запрет выходить раньше срока — «анонс в понедельник,
+    # не раньше».
+    scheduled_for: Mapped[date_type | None] = mapped_column(
+        Date, nullable=True, index=True
+    )
+    # F72: кто одобрил. Нужно не для отчётности, а для второго уровня
+    # согласования: без имени невозможно отличить «одобрил редактор» от
+    # «одобрил владелец».
+    approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # F72: ждёт подтверждения владельца. Отдельный флаг, а не новый статус:
+    # статус-машина F05 работает годами, и вносить в неё состояние ради
+    # необязательной проверки — рисковать публикацией ради церемонии.
+    # Публикатор просто не берёт посты с этим флагом.
+    needs_owner_approval: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
+
     # Путь к скачанному медиа (если есть).
     media_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

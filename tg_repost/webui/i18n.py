@@ -1929,6 +1929,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Once a week the AI compiles top posts into a digest and "
         "publishes it like a regular post.",
     },
+    "settings.group.approval.title": {
+        "ru": "Согласование постов", "en": "Post approval",
+    },
+    "settings.group.approval.desc": {
+        "ru": "Пост, одобренный редактором, не публикуется, пока его не "
+        "подтвердит владелец. По умолчанию выключено: там, где владелец "
+        "работает один или полностью доверяет редактору, это только "
+        "замедляет.",
+        "en": "A post approved by an editor is not published until the owner "
+        "confirms it. Off by default: where the owner works alone or fully "
+        "trusts the editor, this only slows things down.",
+    },
     "settings.group.task_queue.title": {
         "ru": "Очередь задач", "en": "Task queue",
     },
@@ -2484,6 +2496,11 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.digest_minute.label": {"ru": "Минута", "en": "Minute"},
     "settings.field.digest_top_n.label": {"ru": "Постов в дайджест", "en": "Posts in digest"},
     "settings.field.digest_window_days.label": {"ru": "Окно отбора, дней", "en": "Selection window, days"},
+    # F72 — согласование постов.
+    "settings.field.require_owner_approval.label": {
+        "ru": "Редактор одобрил → ждём владельца",
+        "en": "Editor approved → wait for owner",
+    },
     # F64 — очередь задач.
     "settings.field.task_queue_interval_seconds.label": {
         "ru": "Период проверки, сек", "en": "Check period, sec",
