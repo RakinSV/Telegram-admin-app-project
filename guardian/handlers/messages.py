@@ -25,6 +25,7 @@ from guardian.filters import ai_filter, heuristics
 from guardian.filters.flood_filter import FloodFilter
 from guardian.filters.keyword_filter import KeywordFilter
 from guardian.filters.link_filter import LinkFilter
+from guardian.handlers import force_subscribe
 from guardian.logging_conf import get_logger
 from guardian.services import chat_admins, daily_stats_repo, log_channel
 from guardian.services.warn_system import add_warn
@@ -239,6 +240,13 @@ async def on_message(message: Message, bot: Bot) -> None:
 
     user_id = message.from_user.id
     if _is_trusted(user_id, message.chat.id):
+        return
+
+    # F61: обязательная подписка на канал. Проверяется ПОСЛЕ доверенных —
+    # доверенный уже прошёл проверку человеком, и требовать с него подписку
+    # значит наказывать за лояльность. И ДО фильтров: смысла тратить AI-вызов
+    # на сообщение, которое всё равно будет удалено, нет.
+    if await force_subscribe.enforce(message, bot):
         return
 
     if message.forward_origin is not None and not settings.allow_forwards:

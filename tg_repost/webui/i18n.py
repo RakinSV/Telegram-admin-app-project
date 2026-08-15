@@ -2900,6 +2900,66 @@ STRINGS: dict[str, dict[str, str]] = {
     "guardian.settings.field.autoreply_cooldown_seconds.label": {
         "ru": "Пауза на правило, сек", "en": "Per-rule cooldown, sec",
     },
+    # F61 — обязательная подписка на канал.
+    "guardian.settings.group.force_subscribe.title": {
+        "ru": "Обязательная подписка на канал", "en": "Required channel subscription",
+    },
+    "guardian.settings.group.force_subscribe.desc": {
+        "ru": "Участник не может писать, пока не подписан на канал — прямая "
+        "воронка «участник группы → подписчик канала». БОТ ОБЯЗАН БЫТЬ "
+        "АДМИНИСТРАТОРОМ В КАНАЛЕ; если проверка не отработала, сообщения "
+        "ПРОПУСКАЮТСЯ, а не блокируются. Администраторы группы освобождены.",
+        "en": "A member cannot write until subscribed to the channel — a "
+        "direct funnel from group member to channel subscriber. THE BOT MUST "
+        "BE AN ADMIN IN THE CHANNEL; if the check fails, messages are LET "
+        "THROUGH rather than blocked. Group admins are exempt.",
+    },
+    "guardian.settings.field.force_subscribe_enabled.label": {
+        "ru": "Включена", "en": "Enabled",
+    },
+    "guardian.settings.field.force_subscribe_channel.label": {
+        "ru": "@канал или его chat_id", "en": "@channel or its chat_id",
+    },
+    # F57 — обучение антиспама.
+    "guardian.settings.group.spam_learning.title": {
+        "ru": "Обучение антиспама", "en": "Anti-spam learning",
+    },
+    "guardian.settings.group.spam_learning.desc": {
+        "ru": "Спорные вердикты уходят в лог-канал с кнопками «спам / не "
+        "спам», размеченные примеры подмешиваются в промпт. Ничего не "
+        "удаляет и не банит — только наблюдает. Примеров берётся поровну "
+        "каждой метки: перекос научил бы модель называть спамом всё подряд.",
+        "en": "Borderline verdicts go to the log channel with «spam / not "
+        "spam» buttons; labelled examples are mixed into the prompt. Nothing "
+        "is deleted or banned — it only observes. Examples are taken evenly "
+        "per label: a skew would teach the model to call everything spam.",
+    },
+    "guardian.settings.field.spam_learning_enabled.label": {
+        "ru": "Включено", "en": "Enabled",
+    },
+    "guardian.settings.field.spam_learning_examples_per_label.label": {
+        "ru": "Примеров каждой метки", "en": "Examples per label",
+    },
+    # F52 — Premium как сигнал доверия.
+    "guardian.settings.group.premium_trust.title": {
+        "ru": "Premium как сигнал доверия", "en": "Premium as a trust signal",
+    },
+    "guardian.settings.group.premium_trust.desc": {
+        "ru": "Premium-аккаунту капча даётся мягче: у скам-ботов платной "
+        "подписки обычно нет. ВЫКЛЮЧЕНО по умолчанию — это ослабление "
+        "защиты, а Premium покупается, поэтому сигнал идёт в общий скоринг, "
+        "а не даёт пропуск.",
+        "en": "A Premium account gets a milder captcha: scam bots rarely pay "
+        "for a subscription. OFF by default — this weakens protection, and "
+        "Premium can be bought, so it feeds the overall score rather than "
+        "granting a bypass.",
+    },
+    "guardian.settings.field.premium_trust_enabled.label": {
+        "ru": "Включён", "en": "Enabled",
+    },
+    "guardian.settings.field.premium_trust_bonus.label": {
+        "ru": "Насколько смягчать", "en": "How much to soften",
+    },
     "guardian.settings.group.hygiene.title": {
         "ru": "Гигиена группы", "en": "Group hygiene",
     },
