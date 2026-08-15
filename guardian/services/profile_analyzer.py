@@ -9,6 +9,7 @@ from __future__ import annotations
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 
+from guardian.config import get_guardian_settings
 from guardian.logging_conf import get_logger
 
 logger = get_logger(__name__)
@@ -20,10 +21,23 @@ _BIO_SUSPICIOUS_WORDS = ("crypto", "крипто", "заработок", "earn",
 _NEW_ACCOUNT_ID_THRESHOLD = 7_000_000_000
 
 
-async def compute_profile_score(bot: Bot, user_id: int, username: str | None) -> int:
+async def compute_profile_score(
+    bot: Bot,
+    user_id: int,
+    username: str | None,
+    *,
+    is_premium: bool = False,
+) -> int:
     """Сумма сигналов (0-5): нет username +1, новый по id +1, нет фото +1,
     подозрительная био +2. Любая ошибка Bot API по отдельному сигналу не
-    прерывает остальные — просто этот сигнал не засчитывается."""
+    прерывает остальные — просто этот сигнал не засчитывается.
+
+    `is_premium` (F52) — единственный сигнал В ПОЛЬЗУ участника, уменьшает
+    сумму. Работает только если включён `PREMIUM_TRUST_ENABLED` (по умолчанию
+    выключен). Результат ограничен снизу нулём: без этого Premium-аккаунт
+    уходил бы в минус и мог бы «занести» отрицательный запас на будущие
+    сигналы, что превратило бы смягчение в фактический пропуск проверки.
+    """
     score = 0
     if not username:
         score += 1
@@ -44,5 +58,14 @@ async def compute_profile_score(bot: Bot, user_id: int, username: str | None) ->
             score += 2
     except TelegramBadRequest as exc:
         logger.debug("G15: не удалось получить био %s: %s", user_id, exc)
+
+    if is_premium:
+        settings = get_guardian_settings()
+        if settings.premium_trust_enabled:
+            before = score
+            score = max(0, score - settings.premium_trust_bonus)
+            logger.info(
+                "F52: Premium у %s — смягчение %d -> %d", user_id, before, score,
+            )
 
     return score

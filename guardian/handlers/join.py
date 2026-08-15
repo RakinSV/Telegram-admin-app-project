@@ -135,7 +135,13 @@ async def on_new_member(
 
     captcha_type = settings.captcha_type
     profile_score = await profile_analyzer.compute_profile_score(
-        bot, user_id, event.new_chat_member.user.username
+        bot,
+        user_id,
+        event.new_chat_member.user.username,
+        # F52: поле уже лежит в апдейте — лишнего запроса к Bot API не делаем.
+        # У старых аккаунтов и в некоторых типах апдейтов его может не быть,
+        # поэтому `or False`, а не голое обращение к атрибуту.
+        is_premium=bool(getattr(event.new_chat_member.user, "is_premium", False)),
     )
     if profile_score >= settings.profile_suspicion_threshold:
         # G15: усиленная капча для подозрительных профилей — `math` труднее
