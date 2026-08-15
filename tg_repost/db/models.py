@@ -149,6 +149,12 @@ class PostKind(str, enum.Enum):
     # `send_photo`. Как AD/DIGEST, создаётся сразу REWRITTEN (нет реального
     # источника/рерайта) — идёт по тому же пайплайну модерации/публикации.
     POLL = "poll"
+    # F55: повтор уже выстрелившего поста. Текст берётся готовым у оригинала
+    # (`recycled_from_id`), рерайт не нужен — создаётся сразу REWRITTEN.
+    # ВАЖНО: кандидатами на повтор считаются ТОЛЬКО посты вида SOURCE, иначе
+    # повтор сам стал бы кандидатом и один и тот же текст крутился бы в ленте
+    # бесконечно.
+    RECYCLE = "recycle"
 
 
 class InvalidStatusTransition(Exception):
@@ -339,6 +345,15 @@ class Post(Base):
     )
     cluster: Mapped["StoryCluster | None"] = relationship(
         back_populates="posts", foreign_keys=[cluster_id]
+    )
+
+    # F55: если это повтор — id оригинала. Самоссылка на `posts`, а не отдельная
+    # таблица: связь один-к-одному и без собственных атрибутов, заводить под
+    # неё таблицу было бы церемонией. Она же служит признаком «этот пост уже
+    # повторяли»: наличие строки с `recycled_from_id == X` закрывает X от
+    # повторного отбора, отдельного флага для этого не нужно.
+    recycled_from_id: Mapped[int | None] = mapped_column(
+        ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Путь к скачанному медиа (если есть).

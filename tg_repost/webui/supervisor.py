@@ -33,6 +33,7 @@ from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
 from tg_repost.scheduler.posting import parse_slot, publish_slot
+from tg_repost.scheduler.recycle import run_recycle_job
 from tg_repost.scheduler.smart_schedule import auto_apply_slots_job
 from tg_repost.rss.poller import poll_rss_sources
 from tg_repost.scheduler.stats import collect_stats
@@ -184,6 +185,11 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         run_digest_job, [rewriter, application],
         CronTrigger(day_of_week=settings.digest_day_of_week,
                     hour=settings.digest_hour, minute=settings.digest_minute),
+    )
+    _resync_optional_job(
+        scheduler, "recycle_job", settings.recycle_enabled,
+        run_recycle_job, [],
+        IntervalTrigger(hours=settings.recycle_interval_hours),
     )
     _resync_optional_job(
         scheduler, "collect_growth_snapshot", settings.growth_tracking_enabled,

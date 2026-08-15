@@ -398,6 +398,24 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "обзор и ставит его в обычный пайплайн модерации/публикации.",
     ),
     SettingsGroup(
+        "recycle", "Повтор выстреливших постов — F55",
+        (
+            SettingField("recycle_enabled", "Включён", "bool", needs_resync=True),
+            SettingField(
+                "recycle_interval_hours", "Как часто искать, часов", "int", needs_resync=True,
+            ),
+            SettingField("recycle_top_n", "Повторов за проход", "int"),
+            SettingField("recycle_window_days", "Окно поиска, дней", "int"),
+            SettingField("recycle_min_age_days", "Мин. возраст поста, дней", "int"),
+            SettingField("recycle_min_views", "Порог просмотров (0=без порога)", "int"),
+        ),
+        "Удачный пост ставится в очередь ПОВТОРНО — почти бесплатный охват из "
+        "уже проверенного контента. Повтор идёт в модерацию с пометкой "
+        "«🔁 ПОВТОР», а не публикуется сам. Повторяются только оригиналы и "
+        "только один раз. «Мин. возраст» должен быть меньше «окна поиска», "
+        "иначе кандидатов не будет никогда.",
+    ),
+    SettingsGroup(
         "ads", "Нативная реклама — F21",
         (SettingField("ad_every_nth_post", "Каждый N-й пост (0=выкл)", "int"),),
         "Каждый N-й опубликованный обычный пост сопровождается рекламным "

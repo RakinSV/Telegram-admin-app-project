@@ -671,6 +671,26 @@ class Settings(BaseSettings):
     digest_top_n: int = Field(5, alias="DIGEST_TOP_N")
     digest_window_days: int = Field(7, alias="DIGEST_WINDOW_DAYS")
 
+    # --- F55: повтор выстреливших постов (recycling) ---
+    # Почти бесплатный охват из уже проверенного контента. Данные для отбора
+    # уже лежат в метриках (F14/F31) — здесь только правила и постановка
+    # повтора в очередь МОДЕРАЦИИ, не в публикацию: повтор без подтверждения
+    # владельца превращает ленту в самоповтор.
+    recycle_enabled: bool = Field(False, alias="RECYCLE_ENABLED")
+    # Как часто искать кандидатов.
+    recycle_interval_hours: int = Field(24, alias="RECYCLE_INTERVAL_HOURS")
+    # Сколько повторов ставить за один проход. Единица по умолчанию не
+    # случайно: пять повторов разом — это уже не «второе касание», а лента,
+    # состоящая из вчерашнего дня.
+    recycle_top_n: int = Field(1, alias="RECYCLE_TOP_N")
+    # Окно поиска кандидатов: посты старше него уже неактуальны.
+    recycle_window_days: int = Field(30, alias="RECYCLE_WINDOW_DAYS")
+    # Минимальный возраст поста. Повторять вчерашнее бессмысленно — аудитория
+    # его ещё помнит, и повтор читается как сбой, а не как напоминание.
+    recycle_min_age_days: int = Field(7, alias="RECYCLE_MIN_AGE_DAYS")
+    # Порог просмотров: повторяем ВЫСТРЕЛИВШЕЕ, а не всё подряд. 0 — без порога.
+    recycle_min_views: int = Field(0, alias="RECYCLE_MIN_VIEWS")
+
     # --- F21: нативная реклама ---
     # Каждый N-й опубликованный обычный пост — рекламный. 0 = выключено.
     ad_every_nth_post: int = Field(0, alias="AD_EVERY_NTH_POST")

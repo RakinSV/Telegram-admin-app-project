@@ -1509,6 +1509,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Once a week the AI compiles top posts into a digest and "
         "publishes it like a regular post.",
     },
+    "settings.group.recycle.title": {
+        "ru": "Повтор выстреливших постов", "en": "Recycling top posts",
+    },
+    "settings.group.recycle.desc": {
+        "ru": "Удачный пост ставится в очередь ПОВТОРНО — почти бесплатный "
+        "охват из уже проверенного контента. Повтор идёт в модерацию с "
+        "пометкой «🔁 ПОВТОР», а не публикуется сам. Повторяются только "
+        "оригиналы и только один раз. «Мин. возраст» должен быть меньше "
+        "«окна поиска», иначе кандидатов не будет никогда.",
+        "en": "A high-performing post is queued AGAIN — nearly free reach "
+        "from content that already proved itself. The repeat goes to "
+        "moderation marked «🔁 ПОВТОР» instead of publishing itself. Only "
+        "originals are recycled, and only once. «Min post age» must be less "
+        "than «search window», otherwise there will never be any candidates.",
+    },
     "settings.group.ads.title": {"ru": "Нативная реклама", "en": "Native ads"},
     "settings.group.ads.desc": {
         "ru": "Каждый N-й опубликованный пост сопровождается рекламным из "
@@ -2022,6 +2037,23 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.digest_minute.label": {"ru": "Минута", "en": "Minute"},
     "settings.field.digest_top_n.label": {"ru": "Постов в дайджест", "en": "Posts in digest"},
     "settings.field.digest_window_days.label": {"ru": "Окно отбора, дней", "en": "Selection window, days"},
+    # F55 — повтор выстреливших постов.
+    "settings.field.recycle_enabled.label": {"ru": "Включён", "en": "Enabled"},
+    "settings.field.recycle_interval_hours.label": {
+        "ru": "Как часто искать, часов", "en": "Check every, hours",
+    },
+    "settings.field.recycle_top_n.label": {
+        "ru": "Повторов за проход", "en": "Repeats per run",
+    },
+    "settings.field.recycle_window_days.label": {
+        "ru": "Окно поиска, дней", "en": "Search window, days",
+    },
+    "settings.field.recycle_min_age_days.label": {
+        "ru": "Мин. возраст поста, дней", "en": "Min post age, days",
+    },
+    "settings.field.recycle_min_views.label": {
+        "ru": "Порог просмотров (0=без порога)", "en": "Views threshold (0=none)",
+    },
     "settings.field.ad_every_nth_post.label": {"ru": "Каждый N-й пост (0=выкл)", "en": "Every Nth post (0=off)"},
     "settings.field.growth_tracking_enabled.label": {"ru": "Включён", "en": "Enabled"},
     "settings.field.growth_snapshot_interval_minutes.label": {"ru": "Период снимков, мин", "en": "Snapshot period, min"},

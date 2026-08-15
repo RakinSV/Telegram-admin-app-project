@@ -50,7 +50,10 @@ def select_top_posts_for_digest(window_days: int, top_n: int) -> list[Post]:
             last = (
                 session.query(PostStat)
                 .filter(PostStat.post_id == post.id)
-                .order_by(PostStat.captured_at.desc())
+                # Тай-брейк по `id`: при совпадении меток времени (часы на
+                # Windows тикают ~15 мс) порядок иначе не определён — см. F53,
+                # где это ловилось прогоном одного теста десять раз подряд.
+                .order_by(PostStat.captured_at.desc(), PostStat.id.desc())
                 .first()
             )
             views = last.view_count if last and last.view_count is not None else 0
