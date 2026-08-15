@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('broadcasts.title') }}</h1>
+<p class="muted">{{ t('broadcasts.intro') }}</p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+<h2>{{ t('broadcasts.new') }}</h2>
+{% if segments %}
+<form method="post" action="/broadcasts/preview">
+  <div class="field-row">
+    <label for="segment_id">{{ t('broadcasts.segment') }}</label>
+    <select id="segment_id" name="segment_id" style="flex:1;">
+      {% for view in segments %}
+      <option value="{{ view.id }}">{{ view.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field-row" style="align-items: flex-start;">
+    <label for="text">{{ t('broadcasts.text') }}</label>
+    <textarea id="text" name="text" rows="5" style="flex:1;" required></textarea>
+  </div>
+  <div class="hint">{{ t('broadcasts.unsubscribe_note') }}</div>
+  <button type="submit">{{ t('broadcasts.preview_button') }}</button>
+</form>
+{% else %}
+<p class="muted">{{ t('broadcasts.no_segments') | safe }}</p>
+{% endif %}
+
+<h2>{{ t('broadcasts.history') }}</h2>
+<table>
+  <tr>
+    <th>{{ t('broadcasts.segment') }}</th>
+    <th>{{ t('broadcasts.text') }}</th>
+    <th>{{ t('broadcasts.result') }}</th>
+    <th>{{ t('broadcasts.status') }}</th>
+    <th></th>
+  </tr>
+  {% for row in broadcasts %}
+  <tr>
+    <td>{{ row.segment_name }}</td>
+    <td>{{ row.text[:120] }}{% if row.text|length > 120 %}…{% endif %}</td>
+    <td>
+      {{ t('broadcasts.delivered', n=row.sent_count, reachable=row.reachable_size) }}
+      {% if row.blocked_count %}
+      <div class="muted">{{ t('broadcasts.blocked_n', n=row.blocked_count) }}</div>
+      {% endif %}
+      {% if row.failed_count %}
+      <div class="muted">{{ t('broadcasts.failed_n', n=row.failed_count) }}</div>
+      {% endif %}
+      {% if row.reachable_size < row.segment_size %}
+      <div class="hint">{{ t('broadcasts.gap_hint', total=row.segment_size) }}</div>
+      {% endif %}
+    </td>
+    <td>{{ t('broadcasts.status_' + row.status) }}</td>
+    <td>
+      {% if row.status in ('planned', 'running') %}
+      <form method="post" action="/broadcasts/{{ row.id }}/cancel"
+            onsubmit="return confirm('{{ t('broadcasts.confirm_cancel') }}');">
+        <button type="submit" class="secondary">{{ t('broadcasts.stop') }}</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">{{ t('broadcasts.empty') }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

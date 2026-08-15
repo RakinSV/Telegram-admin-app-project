@@ -110,6 +110,114 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.invites": {"ru": "Инвайты", "en": "Invites"},
     "nav.contacts": {"ru": "Участники", "en": "Contacts"},
     "nav.segments": {"ru": "Сегменты", "en": "Segments"},
+    "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
+
+    # --- F64: рассылки по сегменту ---
+    "broadcasts.title": {"ru": "Рассылки", "en": "Broadcasts"},
+    "broadcasts.intro": {
+        "ru": "Сообщение уходит в личку каждому, кто подходит под сегмент И "
+              "запускал бота. Telegram не даёт боту написать первым, поэтому "
+              "получателей всегда меньше, чем людей в сегменте — сколько "
+              "именно, будет видно до отправки.",
+        "en": "The message goes to everyone who matches the segment AND has "
+              "started the bot. Telegram does not let a bot write first, so "
+              "there are always fewer recipients than people in the segment — "
+              "you will see how many before sending.",
+    },
+    "broadcasts.new": {"ru": "Новая рассылка", "en": "New broadcast"},
+    "broadcasts.segment": {"ru": "Сегмент", "en": "Segment"},
+    "broadcasts.text": {"ru": "Текст", "en": "Text"},
+    "broadcasts.preview_button": {
+        "ru": "Посмотреть, кому уйдёт", "en": "See who will receive it",
+    },
+    "broadcasts.unsubscribe_note": {
+        "ru": "В каждое сообщение автоматически добавляется кнопка «Отписаться "
+              "от рассылок». Без неё единственным способом прекратить поток "
+              "остаётся блокировка бота — а это потеря человека целиком, "
+              "вместе с ответами на его вопросы.",
+        "en": "Every message automatically carries an «Unsubscribe» button. "
+              "Without it the only way to stop the flow is blocking the bot — "
+              "which loses the person entirely, including answers to their "
+              "own questions.",
+    },
+    "broadcasts.no_segments": {
+        "ru": "Сначала создайте <a href=\"/segments\">сегмент</a> — "
+              "рассылка отправляется по нему.",
+        "en": "Create a <a href=\"/segments\">segment</a> first — a broadcast "
+              "is sent to one.",
+    },
+    "broadcasts.history": {"ru": "Отправленные", "en": "Sent"},
+    "broadcasts.result": {"ru": "Результат", "en": "Result"},
+    "broadcasts.status": {"ru": "Состояние", "en": "State"},
+    "broadcasts.delivered": {
+        "ru": "доставлено {n} из {reachable}", "en": "delivered {n} of {reachable}",
+    },
+    "broadcasts.blocked_n": {
+        "ru": "заблокировали бота: {n}", "en": "blocked the bot: {n}",
+    },
+    "broadcasts.failed_n": {"ru": "ошибок: {n}", "en": "errors: {n}"},
+    "broadcasts.gap_hint": {
+        "ru": "в сегменте было {total} — остальные не запускали бота, "
+              "заблокировали его или отписались",
+        "en": "the segment had {total} — the rest never started the bot, "
+              "blocked it or unsubscribed",
+    },
+    "broadcasts.status_planned": {"ru": "в очереди", "en": "queued"},
+    "broadcasts.status_running": {"ru": "отправляется", "en": "sending"},
+    "broadcasts.status_done": {"ru": "завершена", "en": "finished"},
+    "broadcasts.status_canceled": {"ru": "остановлена", "en": "stopped"},
+    "broadcasts.stop": {"ru": "Остановить", "en": "Stop"},
+    "broadcasts.confirm_cancel": {
+        "ru": "Остановить рассылку? Уже отправленное вернуть нельзя.",
+        "en": "Stop the broadcast? Already sent messages cannot be recalled.",
+    },
+    "broadcasts.empty": {"ru": "Рассылок ещё не было.", "en": "No broadcasts yet."},
+    "broadcasts.error_need_segment_and_text": {
+        "ru": "Нужны и сегмент, и текст.", "en": "Both a segment and text are required.",
+    },
+    "broadcast_preview.title": {
+        "ru": "Проверьте перед отправкой", "en": "Check before sending",
+    },
+    "broadcast_preview.who": {"ru": "Кому уйдёт", "en": "Who will receive it"},
+    "broadcast_preview.in_segment": {"ru": "В сегменте", "en": "In the segment"},
+    "broadcast_preview.will_receive": {"ru": "Получат сообщение", "en": "Will receive"},
+    "broadcast_preview.why_fewer": {"ru": "Почему меньше", "en": "Why fewer"},
+    "broadcast_preview.why_fewer_hint": {
+        "ru": "Это ограничение Telegram, а не сбой системы.",
+        "en": "This is a Telegram restriction, not a system failure.",
+    },
+    "broadcast_preview.never_started": {
+        "ru": "не запускали бота", "en": "never started the bot",
+    },
+    "broadcast_preview.blocked": {"ru": "заблокировали бота", "en": "blocked the bot"},
+    "broadcast_preview.unsubscribed": {
+        "ru": "отписались от рассылок", "en": "unsubscribed from broadcasts",
+    },
+    "broadcast_preview.what": {"ru": "Что уйдёт", "en": "What will be sent"},
+    "broadcast_preview.send": {
+        "ru": "Отправить {n} получателям", "en": "Send to {n} recipients",
+    },
+    "broadcast_preview.confirm": {
+        "ru": "Отправить сообщение {n} получателям? Отозвать его будет нельзя.",
+        "en": "Send the message to {n} recipients? It cannot be recalled.",
+    },
+    "broadcast_preview.irreversible": {
+        "ru": "Отправку можно остановить, но уже доставленные сообщения "
+              "вернуть нельзя.",
+        "en": "Sending can be stopped, but already delivered messages cannot "
+              "be recalled.",
+    },
+    "broadcast_preview.nobody": {
+        "ru": "Отправлять некому: в сегменте нет ни одного человека, "
+              "запускавшего бота.",
+        "en": "Nobody to send to: no one in this segment has started the bot.",
+    },
+    "broadcast_preview.changed": {
+        "ru": "Состав сегмента изменился, пока вы читали: было {was}, стало "
+              "{now}. Проверьте числа заново.",
+        "en": "The segment changed while you were reading: it was {was}, now "
+              "{now}. Please check the numbers again.",
+    },
 
     # --- F63: CRM участников ---
     "contacts.title": {"ru": "Участники", "en": "Contacts"},

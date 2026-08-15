@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/broadcasts">&larr; {{ t('broadcasts.title') }}</a></p>
+<h1>{{ t('broadcast_preview.title') }}</h1>
+
+{% if changed_from is defined %}
+<p class="badge warn">
+  {{ t('broadcast_preview.changed', was=changed_from, now=plan.stats.reachable) }}
+</p>
+{% endif %}
+
+<h2>{{ t('broadcast_preview.who') }}</h2>
+<table>
+  <tr>
+    <td>{{ t('broadcasts.segment') }}</td>
+    <td>{{ plan.segment_name }}</td>
+  </tr>
+  <tr>
+    <td>{{ t('broadcast_preview.in_segment') }}</td>
+    <td>{{ plan.stats.total }}</td>
+  </tr>
+  <tr>
+    <td><strong>{{ t('broadcast_preview.will_receive') }}</strong></td>
+    <td><strong style="font-size:1.3em;">{{ plan.stats.reachable }}</strong></td>
+  </tr>
+</table>
+
+{% if plan.stats.reachable < plan.stats.total %}
+<h2>{{ t('broadcast_preview.why_fewer') }}</h2>
+<p class="hint">{{ t('broadcast_preview.why_fewer_hint') }}</p>
+<table>
+  {% if plan.stats.never_started %}
+  <tr>
+    <td>{{ t('broadcast_preview.never_started') }}</td>
+    <td>{{ plan.stats.never_started }}</td>
+  </tr>
+  {% endif %}
+  {% if plan.stats.blocked %}
+  <tr>
+    <td>{{ t('broadcast_preview.blocked') }}</td>
+    <td>{{ plan.stats.blocked }}</td>
+  </tr>
+  {% endif %}
+  {% if plan.stats.unsubscribed %}
+  <tr>
+    <td>{{ t('broadcast_preview.unsubscribed') }}</td>
+    <td>{{ plan.stats.unsubscribed }}</td>
+  </tr>
+  {% endif %}
+</table>
+{% endif %}
+
+<h2>{{ t('broadcast_preview.what') }}</h2>
+<pre style="white-space: pre-wrap;">{{ text }}</pre>
+<p class="hint">{{ t('broadcasts.unsubscribe_note') }}</p>
+
+{% if plan.stats.reachable %}
+<form method="post" action="/broadcasts/send"
+      onsubmit="return confirm('{{ t('broadcast_preview.confirm', n=plan.stats.reachable) }}');">
+  <input type="hidden" name="segment_id" value="{{ segment_id }}">
+  <input type="hidden" name="text" value="{{ text }}">
+  <input type="hidden" name="expected_reachable" value="{{ expected_reachable }}">
+  <button type="submit">{{ t('broadcast_preview.send', n=plan.stats.reachable) }}</button>
+</form>
+<p class="hint">{{ t('broadcast_preview.irreversible') }}</p>
+{% else %}
+<p class="badge warn">{{ t('broadcast_preview.nobody') }}</p>
+{% endif %}
+{% endblock %}
