@@ -16,19 +16,17 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from tg_repost import contacts_repo, support_repo
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import audit, i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 
 logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates = build_templates()
 
 
 async def _send_reply(user_id: int, text: str) -> bool:

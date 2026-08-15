@@ -22,7 +22,6 @@ from zipfile import BadZipFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
 
 from guardian import settings_store as guardian_settings_store
 
@@ -55,6 +54,7 @@ from tg_repost.scheduler.stats import compute_stats_summary
 from tg_repost.telegram.moderation_bot import forget_send_failures
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
 from tg_repost.webui import audit, i18n, log_broadcast, settings_store
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs, restart_telethon_listener
 
@@ -68,18 +68,10 @@ _LIST_LIMIT = 500
 logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-# Отдельный экземпляр Jinja2Templates/Environment от `app.py` (тот же каталог
-# шаблонов на диске, но другой объект в памяти) — глобалы `t`/`current_lang`
-# нужно регистрировать в КАЖДОМ, иначе `{{ t(...) }}` в шаблонах, отданных
-# через ЭТОТ роутер, упадёт с UndefinedError.
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
-_templates.env.globals["humanize_action"] = i18n.humanize_action
-# Название языка по коду — нужно и в галерее вариантов на модерации,
-# и в списке целей: держать перевод кодов в шаблонах значило бы
-# размазать справочник языков по HTML.
-_templates.env.globals["language_label"] = languages.label
+# Общая сборка — см. `webui/templating.py`. Раньше каждый модуль роутов
+# регистрировал глобалы сам, и наборы разошлись: переключатель языка жил
+# только на страницах из `app.py`.
+_templates = build_templates()
 
 
 def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:

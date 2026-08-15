@@ -10,7 +10,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from tg_repost import invites_repo, member_origins_repo, targets_repo
 from tg_repost.telegram.invites import (
@@ -20,14 +19,12 @@ from tg_repost.telegram.invites import (
     revoke_invite_link,
 )
 from tg_repost.webui import audit, i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
-_templates.env.globals["humanize_action"] = i18n.humanize_action
+_templates = build_templates()
 
 
 def _context(error: str | None = None) -> dict:

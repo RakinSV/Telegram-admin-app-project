@@ -6,9 +6,15 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  {# Пункт меню, ведущий на отказ, — не защита, а обман: аналитик видел
+     «Настройки» и «Пользователи» и получал 403 на каждый клик. Показываем
+     только то, что роль реально откроет. Это ТОЛЬКО про внешний вид —
+     доступ по-прежнему проверяет middleware, а не шаблон. #}
   {% macro navlink(href, label, prefix=False) %}
+  {%- if can_open(href) -%}
   {%- set is_active = (request.url.path == href) or (prefix and request.url.path.startswith(href + '/')) -%}
   <a href="{{ href }}"{{ ' class="active"' if is_active else '' }}>{{ label }}</a>
+  {%- endif -%}
   {%- endmacro %}
   <div class="layout">
     <nav class="sidebar">

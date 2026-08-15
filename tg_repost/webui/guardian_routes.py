@@ -31,22 +31,17 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from guardian import domains_repo, settings_store, stopwords_repo, trusted_repo
 from guardian.config import get_guardian_settings
 from tg_repost import targets_repo
 from tg_repost.webui import audit, guardian_dashboard, i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.form_utils import coerce_form_value
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-# См. аналогичный комментарий в crud_routes.py — отдельный Environment,
-# глобалы регистрируются в каждом модуле, что строит Jinja2Templates.
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
-_templates.env.globals["humanize_action"] = i18n.humanize_action
+_templates = build_templates()
 
 
 def _settings_groups_context() -> list[dict]:

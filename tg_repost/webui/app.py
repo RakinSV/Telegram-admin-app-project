@@ -12,11 +12,10 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from tg_repost import crypto, languages
+from tg_repost import crypto
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
@@ -29,6 +28,7 @@ from tg_repost.webui import (
     setup_token,
     telethon_login,
 )
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import (
     NotAuthenticatedError,
     clear_failed_logins,
@@ -64,15 +64,7 @@ from tg_repost.webui.supervisor import (
 logger = get_logger(__name__)
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["SUPPORTED_LANGS"] = i18n.SUPPORTED_LANGS
-_templates.env.globals["current_lang"] = i18n.get_current_lang
-_templates.env.globals["humanize_action"] = i18n.humanize_action
-# Название языка по коду — нужно и в галерее вариантов на модерации,
-# и в списке целей: держать перевод кодов в шаблонах значило бы
-# размазать справочник языков по HTML.
-_templates.env.globals["language_label"] = languages.label
+_templates = build_templates()
 
 
 class LanguageMiddleware:

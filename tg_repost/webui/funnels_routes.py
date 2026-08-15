@@ -26,16 +26,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from tg_repost import funnels_repo
 from tg_repost.webui import audit, i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates = build_templates()
 
 # Сколько пустых строк дорисовать под новые шаги. Три — чтобы добавление
 # пары шагов не требовало сохранять и открывать форму заново, и при этом

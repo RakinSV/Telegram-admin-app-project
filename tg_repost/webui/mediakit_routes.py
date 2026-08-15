@@ -19,16 +19,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from tg_repost import mediakit_repo, targets_repo
-from tg_repost.webui import i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates = build_templates()
 
 _WINDOW_CHOICES = (7, 30, 90)
 

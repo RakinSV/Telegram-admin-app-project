@@ -16,18 +16,16 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
 
 from tg_repost.db.models import AdminUser
 from tg_repost.db.session import session_scope
 from tg_repost.webui import access, audit, i18n
+from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import hash_password, require_login
 
 _BASE_DIR = Path(__file__).parent
-_templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-_templates.env.globals["t"] = i18n.t
-_templates.env.globals["current_lang"] = i18n.get_current_lang
+_templates = build_templates()
 
 # Тот же порог, что у пароля владельца при установке: у редактора доступ к
 # публикации от имени канала, и слабый пароль здесь стоит не меньше.
