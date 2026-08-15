@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/contacts">&larr; {{ t('contacts.title') }}</a></p>
+<h1>{{ card.display_name }}</h1>
+<p class="muted">id{{ card.user_id }}{% if card.username %} · @{{ card.username }}{% endif %}</p>
+
+<h2>{{ t('contact_detail.facts') }}</h2>
+<table>
+  <tr>
+    <td>{{ t('contact_detail.origin') }}</td>
+    <td>
+      {{ card.origin or t('contacts.organic') }}
+      {% if not card.origin %}<div class="hint">{{ t('contact_detail.organic_hint') }}</div>{% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.first_seen') }}</td>
+    <td>{{ card.first_seen_at.strftime('%Y-%m-%d %H:%M') if card.first_seen_at else '—' }}</td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.membership') }}</td>
+    <td>{{ t('contact_detail.still_in') if card.is_active_member else t('contacts.left') }}</td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.invited_by') }}</td>
+    <td>
+      {% if card.invited_by %}<a href="/contacts/{{ card.invited_by }}">id{{ card.invited_by }}</a>
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.confirmed_invites') }}</td>
+    <td>
+      {{ card.confirmed_invites }}
+      <div class="hint">{{ t('contact_detail.confirmed_hint') }}</div>
+    </td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.activity') }}</td>
+    <td>
+      {{ t('contact_detail.activity_value', points=card.points, level=card.level,
+            streak=card.streak_days, correct=card.correct_answers) }}
+    </td>
+  </tr>
+  <tr>
+    <td>{{ t('contact_detail.moderation') }}</td>
+    <td>
+      {% if not card.moderation.known %}
+      <span class="muted">{{ t('contact_detail.no_guardian_data') }}</span>
+      {% else %}
+      {{ t('contact_detail.warns', n=card.moderation.warn_count) }}
+      {% if card.moderation.is_trusted %}<span class="badge">{{ t('contacts.trusted') }}</span>{% endif %}
+      {% if card.moderation.is_banned %}<span class="badge warn">{{ t('contacts.banned') }}</span>{% endif %}
+      {% if card.moderation.is_verified %}<span class="badge muted">{{ t('contact_detail.verified') }}</span>{% endif %}
+      {% endif %}
+    </td>
+  </tr>
+</table>
+
+<h2>{{ t('contacts.tags') }}</h2>
+<div class="check-list">
+  {% for tag in card.tags %}
+  <form method="post" action="/contacts/{{ card.user_id }}/tags/delete" style="display:inline;">
+    <input type="hidden" name="tag" value="{{ tag }}">
+    <button type="submit" class="secondary">{{ tag }} ✕</button>
+  </form>
+  {% else %}
+  <p class="muted">{{ t('contact_detail.no_tags') }}</p>
+  {% endfor %}
+</div>
+<form method="post" action="/contacts/{{ card.user_id }}/tags" class="field-row">
+  <input type="text" name="tag" placeholder="{{ t('contact_detail.tag_placeholder') }}" required>
+  <button type="submit">{{ t('common.add') }}</button>
+</form>
+<div class="hint">{{ t('contact_detail.tag_hint') }}</div>
+
+<h2>{{ t('contact_detail.note') }}</h2>
+<form method="post" action="/contacts/{{ card.user_id }}/note">
+  <textarea name="note" rows="4" style="width:100%;">{{ card.note or '' }}</textarea>
+  <button type="submit">{{ t('common.save') }}</button>
+</form>
+<div class="hint">{{ t('contact_detail.note_hint') }}</div>
+{% endblock %}

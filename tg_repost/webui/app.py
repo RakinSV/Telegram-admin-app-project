@@ -40,6 +40,7 @@ from tg_repost.webui.auth import (
     require_login,
     verify_login,
 )
+from tg_repost.webui.contacts_routes import build_contacts_router
 from tg_repost.webui.crud_routes import build_crud_router
 from tg_repost.webui.form_utils import coerce_form_value
 from tg_repost.webui.guardian_routes import build_guardian_router
@@ -768,4 +769,5 @@ def create_app() -> FastAPI:
     app.include_router(build_crud_router())
     app.include_router(build_guardian_router())
     app.include_router(build_invites_router())
+    app.include_router(build_contacts_router())
     return app

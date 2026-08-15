@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('segments.title') }}</h1>
+<p class="muted">{{ t('segments.intro') }}</p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+<table>
+  <tr>
+    <th>{{ t('segments.name') }}</th>
+    <th>{{ t('segments.conditions') }}</th>
+    <th>{{ t('segments.size') }}</th>
+    <th></th>
+  </tr>
+  {% for row in segments %}
+  <tr>
+    <td>{{ row.segment.name }}</td>
+    <td>
+      {% for key, value in row.segment.filter.items() %}
+      <span class="badge muted">{{ key }} = {{ value }}</span>
+      {% endfor %}
+    </td>
+    <td>
+      <strong>{{ row.size }}</strong>
+      <div class="hint">{{ t('segments.size_hint') }}</div>
+    </td>
+    <td>
+      <form method="post" action="/segments/{{ row.segment.id }}/delete"
+            onsubmit="return confirm('{{ t('segments.confirm_delete') }}');">
+        <button type="submit" class="secondary">{{ t('common.delete') }}</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">{{ t('segments.empty') }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>{{ t('segments.new') }}</h2>
+<form method="post" action="/segments">
+  <div class="field-row">
+    <label for="name">{{ t('segments.name') }}</label>
+    <input type="text" id="name" name="name" required style="flex:1;">
+  </div>
+  <div class="field-row">
+    <label for="tag">{{ t('segments.field_tag') }}</label>
+    <input type="text" id="tag" name="tag" list="known-tags" style="flex:1;">
+    <datalist id="known-tags">
+      {% for tag, _count in tags %}<option value="{{ tag }}">{% endfor %}
+    </datalist>
+  </div>
+  <div class="field-row">
+    <label for="min_points">{{ t('segments.field_min_points') }}</label>
+    <input type="number" id="min_points" name="min_points" style="flex:1;">
+  </div>
+  <div class="field-row">
+    <label for="origin">{{ t('segments.field_origin') }}</label>
+    <input type="text" id="origin" name="origin" style="flex:1;">
+  </div>
+  <div class="field-row">
+    <label class="check-item">
+      <input type="checkbox" name="active_only" value="1">
+      <span>{{ t('segments.field_active_only') }}</span>
+    </label>
+  </div>
+  <div class="field-row">
+    <label class="check-item">
+      <input type="checkbox" name="everyone" value="1">
+      <span>{{ t('segments.field_everyone') }}</span>
+    </label>
+  </div>
+  <div class="hint">{{ t('segments.everyone_hint') }}</div>
+  <button type="submit">{{ t('common.save') }}</button>
+</form>
+{% endblock %}

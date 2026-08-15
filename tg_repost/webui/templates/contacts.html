@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('contacts.title') }}</h1>
+<p class="muted">{{ t('contacts.intro') }}</p>
+
+{% if tags %}
+<div class="field-row" style="align-items: flex-start;">
+  <label>{{ t('contacts.filter_label') }}</label>
+  <div style="flex:1;">
+    <a href="/contacts" class="badge {{ 'muted' if selected_tag else '' }}">{{ t('contacts.all_tagged') }}</a>
+    {% for tag, count in tags %}
+    <a href="/contacts?tag={{ tag }}"
+       class="badge {{ 'warn' if tag == selected_tag else 'muted' }}">{{ tag }} · {{ count }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if shown < total %}
+<p class="muted">{{ t('contacts.truncated', shown=shown, total=total) }}</p>
+{% endif %}
+
+<table>
+  <tr>
+    <th>{{ t('contacts.person') }}</th>
+    <th>{{ t('contacts.tags') }}</th>
+    <th>{{ t('contacts.origin') }}</th>
+    <th>{{ t('contacts.points') }}</th>
+    <th>{{ t('contacts.invites') }}</th>
+    <th>{{ t('contacts.status') }}</th>
+  </tr>
+  {% for card in cards %}
+  <tr>
+    <td><a href="/contacts/{{ card.user_id }}">{{ card.display_name }}</a></td>
+    <td>
+      {% for tag in card.tags %}<span class="badge muted">{{ tag }}</span>{% endfor %}
+    </td>
+    <td>{{ card.origin or t('contacts.organic') }}</td>
+    <td>{{ card.points }} <span class="muted">· ур. {{ card.level }}</span></td>
+    <td>{{ card.confirmed_invites }}</td>
+    <td>
+      {% if card.moderation.is_banned %}<span class="badge warn">{{ t('contacts.banned') }}</span>{% endif %}
+      {% if card.moderation.is_trusted %}<span class="badge">{{ t('contacts.trusted') }}</span>{% endif %}
+      {% if not card.is_active_member %}<span class="badge muted">{{ t('contacts.left') }}</span>{% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">{{ t('contacts.empty') }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

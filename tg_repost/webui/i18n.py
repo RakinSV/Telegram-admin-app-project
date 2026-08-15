@@ -108,6 +108,129 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.moderation": {"ru": "Модерация", "en": "Moderation"},
     "nav.ads": {"ru": "Реклама", "en": "Ads"},
     "nav.invites": {"ru": "Инвайты", "en": "Invites"},
+    "nav.contacts": {"ru": "Участники", "en": "Contacts"},
+    "nav.segments": {"ru": "Сегменты", "en": "Segments"},
+
+    # --- F63: CRM участников ---
+    "contacts.title": {"ru": "Участники", "en": "Contacts"},
+    "contacts.intro": {
+        "ru": "Карточка собирается из всех источников: откуда пришёл, кто "
+              "привёл, насколько активен, как ведёт себя в чате. Хранятся "
+              "только ваши теги и заметки — остальное читается из системы.",
+        "en": "The card is assembled from every source: where they came from, "
+              "who invited them, how active they are, how they behave in chat. "
+              "Only your tags and notes are stored — the rest is read live.",
+    },
+    "contacts.filter_label": {"ru": "Фильтр по тегу", "en": "Filter by tag"},
+    "contacts.all_tagged": {"ru": "все с тегами", "en": "all tagged"},
+    "contacts.person": {"ru": "Человек", "en": "Person"},
+    "contacts.tags": {"ru": "Теги", "en": "Tags"},
+    "contacts.origin": {"ru": "Источник", "en": "Origin"},
+    "contacts.points": {"ru": "Очки", "en": "Points"},
+    "contacts.invites": {"ru": "Привёл", "en": "Invited"},
+    "contacts.status": {"ru": "Статус", "en": "Status"},
+    "contacts.organic": {"ru": "органика", "en": "organic"},
+    "contacts.banned": {"ru": "бан", "en": "banned"},
+    "contacts.trusted": {"ru": "доверенный", "en": "trusted"},
+    "contacts.left": {"ru": "ушёл", "en": "left"},
+    "contacts.empty": {
+        "ru": "Пока никого. Теги появляются, когда вы их проставите — "
+              "начните с карточки любого участника.",
+        "en": "Nobody yet. Tags appear once you add them — start from any "
+              "member's card.",
+    },
+    "contacts.truncated": {
+        "ru": "Показано {shown} из {total}. Для полной выборки — «Экспорт».",
+        "en": "Showing {shown} of {total}. Use Export for the full list.",
+    },
+    "contact_detail.facts": {"ru": "Что о нём известно", "en": "What we know"},
+    "contact_detail.origin": {"ru": "Откуда пришёл", "en": "Came from"},
+    "contact_detail.organic_hint": {
+        "ru": "Пришёл не по нашей ссылке: поиск, добавлен админом или ссылка "
+              "создана вручную в Telegram. Это ответ, а не отсутствие данных.",
+        "en": "Did not arrive through our link: search, added by an admin, or "
+              "a link created manually in Telegram. That is an answer, not "
+              "missing data.",
+    },
+    "contact_detail.first_seen": {"ru": "Впервые замечен", "en": "First seen"},
+    "contact_detail.membership": {"ru": "Участие", "en": "Membership"},
+    "contact_detail.still_in": {"ru": "в чате", "en": "still in chat"},
+    "contact_detail.invited_by": {"ru": "Кто привёл", "en": "Invited by"},
+    "contact_detail.confirmed_invites": {"ru": "Привёл сам", "en": "Invited by them"},
+    "contact_detail.confirmed_hint": {
+        "ru": "Только подтверждённые: приглашённый вступил, написал и прожил "
+              "в группе положенный срок.",
+        "en": "Confirmed only: the invitee joined, wrote a message and stayed "
+              "for the required period.",
+    },
+    "contact_detail.activity": {"ru": "Активность", "en": "Activity"},
+    "contact_detail.activity_value": {
+        "ru": "{points} очков · уровень {level} · серия {streak} дн. · "
+              "{correct} верных ответов",
+        "en": "{points} points · level {level} · {streak}-day streak · "
+              "{correct} correct answers",
+    },
+    "contact_detail.moderation": {"ru": "Модерация", "en": "Moderation"},
+    "contact_detail.no_guardian_data": {
+        "ru": "Guardian о нём ничего не знает (или сейчас недоступен)",
+        "en": "Guardian knows nothing about them (or is unavailable now)",
+    },
+    "contact_detail.warns": {"ru": "варнов: {n}", "en": "warnings: {n}"},
+    "contact_detail.verified": {"ru": "прошёл капчу", "en": "passed captcha"},
+    "contact_detail.no_tags": {"ru": "Тегов пока нет.", "en": "No tags yet."},
+    "contact_detail.tag_placeholder": {"ru": "например, покупатель", "en": "e.g. customer"},
+    "contact_detail.tag_hint": {
+        "ru": "Тег вешается на человека, а не на чат: «постоянный покупатель» "
+              "останется таковым во всех ваших группах. Регистр и лишние "
+              "пробелы не важны.",
+        "en": "A tag belongs to the person, not the chat: «regular customer» "
+              "stays true across all your groups. Case and extra spaces do "
+              "not matter.",
+    },
+    "contact_detail.note": {"ru": "Заметка", "en": "Note"},
+    "contact_detail.note_hint": {
+        "ru": "Видна только вам. Пустая заметка удаляется.",
+        "en": "Visible only to you. An empty note is deleted.",
+    },
+    "segments.title": {"ru": "Сегменты", "en": "Segments"},
+    "segments.intro": {
+        "ru": "Сегмент — это ЗАПРОС, а не список. Состав пересчитывается "
+              "каждый раз, поэтому он не устаревает: получил человек тег — "
+              "сразу попал, ушёл из чата — сразу выпал.",
+        "en": "A segment is a QUERY, not a list. Membership is recomputed "
+              "every time, so it never goes stale: tag someone and they are "
+              "in, they leave the chat and they are out.",
+    },
+    "segments.name": {"ru": "Название", "en": "Name"},
+    "segments.conditions": {"ru": "Условия", "en": "Conditions"},
+    "segments.size": {"ru": "Сейчас в сегменте", "en": "Currently in segment"},
+    "segments.size_hint": {
+        "ru": "посчитано только что", "en": "computed just now",
+    },
+    "segments.empty": {"ru": "Сегментов пока нет.", "en": "No segments yet."},
+    "segments.new": {"ru": "Новый сегмент", "en": "New segment"},
+    "segments.field_tag": {"ru": "Есть тег", "en": "Has tag"},
+    "segments.field_min_points": {"ru": "Очков не меньше", "en": "Points at least"},
+    "segments.field_origin": {"ru": "Пришёл по кампании", "en": "Came from campaign"},
+    "segments.field_active_only": {
+        "ru": "Только те, кто ещё в чате", "en": "Only those still in chat",
+    },
+    "segments.field_everyone": {"ru": "ВСЕ участники", "en": "EVERYONE"},
+    "segments.everyone_hint": {
+        "ru": "«Все» — отдельная галочка и ни с чем не сочетается. Так "
+              "сегмент на всю базу нельзя получить по ошибке: разосланные "
+              "сообщения не отзываются.",
+        "en": "«Everyone» is a separate checkbox and combines with nothing. "
+              "That way a whole-base segment cannot happen by accident: sent "
+              "messages cannot be recalled.",
+    },
+    "segments.confirm_delete": {
+        "ru": "Удалить сегмент?", "en": "Delete this segment?",
+    },
+    "segments.error_points_number": {
+        "ru": "«Очков не меньше» должно быть числом",
+        "en": "«Points at least» must be a number",
+    },
     "nav.polls": {"ru": "Опросы", "en": "Polls"},
     "nav.export": {"ru": "Экспорт / Импорт", "en": "Export / Import"},
     "nav.telethon_sessions": {"ru": "Telethon-сессии", "en": "Telethon sessions"},
