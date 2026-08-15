@@ -96,8 +96,22 @@ def parse_steps(raw: object) -> tuple[Step, ...]:
     return tuple(steps)
 
 
-def save(name: str, steps: list, *, trigger: str = TRIGGER_START, is_active: bool = False) -> int:
-    """Создать или обновить воронку по имени."""
+def save(
+    name: str,
+    steps: list,
+    *,
+    funnel_id: int | None = None,
+    trigger: str = TRIGGER_START,
+    is_active: bool = False,
+) -> int:
+    """Создать или обновить воронку.
+
+    Без `funnel_id` — upsert ПО ИМЕНИ: так удобно заводить воронку из кода,
+    не заботясь, есть она уже или нет. С `funnel_id` — правка конкретной
+    строки, включая переименование. Разница существенна: форма
+    редактирования без этого превращала бы смену имени в создание второй
+    воронки, и человек молча оказывался бы записан в обе.
+    """
     clean_name = name.strip()
     if not clean_name:
         raise InvalidFunnel("Имя воронки не может быть пустым")
@@ -110,7 +124,24 @@ def save(name: str, steps: list, *, trigger: str = TRIGGER_START, is_active: boo
         ensure_ascii=False,
     )
     with session_scope() as session:
-        row = session.query(Funnel).filter(Funnel.name == clean_name).first()
+        row = None
+        if funnel_id is not None:
+            row = session.get(Funnel, funnel_id)
+            if row is None:
+                raise InvalidFunnel("Воронка не найдена")
+            # Имя — не украшение: по нему идёт upsert из кода и по нему
+            # владелец узнаёт воронку в журнале. Два одинаковых имени
+            # сделали бы и то и другое неоднозначным.
+            twin = (
+                session.query(Funnel.id)
+                .filter(Funnel.name == clean_name, Funnel.id != funnel_id)
+                .first()
+            )
+            if twin is not None:
+                raise InvalidFunnel(f"Воронка «{clean_name}» уже есть")
+            row.name = clean_name
+        else:
+            row = session.query(Funnel).filter(Funnel.name == clean_name).first()
         if row is None:
             row = Funnel(name=clean_name, trigger=trigger, steps_json=payload)
             session.add(row)
@@ -151,10 +182,19 @@ def set_active(funnel_id: int, active: bool) -> bool:
 
 
 def delete(funnel_id: int) -> bool:
+    """Удалить воронку вместе с её запусками.
+
+    Запуски чистим ЯВНО, хотя во внешнем ключе стоит `ondelete="CASCADE"`:
+    SQLite не включает `PRAGMA foreign_keys` по умолчанию (проверено —
+    значение 0), поэтому каскад там декоративен. Без явной чистки остались
+    бы висячие запуски в статусе «идёт» без воронки, а отложенные задачи
+    молча завершались бы, не найдя её.
+    """
     with session_scope() as session:
         row = session.get(Funnel, funnel_id)
         if row is None:
             return False
+        session.query(FunnelRun).filter(FunnelRun.funnel_id == funnel_id).delete()
         session.delete(row)
         return True
 

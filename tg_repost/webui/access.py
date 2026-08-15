@@ -62,6 +62,9 @@ _POLICY: dict[str, str] = {
     "/contacts": ROLE_EDITOR,
     "/segments": ROLE_EDITOR,
     "/broadcasts": ROLE_EDITOR,
+    # Воронка — та же рассылка, только растянутая во времени, поэтому и
+    # роль та же, что у `/broadcasts`.
+    "/funnels": ROLE_EDITOR,
     "/ad-requests": ROLE_EDITOR,
     "/calendar": ROLE_EDITOR,
     "/guardian": ROLE_EDITOR,

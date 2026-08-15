@@ -111,6 +111,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.contacts": {"ru": "Участники", "en": "Contacts"},
     "nav.segments": {"ru": "Сегменты", "en": "Segments"},
     "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
+    "nav.funnels": {"ru": "Воронки", "en": "Funnels"},
     "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
     "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
     "nav.users": {"ru": "Пользователи", "en": "Users"},
@@ -395,6 +396,91 @@ STRINGS: dict[str, dict[str, str]] = {
     "mediakit.post": {"ru": "Пост", "en": "Post"},
     "mediakit.views": {"ru": "Просмотры", "en": "Views"},
     "mediakit.date": {"ru": "Дата", "en": "Date"},
+
+    # --- F71: воронки ---
+    "funnels.title": {"ru": "Воронки", "en": "Funnels"},
+    "funnels.intro": {
+        "ru": "Цепочка сообщений с задержками: человек нажал «Запустить» у "
+              "бота — и получает шаги по очереди. Цепочка обрывается, если "
+              "он отписался, заблокировал бота или воронку выключили.",
+        "en": "A chain of messages with delays: a person presses «Start» in "
+              "the bot and receives the steps one by one. The chain stops if "
+              "they unsubscribe, block the bot, or the funnel is turned off.",
+    },
+    "funnels.create": {"ru": "Новая воронка", "en": "New funnel"},
+    "funnels.name": {"ru": "Название", "en": "Name"},
+    "funnels.steps": {"ru": "Шаги", "en": "Steps"},
+    "funnels.steps_n": {"ru": "{n} шт.", "en": "{n}"},
+    "funnels.total_span": {"ru": "растянута на {h} ч", "en": "spans {h} h"},
+    "funnels.people": {"ru": "Люди", "en": "People"},
+    "funnels.running_n": {"ru": "идут: {n}", "en": "in progress: {n}"},
+    "funnels.done_n": {"ru": "дошли: {n}", "en": "finished: {n}"},
+    "funnels.stopped_n": {"ru": "сорвались: {n}", "en": "stopped: {n}"},
+    "funnels.state": {"ru": "Состояние", "en": "State"},
+    "funnels.active": {"ru": "включена", "en": "on"},
+    "funnels.paused": {"ru": "выключена", "en": "off"},
+    "funnels.start": {"ru": "Включить", "en": "Turn on"},
+    "funnels.stop": {"ru": "Выключить", "en": "Turn off"},
+    "funnels.delete": {"ru": "Удалить", "en": "Delete"},
+    "funnels.confirm_activate": {
+        "ru": "Включить воронку? С этого момента каждый, кто запустит бота, "
+              "начнёт получать цепочку.",
+        "en": "Turn the funnel on? From now on everyone who starts the bot "
+              "will begin receiving the chain.",
+    },
+    "funnels.confirm_delete": {
+        "ru": "Удалить воронку? Вместе с ней пропадёт история прохождений, "
+              "восстановить её нечем.",
+        "en": "Delete the funnel? Its run history goes with it and cannot be "
+              "restored.",
+    },
+    "funnels.empty": {"ru": "Воронок пока нет.", "en": "No funnels yet."},
+    "funnels.reach_note": {
+        "ru": "Воронка доходит только до тех, кто запускал бота: Telegram не "
+              "даёт боту написать первым.",
+        "en": "A funnel only reaches people who started the bot: Telegram "
+              "does not let a bot write first.",
+    },
+    "funnels.trigger_note": {
+        "ru": "Запускается, когда человек нажимает «Запустить» у бота. Других "
+              "триггеров намеренно нет: каждый — это точка, где воронка может "
+              "выстрелить неожиданно.",
+        "en": "Starts when a person presses «Start» in the bot. Other "
+              "triggers are deliberately absent: each one is a place where a "
+              "funnel could fire unexpectedly.",
+    },
+    "funnels.steps_hint": {
+        "ru": "Часы отсчитываются от предыдущего шага, а у первого — от "
+              "запуска. Пустой текст = строки нет: так шаг и добавляется, и "
+              "удаляется.",
+        "en": "Hours count from the previous step, and for the first one from "
+              "enrollment. Empty text = no row: that is how a step is both "
+              "added and removed.",
+    },
+    "funnels.after_hours": {"ru": "Шаг {n}, через (ч)", "en": "Step {n}, after (h)"},
+    "funnels.step_placeholder": {
+        "ru": "Текст сообщения. Пусто — шага нет.",
+        "en": "Message text. Empty means no step.",
+    },
+    "funnels.save": {"ru": "Сохранить", "en": "Save"},
+    "funnels.back": {"ru": "К списку", "en": "Back to list"},
+    "funnels.warn_in_flight": {
+        "ru": "Сейчас по цепочке идут {n} чел. Позиция хранится номером шага: "
+              "вставите шаг в середину — ушедшие дальше получат чужое "
+              "сообщение, уберёте хвост — их цепочка закончится досрочно.",
+        "en": "{n} people are going through the chain right now. Position is "
+              "stored as a step number: insert a step in the middle and those "
+              "further along get someone else's message; cut the tail and "
+              "their chain ends early.",
+    },
+    "funnels.error_no_steps": {
+        "ru": "У воронки нет шагов — включать нечего.",
+        "en": "The funnel has no steps — there is nothing to turn on.",
+    },
+    "funnels.error_delay_not_number": {
+        "ru": "Шаг {n}: задержка должна быть числом часов.",
+        "en": "Step {n}: the delay must be a number of hours.",
+    },
 
     # --- F64: рассылки по сегменту ---
     "broadcasts.title": {"ru": "Рассылки", "en": "Broadcasts"},

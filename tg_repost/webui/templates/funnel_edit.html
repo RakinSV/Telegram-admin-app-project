@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ funnel.name if funnel else t('funnels.create') }}</h1>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+{% if running %}
+<p class="badge warn">{{ t('funnels.warn_in_flight', n=running) }}</p>
+{% endif %}
+
+<form method="post" action="/funnels/save">
+  {% if funnel %}<input type="hidden" name="funnel_id" value="{{ funnel.id }}">{% endif %}
+  <div class="field-row">
+    <label for="name">{{ t('funnels.name') }}</label>
+    <input id="name" name="name" style="flex:1;" required
+           value="{{ name if name is defined else (funnel.name if funnel else '') }}">
+  </div>
+  <p class="hint">{{ t('funnels.trigger_note') }}</p>
+
+  <h2>{{ t('funnels.steps') }}</h2>
+  <p class="muted">{{ t('funnels.steps_hint') }}</p>
+  {% for row in rows %}
+  <div class="field-row" style="align-items: flex-start;">
+    <label for="delay_{{ loop.index }}">{{ t('funnels.after_hours', n=loop.index) }}</label>
+    <input id="delay_{{ loop.index }}" name="delay_hours" type="number" min="0"
+           style="width: 90px;" value="{{ row.delay_hours }}">
+    <textarea name="text" rows="3" style="flex:1;"
+              placeholder="{{ t('funnels.step_placeholder') }}">{{ row.text }}</textarea>
+  </div>
+  {% endfor %}
+
+  <button type="submit">{{ t('funnels.save') }}</button>
+  <a href="/funnels">{{ t('funnels.back') }}</a>
+</form>
+{% endblock %}
