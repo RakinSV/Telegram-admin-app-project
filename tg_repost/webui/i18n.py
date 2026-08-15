@@ -114,6 +114,50 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
     "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
     "nav.users": {"ru": "Пользователи", "en": "Users"},
+    "nav.calendar": {"ru": "Календарь", "en": "Calendar"},
+
+    # --- F72: контент-календарь ---
+    "calendar.title": {"ru": "Контент-календарь", "en": "Content calendar"},
+    "calendar.intro": {
+        "ru": "Слева от сегодня — что реально вышло. Справа — только то, что "
+              "запланировано явной датой, и брони рекламы. Посты без даты "
+              "здесь не показаны: система публикует их «когда дойдёт "
+              "очередь», и раскладывать их по дням значило бы придумать "
+              "расписание, которого нет.",
+        "en": "Left of today — what actually went out. Right — only what is "
+              "planned with an explicit date, plus ad bookings. Undated posts "
+              "are not shown: the system publishes them «when their turn "
+              "comes», and spreading them over days would invent a schedule "
+              "that does not exist.",
+    },
+    "calendar.channel": {"ru": "Канал", "en": "Channel"},
+    "calendar.show": {"ru": "Показать", "en": "Show"},
+    "calendar.queue": {"ru": "в очереди без даты: {n}", "en": "queued without a date: {n}"},
+    "calendar.queue_hint": {
+        "ru": "Они выйдут в ближайшие слоты расписания, по мере очереди.",
+        "en": "They will go out in the next scheduled slots, in order.",
+    },
+    "calendar.awaiting": {"ru": "ждут владельца: {n}", "en": "awaiting owner: {n}"},
+    "calendar.awaiting_title": {
+        "ru": "Одобрено редактором, ждёт владельца",
+        "en": "Approved by editor, awaiting owner",
+    },
+    "calendar.awaiting_not_owner": {
+        "ru": "Подтвердить может только владелец — это и есть смысл второго "
+              "уровня согласования.",
+        "en": "Only the owner can confirm — that is the point of the second "
+              "approval level.",
+    },
+    "calendar.approve": {"ru": "Подтвердить", "en": "Confirm"},
+    "calendar.grid": {"ru": "Сетка", "en": "Grid"},
+    "calendar.day": {"ru": "День", "en": "Day"},
+    "calendar.content": {"ru": "Свои посты", "en": "Own posts"},
+    "calendar.ad": {"ru": "Реклама", "en": "Ad"},
+    "calendar.today": {"ru": "сегодня", "en": "today"},
+    "calendar.published": {"ru": "вышло", "en": "published"},
+    "calendar.planned": {"ru": "запланировано", "en": "planned"},
+    "calendar.waiting_owner": {"ru": "ждёт владельца", "en": "awaiting owner"},
+    "calendar.move": {"ru": "Перенести", "en": "Move"},
 
     # --- F37: роли и доступ ---
     "access.denied": {

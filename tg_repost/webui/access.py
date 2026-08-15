@@ -48,6 +48,10 @@ _POLICY: dict[str, str] = {
     "/export": ROLE_OWNER,
     "/users": ROLE_OWNER,
     "/guardian/settings": ROLE_OWNER,
+    # Календарь открыт редактору (ниже), но ПОДТВЕРЖДЕНИЕ поста — только
+    # владельцу. Работает за счёт правила «побеждает самый длинный
+    # префикс»: `/calendar/approve` длиннее `/calendar`.
+    "/calendar/approve": ROLE_OWNER,
     # --- редактор: контент и модерация ---
     "/sources": ROLE_EDITOR,
     "/targets": ROLE_EDITOR,
@@ -59,6 +63,7 @@ _POLICY: dict[str, str] = {
     "/segments": ROLE_EDITOR,
     "/broadcasts": ROLE_EDITOR,
     "/ad-requests": ROLE_EDITOR,
+    "/calendar": ROLE_EDITOR,
     "/guardian": ROLE_EDITOR,
     # --- аналитик: только смотреть ---
     "/": ROLE_ANALYST,

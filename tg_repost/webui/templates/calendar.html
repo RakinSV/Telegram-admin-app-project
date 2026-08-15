@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('calendar.title') }}</h1>
+<p class="muted">{{ t('calendar.intro') }}</p>
+
+{% if targets %}
+<form method="get" action="/calendar" class="field-row">
+  <label for="chat_id">{{ t('calendar.channel') }}</label>
+  <select id="chat_id" name="chat_id" onchange="this.form.submit()">
+    {% for tg in targets %}
+    <option value="{{ tg.chat_id }}" {{ 'selected' if tg.chat_id == selected else '' }}>
+      {{ tg.title or tg.chat_id }}
+    </option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">{{ t('calendar.show') }}</button></noscript>
+</form>
+{% endif %}
+
+<div class="check-list">
+  <span class="badge muted">{{ t('calendar.queue', n=view.undated_queue) }}</span>
+  {% if view.awaiting_owner %}
+  <span class="badge warn">{{ t('calendar.awaiting', n=view.awaiting_owner) }}</span>
+  {% endif %}
+</div>
+<p class="hint">{{ t('calendar.queue_hint') }}</p>
+
+{% if awaiting %}
+<h2>{{ t('calendar.awaiting_title') }}</h2>
+{% if not is_owner %}
+<p class="hint">{{ t('calendar.awaiting_not_owner') }}</p>
+{% endif %}
+<table>
+  {% for post in awaiting %}
+  <tr>
+    <td>#{{ post.post_id }}</td>
+    <td>{{ post.snippet }}</td>
+    <td>
+      {% if is_owner %}
+      <form method="post" action="/calendar/approve/{{ post.post_id }}">
+        <button type="submit">{{ t('calendar.approve') }}</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>{{ t('calendar.grid') }}</h2>
+<table>
+  <tr>
+    <th>{{ t('calendar.day') }}</th>
+    <th>{{ t('calendar.content') }}</th>
+    <th>{{ t('calendar.ad') }}</th>
+  </tr>
+  {% for cell in view.days %}
+  <tr{% if cell.is_today %} style="font-weight:600;"{% endif %}>
+    <td>
+      {{ cell.day.strftime('%d.%m') }}
+      {% if cell.is_today %}<span class="badge">{{ t('calendar.today') }}</span>{% endif %}
+    </td>
+    <td>
+      {% for post in cell.posts %}
+      <div>
+        {% if post.is_published %}
+        <span class="badge muted">{{ t('calendar.published') }}</span>
+        {% elif post.needs_owner_approval %}
+        <span class="badge warn">{{ t('calendar.waiting_owner') }}</span>
+        {% else %}
+        <span class="badge">{{ t('calendar.planned') }}</span>
+        {% endif %}
+        #{{ post.post_id }} {{ post.snippet }}
+        {% if not post.is_published %}
+        <form method="post" action="/calendar/{{ post.post_id }}/schedule"
+              style="display:inline;">
+          <input type="date" name="day" value="{{ cell.day }}">
+          <button type="submit" class="secondary">{{ t('calendar.move') }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}
+      <span class="muted">—</span>
+      {% endfor %}
+    </td>
+    <td>
+      {% if cell.ad_advertiser %}
+      <span class="badge warn">{{ cell.ad_advertiser }}</span>
+      {% else %}
+      <span class="muted">—</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
