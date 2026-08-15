@@ -1,4 +1,4 @@
-"""Каркас бота Engage (пункт 8.3): конфиг, токен из шифрованной БД,
+﻿"""Каркас бота Engage (пункт 8.3): конфиг, токен из шифрованной БД,
 разбор deep-link — фундамент для F42 (рефералы), F44 (конкурсы), F47 (предложка).
 """
 
@@ -48,7 +48,11 @@ def test_parse_payload_none_for_plain_start():
 
 async def test_start_answers_without_payload():
     message = SimpleNamespace(
-        from_user=SimpleNamespace(id=1), answer=AsyncMock(),
+        # username/first_name есть у настоящего Telegram-объекта всегда —
+        # заглушка без них давала бы ложную уверенность, что код к ним
+        # обращаться не должен (F64 записывает контакт именно отсюда).
+        from_user=SimpleNamespace(id=1, username="tester", first_name="Тест"),
+        answer=AsyncMock(),
     )
     await start.on_start(message, SimpleNamespace(args=None), AsyncMock())
     message.answer.assert_awaited_once()
@@ -57,7 +61,11 @@ async def test_start_answers_without_payload():
 async def test_start_answers_on_unknown_payload():
     """Ссылку могли скопировать из старого поста — молчать нельзя."""
     message = SimpleNamespace(
-        from_user=SimpleNamespace(id=1), answer=AsyncMock(),
+        # username/first_name есть у настоящего Telegram-объекта всегда —
+        # заглушка без них давала бы ложную уверенность, что код к ним
+        # обращаться не должен (F64 записывает контакт именно отсюда).
+        from_user=SimpleNamespace(id=1, username="tester", first_name="Тест"),
+        answer=AsyncMock(),
     )
     await start.on_start(message, SimpleNamespace(args="whoknows_1"), AsyncMock())
     message.answer.assert_awaited_once()

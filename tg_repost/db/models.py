@@ -656,6 +656,47 @@ class ContactTag(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class BotSubscriber(Base):
+    """Человек, с которым бот ВООБЩЕ может заговорить (F64).
+
+    ЭТО НЕ НАШЕ ОГРАНИЧЕНИЕ, А ПРАВИЛО TELEGRAM: бот не может написать
+    первым. Личная переписка открывается только когда человек сам нажал
+    «Запустить» или пришёл по deep-link. До этого момента любая попытка
+    отправить ему сообщение вернёт ошибку.
+
+    Отсюда следствие, которое легко упустить: сегмент из 8000 участников
+    группы может быть достижим на сотню человек. Показывать владельцу только
+    размер сегмента — значит вводить его в заблуждение, поэтому у рассылки
+    всегда две цифры: сколько в сегменте и скольким реально можно написать.
+
+    `is_blocked` — человек заблокировал бота. Пробовать снова бессмысленно,
+    пока он сам не разблокирует; сбрасывается при новом сообщении от него.
+    `unsubscribed_at` — отписался от рассылок кнопкой. Это РАЗНЫЕ вещи:
+    первое решает Telegram, второе — человек, и путать их нельзя.
+    """
+
+    __tablename__ = "bot_subscribers"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_bot_subscriber"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class ContactSegment(Base):
     """Сохранённый сегмент участников (F63) — ЗАПРОС, а не список.
 

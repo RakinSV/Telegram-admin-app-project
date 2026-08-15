@@ -70,6 +70,16 @@ async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
     user = message.from_user
     user_id = user.id if user is not None else 0
 
+    # F64: с этого момента боту РАЗРЕШЕНО писать человеку — Telegram не даёт
+    # заговорить первым, и `/start` это единственный момент, когда разрешение
+    # появляется. Не записать его здесь значит навсегда потерять получателя.
+    if user is not None and user_id:
+        from tg_repost import subscribers_repo
+
+        subscribers_repo.record_contact(
+            user_id, username=user.username, first_name=user.first_name,
+        )
+
     if link is None:
         await message.answer(_WELCOME)
         return
