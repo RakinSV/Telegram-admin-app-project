@@ -1973,6 +1973,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Once a week the AI compiles top posts into a digest and "
         "publishes it like a regular post.",
     },
+    "settings.group.utm.title": {
+        "ru": "UTM-метки на ссылках", "en": "UTM tags on links",
+    },
+    "settings.group.utm.desc": {
+        "ru": "Дописывает метки к внешним ссылкам при публикации — внешняя "
+        "аналитика видит, какой пост принёс переходы. Ссылки на Telegram НЕ "
+        "размечаются: метки там бессмысленны, а инвайт-ссылку лишний "
+        "параметр может сломать.",
+        "en": "Appends tags to external links at publish time so external "
+        "analytics can tell which post drove the visits. Telegram links are "
+        "NOT tagged: tags are meaningless there, and an extra parameter can "
+        "break an invite link.",
+    },
     "settings.group.approval.title": {
         "ru": "Согласование постов", "en": "Post approval",
     },
@@ -2540,6 +2553,13 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.digest_minute.label": {"ru": "Минута", "en": "Minute"},
     "settings.field.digest_top_n.label": {"ru": "Постов в дайджест", "en": "Posts in digest"},
     "settings.field.digest_window_days.label": {"ru": "Окно отбора, дней", "en": "Selection window, days"},
+    # F59 — UTM-метки.
+    "settings.field.utm_enabled.label": {"ru": "Включены", "en": "Enabled"},
+    "settings.field.utm_source.label": {"ru": "utm_source", "en": "utm_source"},
+    "settings.field.utm_medium.label": {"ru": "utm_medium", "en": "utm_medium"},
+    "settings.field.utm_campaign.label": {
+        "ru": "utm_campaign (можно {post_id})", "en": "utm_campaign (may use {post_id})",
+    },
     # F72 — согласование постов.
     "settings.field.require_owner_approval.label": {
         "ru": "Редактор одобрил → ждём владельца",

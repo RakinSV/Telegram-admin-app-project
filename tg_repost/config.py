@@ -671,6 +671,18 @@ class Settings(BaseSettings):
     digest_top_n: int = Field(5, alias="DIGEST_TOP_N")
     digest_window_days: int = Field(7, alias="DIGEST_WINDOW_DAYS")
 
+    # --- F59: UTM-метки на исходящих ссылках ---
+    # Если канал гонит трафик на сайт, без меток невозможно понять, какой
+    # пост принёс переходы. Ссылки на Telegram не размечаются никогда:
+    # метки там бессмысленны, а инвайт-ссылку лишний параметр может сломать.
+    utm_enabled: bool = Field(False, alias="UTM_ENABLED")
+    utm_source: str = Field("telegram", alias="UTM_SOURCE")
+    utm_medium: str = Field("channel", alias="UTM_MEDIUM")
+    # `{post_id}` подставляется. Именно id, а не дата: в отчёте аналитики он
+    # однозначно указывает на конкретный пост, а «2026-08-15» смешает все
+    # посты одного дня.
+    utm_campaign: str = Field("post_{post_id}", alias="UTM_CAMPAIGN")
+
     # --- F72: контент-календарь и согласование ---
     # Пост, одобренный редактором, ждёт подтверждения владельца. ВЫКЛЮЧЕНО
     # по умолчанию: навязывать согласование там, где владелец работает один

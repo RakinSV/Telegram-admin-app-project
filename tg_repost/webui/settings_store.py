@@ -398,6 +398,20 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "обзор и ставит его в обычный пайплайн модерации/публикации.",
     ),
     SettingsGroup(
+        "utm", "UTM-метки на ссылках — F59",
+        (
+            SettingField("utm_enabled", "Включены", "bool"),
+            SettingField("utm_source", "utm_source", "str"),
+            SettingField("utm_medium", "utm_medium", "str"),
+            SettingField("utm_campaign", "utm_campaign (можно {post_id})", "str"),
+        ),
+        "Дописывает метки к внешним ссылкам при публикации — так внешняя "
+        "аналитика видит, какой пост принёс переходы. Ссылки на Telegram "
+        "НЕ размечаются: метки там бессмысленны, а инвайт-ссылку лишний "
+        "параметр может сломать. Ссылка, уже содержащая utm_source, "
+        "остаётся как есть.",
+    ),
+    SettingsGroup(
         "approval", "Согласование постов — F72",
         (
             SettingField(

@@ -14,7 +14,7 @@ from pathlib import Path
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
 
-from tg_repost import languages, post_targets_repo
+from tg_repost import languages, post_targets_repo, utm
 from tg_repost.config import get_settings
 from tg_repost.db.models import (
     Post,
@@ -262,6 +262,20 @@ async def publish_post(bot: Bot, post_id: int) -> None:
             )
             return
         text = post.rewritten_text or post.original_text
+        # F59: метки проставляются В МОМЕНТ ПУБЛИКАЦИИ, а не при рерайте.
+        # Так их видно в превью модерации ровно такими, какими они уйдут, и
+        # смена настроек не требует переписывать уже готовые посты.
+        settings_for_utm = get_settings()
+        if settings_for_utm.utm_enabled and text:
+            text = utm.tag_links(
+                text,
+                utm.build_params(
+                    source=settings_for_utm.utm_source,
+                    medium=settings_for_utm.utm_medium,
+                    campaign_template=settings_for_utm.utm_campaign,
+                    post_id=post.id,
+                ),
+            )
         media_path = post.media_path
         # F33: опрос не может нести медиа — игнорируем media_path, если он
         # каким-то образом оказался задан на POLL-посте (валидация на входе
