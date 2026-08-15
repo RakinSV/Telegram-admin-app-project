@@ -734,6 +734,68 @@ class ContactTag(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class Funnel(Base):
+    """Цепочка сообщений с задержками (F71).
+
+    ЛИНЕЙНАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ, БЕЗ ВЕТВЛЕНИЙ — и это осознанный предел.
+    Полноценный движок сценариев с условиями и ветками разрастается
+    бесконечно: за ветвлением просят циклы, за циклами переменные, и в итоге
+    получается плохой язык программирования внутри админки. Реальные задачи
+    владельца — онбординг новичка и цепочка напоминаний — линейны.
+
+    Шаги хранятся JSON-списком: `[{"delay_hours": 24, "text": "..."}]`.
+    Колонки под них означали бы отдельную таблицу и join ради данных,
+    которые всегда читаются целиком.
+    """
+
+    __tablename__ = "funnels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    # Что запускает воронку: "start" — человек нажал «Запустить» у бота.
+    # Список намеренно короткий: каждый новый триггер это точка, где воронка
+    # может выстрелить неожиданно, и заводить их про запас опасно.
+    trigger: Mapped[str] = mapped_column(String(32), default="start")
+    steps_json: Mapped[str] = mapped_column(Text, default="[]")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class FunnelRun(Base):
+    """Прохождение воронки конкретным человеком (F71).
+
+    Уникальность по паре (воронка, человек) — защита от повторного
+    прохождения: человек, дважды нажавший «Запустить», иначе получил бы всю
+    цепочку дважды.
+    """
+
+    __tablename__ = "funnel_runs"
+    __table_args__ = (
+        UniqueConstraint("funnel_id", "user_id", name="uq_funnel_run"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    funnel_id: Mapped[int] = mapped_column(
+        ForeignKey("funnels.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # Индекс СЛЕДУЮЩЕГО шага. Хранить пройденный значило бы каждый раз
+    # прибавлять единицу и однажды забыть это сделать.
+    next_step: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # running | done | stopped
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    # Почему остановилась: человек отписался, стал недостижим, воронку
+    # выключили. Без причины «остановлена» выглядит как сбой.
+    stop_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class SupportThread(Base):
     """Переписка с одним человеком в поддержке (F68).
 
