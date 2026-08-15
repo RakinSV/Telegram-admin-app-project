@@ -590,6 +590,64 @@ class AdBrief(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class AdRequest(Base):
+    """Заявка рекламодателя на место в сетке (F66).
+
+    НЕДОСТАЮЩЕЕ ЗВЕНО между F21 и F35. Бриф (`ad_briefs`) — это уже принятая
+    к работе задача для ИИ, журнал дохода (`ad_revenue`) — уже полученные
+    деньги. А как заявка приходит, где она ждёт решения и чем занято
+    расписание — не знал никто, и владелец держал это в переписке.
+
+    ЖИЗНЕННЫЙ ЦИКЛ: `new` → `accepted` → `published`, либо `declined`.
+    Принятие СОЗДАЁТ бриф, публикация — запись дохода. Так три сущности
+    связываются в одну цепочку, и «сколько мы заработали на этом
+    рекламодателе» перестаёт быть вопросом к памяти.
+
+    ДВОЙНАЯ ПРОДАЖА МЕСТА — главная опасность фичи. Две принятые заявки на
+    одну дату в одном канале означают, что владелец пообещал одно и то же
+    двоим; кто-то из них узнает об этом уже после оплаты. Проверка живёт в
+    `ad_requests_repo.accept`, а не в базе: объяснить человеку, с кем именно
+    конфликт, важнее, чем получить ошибку уникальности.
+    """
+
+    __tablename__ = "ad_requests"
+    __table_args__ = (
+        # Горячий запрос — «что занято в этом канале»: календарь и проверка
+        # конфликта идут ровно по этой паре.
+        Index("ix_ad_requests_slot", "chat_id", "slot_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # Как связаться с рекламодателем: @username, почта, что угодно. Свободный
+    # текст намеренно — заявки приходят разными путями, и загонять их в
+    # формат означало бы терять те, что не подошли.
+    advertiser: Mapped[str] = mapped_column(String(255))
+    brief_text: Mapped[str] = mapped_column(Text)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
+    # Дата размещения. Именно дата, а не время: сетка канала планируется по
+    # дням, а конкретный час выбирает умное расписание (F19).
+    slot_date: Mapped[date_type] = mapped_column(Date)
+    # new | accepted | declined | published
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)
+    # Заполняются при переходах — так видно, что из чего выросло.
+    ad_brief_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ad_briefs.id"), nullable=True
+    )
+    ad_revenue_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ad_revenue.id"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class AdRevenue(Base):
     """Ручная запись рекламного дохода (F35) — НЕ интеграция с биржей (нет
     партнёрского API-доступа ни к одной конкретной бирже, решено с
