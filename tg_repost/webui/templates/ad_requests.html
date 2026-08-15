@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('ad_requests.title') }}</h1>
+<p class="muted">{{ t('ad_requests.intro') }}</p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+{% if not targets %}
+<p class="muted">{{ t('ad_requests.no_channels') }}</p>
+{% else %}
+
+<form method="get" action="/ad-requests" class="field-row">
+  <label for="chat_id">{{ t('ad_requests.channel') }}</label>
+  <select id="chat_id" name="chat_id" onchange="this.form.submit()">
+    {% for tg in targets %}
+    <option value="{{ tg.chat_id }}" {{ 'selected' if tg.chat_id == selected else '' }}>
+      {{ tg.title or tg.chat_id }}
+    </option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">{{ t('ad_requests.show') }}</button></noscript>
+</form>
+
+<h2>{{ t('ad_requests.calendar') }}</h2>
+<p class="hint">{{ t('ad_requests.calendar_hint') }}</p>
+<div class="check-list">
+  {% for cell in calendar %}
+  <span class="badge {{ 'warn' if cell.taken else 'muted' }}"
+        title="{{ cell.taken.advertiser if cell.taken else t('ad_requests.free') }}">
+    {{ cell.day.strftime('%d.%m') }}{% if cell.taken %} · {{ cell.taken.advertiser }}{% endif %}
+  </span>
+  {% endfor %}
+</div>
+
+<h2>{{ t('ad_requests.list') }}</h2>
+<table>
+  <tr>
+    <th>{{ t('ad_requests.date') }}</th>
+    <th>{{ t('ad_requests.advertiser') }}</th>
+    <th>{{ t('ad_requests.brief') }}</th>
+    <th>{{ t('ad_requests.price') }}</th>
+    <th>{{ t('ad_requests.status') }}</th>
+    <th>{{ t('ad_requests.actions') }}</th>
+  </tr>
+  {% for req in requests %}
+  <tr>
+    <td>{{ req.slot_date.strftime('%Y-%m-%d') }}</td>
+    <td>{{ req.advertiser }}</td>
+    <td>{{ req.brief_text[:100] }}{% if req.brief_text|length > 100 %}…{% endif %}</td>
+    <td>{% if req.price %}{{ req.price }} {{ req.currency }}{% else %}—{% endif %}</td>
+    <td>{{ t('ad_requests.status_' + req.status) }}</td>
+    <td>
+      {% if req.status == statuses.new %}
+      <form method="post" action="/ad-requests/{{ req.id }}/accept" style="display:inline;">
+        <button type="submit">{{ t('ad_requests.accept') }}</button>
+      </form>
+      <form method="post" action="/ad-requests/{{ req.id }}/decline" style="display:inline;">
+        <button type="submit" class="secondary">{{ t('ad_requests.decline') }}</button>
+      </form>
+      {% elif req.status == statuses.accepted %}
+      <form method="post" action="/ad-requests/{{ req.id }}/publish" style="display:inline;">
+        <input type="text" name="amount" size="8"
+               placeholder="{{ req.price or '' }}">
+        <button type="submit">{{ t('ad_requests.publish') }}</button>
+      </form>
+      <div class="hint">{{ t('ad_requests.publish_hint') }}</div>
+      {% endif %}
+      {% if req.status != statuses.published %}
+      <form method="post" action="/ad-requests/{{ req.id }}/delete" style="display:inline;"
+            onsubmit="return confirm('{{ t('ad_requests.confirm_delete') }}');">
+        <button type="submit" class="secondary">✕</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">{{ t('ad_requests.empty') }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>{{ t('ad_requests.new') }}</h2>
+<form method="post" action="/ad-requests">
+  <input type="hidden" name="chat_id" value="{{ selected }}">
+  <div class="field-row">
+    <label for="advertiser">{{ t('ad_requests.advertiser') }}</label>
+    <input type="text" id="advertiser" name="advertiser" style="flex:1;" required
+           placeholder="{{ t('ad_requests.advertiser_placeholder') }}">
+  </div>
+  <div class="field-row">
+    <label for="slot_date">{{ t('ad_requests.date') }}</label>
+    <input type="date" id="slot_date" name="slot_date" value="{{ today }}" required>
+    <label for="price">{{ t('ad_requests.price') }}</label>
+    <input type="text" id="price" name="price" size="10">
+  </div>
+  <div class="field-row" style="align-items: flex-start;">
+    <label for="brief_text">{{ t('ad_requests.brief') }}</label>
+    <textarea id="brief_text" name="brief_text" rows="4" style="flex:1;" required></textarea>
+  </div>
+  <div class="hint">{{ t('ad_requests.brief_hint') }}</div>
+  <button type="submit">{{ t('common.add') }}</button>
+</form>
+{% endif %}
+{% endblock %}

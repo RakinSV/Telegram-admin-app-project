@@ -112,6 +112,78 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.segments": {"ru": "Сегменты", "en": "Segments"},
     "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
     "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
+    "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
+
+    # --- F66: заявки рекламодателей и бронь мест ---
+    "ad_requests.title": {"ru": "Заявки на рекламу", "en": "Ad requests"},
+    "ad_requests.intro": {
+        "ru": "Заявка → принята → опубликована. Принятие создаёт бриф для ИИ, "
+              "публикация — запись дохода. Одну дату нельзя продать дважды.",
+        "en": "Request → accepted → published. Accepting creates an AI brief, "
+              "publishing records revenue. One date cannot be sold twice.",
+    },
+    "ad_requests.no_channels": {
+        "ru": "Сначала добавьте целевой канал.", "en": "Add a target channel first.",
+    },
+    "ad_requests.channel": {"ru": "Канал", "en": "Channel"},
+    "ad_requests.show": {"ru": "Показать", "en": "Show"},
+    "ad_requests.calendar": {"ru": "Сетка на месяц", "en": "Month grid"},
+    "ad_requests.calendar_hint": {
+        "ru": "Оранжевым — занятые даты. Занимают только принятые и "
+              "опубликованные заявки: отказ место не держит.",
+        "en": "Orange marks booked dates. Only accepted and published "
+              "requests hold a slot; a decline does not.",
+    },
+    "ad_requests.free": {"ru": "свободно", "en": "free"},
+    "ad_requests.list": {"ru": "Заявки", "en": "Requests"},
+    "ad_requests.date": {"ru": "Дата", "en": "Date"},
+    "ad_requests.advertiser": {"ru": "Рекламодатель", "en": "Advertiser"},
+    "ad_requests.advertiser_placeholder": {
+        "ru": "@username, почта — как удобно", "en": "@username, email — whatever",
+    },
+    "ad_requests.brief": {"ru": "Бриф", "en": "Brief"},
+    "ad_requests.brief_hint": {
+        "ru": "Текст-задание, по которому ИИ напишет рекламный пост. При "
+              "принятии заявки бриф создаётся с лимитом в одно "
+              "использование — оплачено одно размещение.",
+        "en": "The task text the AI will write the ad post from. On accepting, "
+              "the brief is created with a single-use limit — one placement "
+              "was paid for.",
+    },
+    "ad_requests.price": {"ru": "Цена", "en": "Price"},
+    "ad_requests.status": {"ru": "Статус", "en": "Status"},
+    "ad_requests.actions": {"ru": "Действия", "en": "Actions"},
+    "ad_requests.status_new": {"ru": "новая", "en": "new"},
+    "ad_requests.status_accepted": {"ru": "принята", "en": "accepted"},
+    "ad_requests.status_declined": {"ru": "отклонена", "en": "declined"},
+    "ad_requests.status_published": {"ru": "опубликована", "en": "published"},
+    "ad_requests.accept": {"ru": "Принять", "en": "Accept"},
+    "ad_requests.decline": {"ru": "Отклонить", "en": "Decline"},
+    "ad_requests.publish": {"ru": "Размещено", "en": "Published"},
+    "ad_requests.publish_hint": {
+        "ru": "Сумму можно поправить: договорились на одну, получили другую.",
+        "en": "The amount can be corrected: agreed one, received another.",
+    },
+    "ad_requests.confirm_delete": {
+        "ru": "Удалить заявку?", "en": "Delete this request?",
+    },
+    "ad_requests.empty": {"ru": "Заявок пока нет.", "en": "No requests yet."},
+    "ad_requests.new": {"ru": "Новая заявка", "en": "New request"},
+    "ad_requests.error_bad_date": {
+        "ru": "Дата не распознана.", "en": "Date not recognised.",
+    },
+    "ad_requests.error_bad_price": {
+        "ru": "Цена должна быть числом.", "en": "Price must be a number.",
+    },
+    "ad_requests.error_need_fields": {
+        "ru": "Нужны рекламодатель и бриф.", "en": "Advertiser and brief are required.",
+    },
+    "ad_requests.error_slot_taken": {
+        "ru": "На {date} уже принята заявка от {who}. Продать одно место "
+              "дважды нельзя — сначала откажите одному из них.",
+        "en": "A request from {who} is already accepted for {date}. One slot "
+              "cannot be sold twice — decline one of them first.",
+    },
 
     # --- F65: медиакит для рекламодателя ---
     "mediakit.title": {"ru": "Медиакит", "en": "Media kit"},
