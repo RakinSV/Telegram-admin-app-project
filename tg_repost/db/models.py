@@ -624,6 +624,62 @@ class ChannelGrowthSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class QueuedTask(Base):
+    """Долгая операция, переживающая рестарт процесса (фаза 11, решение 3).
+
+    ЗАЧЕМ НЕ APScheduler И НЕ CELERY. Планировщик умеет «запустить в 9:00»,
+    но не умеет «продолжить с 4312-го получателя». Рассылка на 10 000 человек
+    идёт минутами, упирается в лимиты Telegram и обязана переживать рестарт —
+    а Celery с Redis ради этого означал бы второй сервис в развёртывании
+    ради свойства, которое даёт обычная строка в БД.
+
+    КУРСОР — СЕРДЦЕ ТАБЛИЦЫ. Обработчик двигает `cursor` по мере работы, и
+    именно он делает задачу возобновляемой: после обрыва она продолжается с
+    места, а не начинается заново. Что лежит в курсоре — дело обработчика:
+    для рассылки это id последнего получателя, для воронки — номер шага.
+
+    АРЕНДА ВМЕСТО ФЛАГА «ВЫПОЛНЯЕТСЯ». Если процесс упал посреди задачи,
+    статус `running` остался бы навсегда, и задача молча зависла бы — самый
+    неприятный вид поломки, потому что снаружи всё выглядит рабочим. Поэтому
+    `running` действителен, пока обработчик обновляет `updated_at`; протухшую
+    аренду подбирает следующий воркер.
+    """
+
+    __tablename__ = "queued_tasks"
+    __table_args__ = (
+        # Выборка «что взять следующим» идёт ровно по этой тройке.
+        Index("ix_queued_tasks_pick", "status", "run_after", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    # Что за задача: под неё зарегистрирован обработчик (см. `task_queue`).
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    # Параметры задачи, JSON. Хранится строкой: набор полей у каждого вида
+    # свой, и заводить под них колонки значило бы менять схему на каждую
+    # новую фичу.
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    # Прогресс. Семантика — на стороне обработчика (см. docstring класса).
+    cursor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    done_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # pending | running | done | failed | canceled
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Не раньше этого момента. Отложенные шаги воронок (F71) — это оно.
+    run_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
 class ChannelStatsSnapshot(Base):
     """Снимок статистики канала из MTProto Stats API (F56).
 
