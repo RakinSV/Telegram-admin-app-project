@@ -46,5 +46,33 @@
 <p class="muted">⚠️ {{ t('growth.footnote') }}</p>
 {% endif %}
 
+{% if fraud %}
+<div class="card">
+  <h2>{{ t('fraud.title') }}</h2>
+  <p class="muted">{{ t('fraud.desc') }}</p>
+  <table>
+    <tr><th>{{ t('fraud.col_channel') }}</th><th>{{ t('fraud.col_verdict') }}</th></tr>
+    {% for target, verdict in fraud %}
+    <tr>
+      <td>{{ target.title or target.chat_id }}</td>
+      <td>
+        {% if not verdict.enough_data %}
+        <span class="muted">{{ t('fraud.not_enough_data', have=verdict.snapshots, need=6) }}</span>
+        {% elif verdict.looks_suspicious %}
+        <span class="badge warn">{{ t('fraud.suspicious') }}</span>
+        {% for finding in verdict.findings %}
+        <div class="muted">{{ t('fraud.code_' + finding.code) }}: {{ finding.detail }}</div>
+        {% endfor %}
+        {% else %}
+        <span class="badge ok">{{ t('fraud.clean') }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="hint">{{ t('fraud.caution') }}</p>
+</div>
+{% endif %}
+
 <p><a href="/stats">{{ t('growth.back_link') }}</a></p>
 {% endblock %}

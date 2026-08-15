@@ -1668,6 +1668,42 @@ STRINGS: dict[str, dict[str, str]] = {
         "draw cause-and-effect conclusions from them alone.",
     },
 
+    # --- F60: детектор накрутки ---
+    "fraud.title": {"ru": "Признаки накрутки", "en": "Signs of inflated growth"},
+    "fraud.desc": {
+        "ru": "Накрутка видна не в точке, а в ФОРМЕ кривой — поэтому считается "
+        "по накопленной истории снимков, а не по сегодняшним цифрам. Разовые "
+        "чекеры этого не умеют: у них истории нет.",
+        "en": "Inflated growth shows up in the SHAPE of the curve, not in a "
+        "single point — so it is computed from the accumulated snapshot "
+        "history rather than today's numbers. One-shot checkers cannot do "
+        "this: they have no history.",
+    },
+    "fraud.col_channel": {"ru": "Канал", "en": "Channel"},
+    "fraud.col_verdict": {"ru": "Что видно", "en": "What is visible"},
+    "fraud.not_enough_data": {
+        "ru": "мало данных: снимков {have}, нужно {need}",
+        "en": "not enough data: {have} snapshots, {need} needed",
+    },
+    "fraud.suspicious": {"ru": "есть признаки", "en": "signs present"},
+    "fraud.clean": {"ru": "ничего подозрительного", "en": "nothing suspicious"},
+    "fraud.code_sawtooth": {
+        "ru": "«пила»: резкий приход и такой же уход",
+        "en": "«sawtooth»: a sharp inflow followed by the same outflow",
+    },
+    "fraud.code_growth_without_reach": {
+        "ru": "подписчиков прибыло, а охват не вырос",
+        "en": "subscribers grew while reach did not",
+    },
+    "fraud.caution": {
+        "ru": "Формулировки осторожные намеренно: видна форма кривой, а не "
+        "намерение. Резкий приход и уход бывает и у честного канала — "
+        "например, после виральной публикации.",
+        "en": "The wording is deliberately careful: what is visible is the "
+        "shape of the curve, not intent. A sharp rise and fall also happens "
+        "to an honest channel — after a viral post, for instance.",
+    },
+
     # --- Настройки (общие для страницы) ---
     "settings.title": {"ru": "Настройки и секреты", "en": "Settings & secrets"},
     "settings.intro": {

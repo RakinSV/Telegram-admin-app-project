@@ -29,6 +29,7 @@ from tg_repost import (
     ad_marking,
     clusters_repo,
     discovered_chats_repo,
+    fraud_detector,
     post_targets_repo,
     post_variants_repo,
     sources_repo,
@@ -1030,9 +1031,23 @@ def build_crud_router() -> APIRouter:
         report = build_growth_report(
             settings.growth_report_window_days, settings.growth_min_snapshots
         )
+        # F60: детектор накрутки живёт ЗДЕСЬ, потому что считает он ровно по
+        # тем снимкам, которые эта страница и показывает. До аудита 2026-08-16
+        # он не вызывался ниоткуда: фича числилась реализованной, а владелец
+        # не имел способа увидеть её вывод.
+        fraud = [
+            (target, fraud_detector.analyze(
+                target.chat_id, window_days=settings.growth_report_window_days,
+            ))
+            for target in targets_repo.list_targets() if target.is_active
+        ]
         return _templates.TemplateResponse(
             request, "growth.html",
-            {"report": report, "window_days": settings.growth_report_window_days},
+            {
+                "report": report,
+                "window_days": settings.growth_report_window_days,
+                "fraud": fraud,
+            },
         )
 
     # --- Журнал изменений + живые логи (F23, Фаза 5.4) ---
