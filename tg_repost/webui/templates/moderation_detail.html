@@ -39,6 +39,13 @@
 </p>
 {% endif %}
 
+{% if ad_label is not none %}
+<p class="{{ 'badge ok' if ad_label else 'badge warn' }}">
+  {% if ad_label %}{{ ad_label }}{% else %}{{ t('moderation_detail.ad_marking_missing') }}{% endif %}
+</p>
+<p class="hint">{{ t('moderation_detail.ad_marking_hint') }}</p>
+{% endif %}
+
 <div class="card">
   <form method="post" action="/moderation/{{ post.id }}/edit">
     <textarea name="rewritten_text" rows="14">{{ post.rewritten_text or post.original_text or '' }}</textarea>

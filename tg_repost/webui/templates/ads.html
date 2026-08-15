@@ -30,11 +30,56 @@
       <td>{{ b.brief_text[:80] }}{{ '…' if b.brief_text|length > 80 else '' }}</td>
       <td>{% if b.is_active %}{{ m.confirm_form('/ads/%d/disable'|format(b.id), t('common.deactivate')) }}{% endif %}</td>
     </tr>
+    {% if ad_marking_enabled %}
+    <tr>
+      <td colspan="6">
+        <form method="post" action="/ads/{{ b.id }}/marking" class="inline-form">
+          <input type="text" name="advertiser_legal_name" value="{{ b.advertiser_legal_name or '' }}"
+                 placeholder="{{ t('ads.marking_legal_name') }}">
+          <input type="text" name="advertiser_inn" value="{{ b.advertiser_inn or '' }}"
+                 placeholder="{{ t('ads.marking_inn') }}">
+          <input type="text" name="erid" value="{{ b.erid or '' }}"
+                 placeholder="{{ t('ads.marking_erid') }}">
+          <button type="submit" class="secondary">{{ t('common.save') }}</button>
+          {% if not b.erid %}<span class="badge warn">{{ t('ads.marking_missing') }}</span>{% endif %}
+        </form>
+      </td>
+    </tr>
+    {% endif %}
     {% else %}
     <tr><td colspan="6" class="muted">{{ t('common.empty_list') }}</td></tr>
     {% endfor %}
   </table>
 </div>
+
+{% if ad_marking_enabled %}
+<h2>{{ t('ads.ord_title') }}</h2>
+<p class="muted">{{ t('ads.ord_desc') }}</p>
+{% if unmarked_count %}
+<p class="badge warn">{{ t('ads.ord_unmarked', n=unmarked_count) }}</p>
+{% endif %}
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('ads.ord_col_date') }}</th><th>{{ t('ads.ord_col_advertiser') }}</th>
+      <th>erid</th><th>{{ t('ads.ord_col_text') }}</th>
+    </tr>
+    {% for row in ord_report %}
+    <tr>
+      <td>{{ row.posted_at.strftime("%Y-%m-%d") if row.posted_at else "" }}</td>
+      <td>
+        {{ row.advertiser_legal_name or "—" }}
+        {% if row.advertiser_inn %}<div class="muted">ИНН {{ row.advertiser_inn }}</div>{% endif %}
+      </td>
+      <td>{% if row.erid %}{{ row.erid }}{% else %}<span class="badge warn">{{ t('ads.marking_missing') }}</span>{% endif %}</td>
+      <td>{{ row.text[:80] }}{{ '…' if row.text|length > 80 else '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">{{ t('ads.ord_empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
 
 <h2>{{ t('ads.revenue_title') }}</h2>
 <p class="muted">{{ t('ads.revenue_desc') }}</p>

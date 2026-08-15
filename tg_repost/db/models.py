@@ -603,6 +603,19 @@ class AdBrief(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     brief_text: Mapped[str] = mapped_column(Text)
+    # --- F62: маркировка рекламы ---
+    # Токен erid выдаёт ОРД на КРЕАТИВ, а креатив здесь — это бриф: из него
+    # рождается ровно один рекламный пост (`max_uses=1` у заявок F66).
+    # Поэтому маркировка живёт тут, а не на посте: пост может быть перегенерён,
+    # а токен относится к согласованному креативу и не меняется.
+    #
+    # ИНТЕГРАЦИИ С API ОРД НЕТ И НЕ ПЛАНИРУЕТСЯ на этом этапе: регистрация
+    # креатива требует договора с оператором и происходит вне системы.
+    # Владелец получает токен там и вставляет сюда. Честнее пустое поле,
+    # чем видимость автоматизации, которой нет.
+    advertiser_legal_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    advertiser_inn: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    erid: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # NULL — без ограничения по числу использований.
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -646,6 +659,12 @@ class AdRequest(Base):
     # текст намеренно — заявки приходят разными путями, и загонять их в
     # формат означало бы терять те, что не подошли.
     advertiser: Mapped[str] = mapped_column(String(255))
+    # F62: юридическое имя и ИНН нужны в самой пометке «Реклама», а поле
+    # `advertiser` выше — это КОНТАКТ (@username, почта). Одним полем не
+    # обойтись: в пометку нельзя поставить телеграм-ник, а писать по
+    # юрлицу неудобно.
+    advertiser_legal_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    advertiser_inn: Mapped[str | None] = mapped_column(String(32), nullable=True)
     brief_text: Mapped[str] = mapped_column(Text)
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)

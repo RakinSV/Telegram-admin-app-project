@@ -186,7 +186,16 @@ def accept(request_id: int) -> int | None:
         # Бриф создаётся с лимитом в одно использование: заявка оплачена за
         # ОДНО размещение, и бриф, который ИИ возьмёт повторно, — это
         # бесплатная реклама за наш счёт.
-        brief = AdBrief(brief_text=row.brief_text, max_uses=1)
+        # F62: реквизиты КОПИРУЮТСЯ на бриф, а не читаются из заявки по
+        # ссылке. Заявку могут потом поправить — рекламодатель переименуется,
+        # уточнится ИНН, — а в отчёт ОРД должно уйти то, что стояло в самом
+        # опубликованном посте.
+        brief = AdBrief(
+            brief_text=row.brief_text,
+            max_uses=1,
+            advertiser_legal_name=row.advertiser_legal_name,
+            advertiser_inn=row.advertiser_inn,
+        )
         session.add(brief)
         session.flush()
 

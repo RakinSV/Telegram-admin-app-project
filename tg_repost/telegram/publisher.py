@@ -14,7 +14,7 @@ from pathlib import Path
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import RetryAfter
 
-from tg_repost import languages, post_targets_repo, utm
+from tg_repost import ad_marking, languages, post_targets_repo, utm
 from tg_repost.config import get_settings
 from tg_repost.db.models import (
     Post,
@@ -262,6 +262,21 @@ async def publish_post(bot: Bot, post_id: int) -> None:
             )
             return
         text = post.rewritten_text or post.original_text
+        # F62: маркировка рекламы. Проверяется ДО отправки и до всего
+        # остального: пост без erid не должен уйти ни в одну цель, а
+        # обнаружить это после первой успешной отправки уже поздно.
+        marking_settings = get_settings()
+        if marking_settings.ad_marking_enabled and post.kind == PostKind.AD:
+            marking = ad_marking.marking_of(post.ad_brief_id)
+            if marking is None or not marking.is_complete:
+                reason = (
+                    "маркировка включена, но у рекламного поста нет erid "
+                    "или рекламодателя"
+                )
+                logger.error("Публикация поста %s отменена: %s", post_id, reason)
+                post.set_status(PostStatus.FAILED, reason=reason)
+                return
+            text = ad_marking.apply_label(text or "", marking)
         # F59: метки проставляются В МОМЕНТ ПУБЛИКАЦИИ, а не при рерайте.
         # Так их видно в превью модерации ровно такими, какими они уйдут, и
         # смена настроек не требует переписывать уже готовые посты.

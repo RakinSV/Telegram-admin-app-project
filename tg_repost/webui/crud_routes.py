@@ -27,6 +27,7 @@ from fastapi.templating import Jinja2Templates
 from guardian import settings_store as guardian_settings_store
 
 from tg_repost import (
+    ad_marking,
     clusters_repo,
     discovered_chats_repo,
     post_targets_repo,
@@ -117,9 +118,22 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
         clusters_repo.sources_for(post.cluster_id, exclude_post_id=post_id)
         if post is not None else []
     )
+    # F62: пометка «Реклама…» показывается ЗДЕСЬ, хотя приписывается при
+    # публикации. Владелец подтверждает пост, а пометка — юридическое
+    # заявление о том, кто рекламодатель; увидеть её впервые уже в канале
+    # означало бы согласовать вслепую. Пустая, если маркировка выключена или
+    # пост не рекламный.
+    ad_label = None
+    if get_settings().ad_marking_enabled and post is not None and post.kind == PostKind.AD:
+        marking = ad_marking.marking_of(post.ad_brief_id)
+        ad_label = (
+            ad_marking.build_label(marking)
+            if marking is not None and marking.is_complete else ""
+        )
     return {
         "post": post,
         "error": error,
+        "ad_label": ad_label,
         "rewrite_variants": rewrite_variants,
         "active_editorial_notes": active_editorial_notes,
         "cluster_sources": cluster_sources,
@@ -820,6 +834,11 @@ def build_crud_router() -> APIRouter:
             "revenue": revenue,
             "revenue_totals": ads_revenue_repo.total_by_currency(revenue),
             "error": error,
+            # F62: блок маркировки рисуется только когда она включена — иначе
+            # на странице висели бы три пустых поля без объяснения, зачем они.
+            "ad_marking_enabled": get_settings().ad_marking_enabled,
+            "ord_report": ad_marking.report(),
+            "unmarked_count": ad_marking.unmarked_count(),
         }
 
     @router.get("/ads", response_class=HTMLResponse)
@@ -842,6 +861,33 @@ def build_crud_router() -> APIRouter:
             )
         brief = ads_repo.add_brief(brief_text.strip(), max_uses_int)
         audit.record_audit("ad_brief_add", target=f"#{brief.id}", detail=brief.brief_text[:80])
+        return RedirectResponse(url="/ads", status_code=303)
+
+    @router.post("/ads/{brief_id}/marking")
+    async def ads_set_marking(
+        request: Request,
+        brief_id: int,
+        advertiser_legal_name: str = Form(""),
+        advertiser_inn: str = Form(""),
+        erid: str = Form(""),
+    ) -> Response:
+        """F62: реквизиты и токен ОРД на бриф.
+
+        Вводится вручную и это не недоделка: креатив регистрируется у
+        оператора по договору, вне системы. Изображать здесь автоматическую
+        выдачу токена значило бы показывать работу, которой не происходит.
+        """
+        del request
+        if ads_repo.set_marking(
+            brief_id,
+            advertiser_legal_name=advertiser_legal_name,
+            advertiser_inn=advertiser_inn,
+            erid=erid,
+        ):
+            audit.record_audit(
+                "ad_brief_marking", target=f"#{brief_id}",
+                detail=f"erid {'задан' if erid.strip() else 'очищен'}",
+            )
         return RedirectResponse(url="/ads", status_code=303)
 
     @router.post("/ads/{brief_id}/disable")

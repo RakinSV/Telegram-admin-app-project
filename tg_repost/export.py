@@ -11,6 +11,7 @@ import io
 import json
 from datetime import datetime
 
+from tg_repost import post_stats_repo
 from tg_repost.db.models import Post, PostStat, PostStatus, PostTarget
 from tg_repost.db.session import session_scope
 
@@ -52,18 +53,21 @@ def export_posts(since: datetime | None = None, until: datetime | None = None) -
             query = query.filter(Post.posted_at <= until)
         posts = query.order_by(Post.posted_at).all()
 
+        # Пятая копия «последнего снимка» жила здесь и повторяла ту же
+        # ошибку, что и остальные четыре: сортировку только по `captured_at`,
+        # без тай-брейка по `id`. Часы на Windows тикают ~15 мс, два замера
+        # подряд регулярно получают одинаковую метку, и при равенстве порядок
+        # строк не определён. Цена ошибки именно здесь выше обычного: этот
+        # экспорт делается для передачи канала и для комплаенса, то есть
+        # цифры из него однажды предъявят наружу.
+        stats = post_stats_repo.latest_stats_for(session, [post.id for post in posts])
+
         rows = []
         for post in posts:
             targets = (
                 session.query(PostTarget).filter(PostTarget.post_id == post.id).all()
             )
-            latest_stat = (
-                session.query(PostStat)
-                .filter(PostStat.post_id == post.id)
-                .order_by(PostStat.captured_at.desc())
-                .first()
-            )
-            rows.append(_post_row(post, targets, latest_stat))
+            rows.append(_post_row(post, targets, stats.get(post.id)))
         return rows
 
 

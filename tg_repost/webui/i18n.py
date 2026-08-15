@@ -1251,6 +1251,20 @@ STRINGS: dict[str, dict[str, str]] = {
               "or the site returned no text (paywall, JS rendering, timeout).",
     },
     "moderation_detail.source_link": {"ru": "Источник", "en": "Source"},
+    # --- F62: маркировка рекламы в предпросмотре ---
+    "moderation_detail.ad_marking_missing": {
+        "ru": "Маркировка не заполнена — пост не опубликуется",
+        "en": "Marking is incomplete — the post will not be published",
+    },
+    "moderation_detail.ad_marking_hint": {
+        "ru": "Эта строка будет добавлена в НАЧАЛО поста при публикации. "
+              "Рекламодатель и erid заполняются в брифе на странице «Реклама»; "
+              "токен выдаёт ОРД, интеграции с ним у системы нет.",
+        "en": "This line will be prepended to the post when published. The "
+              "advertiser and erid are filled in on the brief at the «Ads» "
+              "page; the token is issued by the ad-data operator, the system "
+              "has no integration with it.",
+    },
     "moderation_detail.save_text": {"ru": "Сохранить текст", "en": "Save text"},
     "moderation_detail.approve": {"ru": "✅ Одобрить", "en": "✅ Approve"},
     "moderation_detail.retry": {"ru": "↻ Повторить рерайт", "en": "↻ Retry rewrite"},
@@ -1333,6 +1347,34 @@ STRINGS: dict[str, dict[str, str]] = {
     "ads.col_used": {"ru": "Использован", "en": "Used"},
     "ads.col_limit": {"ru": "Лимит", "en": "Limit"},
     "ads.col_text": {"ru": "Текст", "en": "Text"},
+    # --- F62: маркировка рекламы ---
+    "ads.marking_legal_name": {
+        "ru": "Рекламодатель для пометки", "en": "Advertiser for the label",
+    },
+    "ads.marking_inn": {"ru": "ИНН (если есть)", "en": "Tax ID (if any)"},
+    "ads.marking_erid": {"ru": "erid от ОРД", "en": "erid from the operator"},
+    "ads.marking_missing": {"ru": "нет erid", "en": "no erid"},
+    "ads.ord_title": {"ru": "Отчёт по маркировке", "en": "Marking report"},
+    "ads.ord_desc": {
+        "ru": "Опубликованные рекламные посты. Размещения без erid показаны "
+              "здесь же намеренно: именно они и создают проблему, прятать их "
+              "в красивом отчёте бессмысленно. Токен выдаёт ОРД по договору, "
+              "интеграции с его API у системы нет.",
+        "en": "Published ad posts. Placements without an erid are shown here "
+              "on purpose: those are exactly the problem, hiding them behind "
+              "a tidy report helps nobody. The token is issued by the ad-data "
+              "operator under contract; the system has no API integration.",
+    },
+    "ads.ord_unmarked": {
+        "ru": "Без erid опубликовано: {n}", "en": "Published without erid: {n}",
+    },
+    "ads.ord_col_date": {"ru": "Дата", "en": "Date"},
+    "ads.ord_col_advertiser": {"ru": "Рекламодатель", "en": "Advertiser"},
+    "ads.ord_col_text": {"ru": "Пост", "en": "Post"},
+    "ads.ord_empty": {
+        "ru": "Рекламных постов ещё не публиковалось.",
+        "en": "No ad posts have been published yet.",
+    },
     "ads.error_invalid_max_uses": {
         "ru": "Лимит показов должен быть целым неотрицательным числом или пустым.",
         "en": "The usage cap must be a non-negative integer or blank.",
@@ -2183,6 +2225,30 @@ STRINGS: dict[str, dict[str, str]] = {
         "брифов (страница «Реклама»).",
         "en": "Every Nth published post is paired with an ad from a brief "
         "(the “Ads” page).",
+    },
+    "settings.group.ad_marking.title": {
+        "ru": "Маркировка рекламы", "en": "Ad marking",
+    },
+    "settings.group.ad_marking.desc": {
+        "ru": "Дописывает в НАЧАЛО рекламного поста пометку «Реклама. "
+        "<рекламодатель>. erid: <токен>». В начало, а не в конец: Telegram "
+        "сворачивает длинный текст, и пометка под «показать полностью» "
+        "формально есть, а фактически не видна. Пока включено, рекламный "
+        "пост БЕЗ erid не публикуется — опубликовать с половиной маркировки "
+        "хуже, чем не опубликовать, потому что ушедший пост не отозвать. "
+        "Токен выдаёт ОРД на креатив и вставляется в бриф вручную: "
+        "интеграции с API оператора нет, регистрация требует договора.",
+        "en": "Prepends «Реклама. <advertiser>. erid: <token>» to an ad post. "
+        "At the start, not the end: Telegram collapses long text, and a label "
+        "hidden behind «show more» exists formally but is not actually seen. "
+        "While enabled, an ad post WITHOUT an erid is not published at all — "
+        "publishing with half the marking is worse than not publishing, "
+        "because a sent post cannot be recalled. The token is issued by the "
+        "ad-data operator per creative and pasted into the brief by hand: "
+        "there is no API integration, registration requires a contract.",
+    },
+    "settings.field.ad_marking_enabled.label": {
+        "ru": "Включена", "en": "Enabled",
     },
     "settings.group.growth.title": {"ru": "Growth-трекер", "en": "Growth tracker"},
     "settings.group.growth.desc": {

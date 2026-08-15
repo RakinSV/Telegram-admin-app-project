@@ -30,6 +30,30 @@ def get_brief(brief_id: int) -> AdBrief | None:
         return session.get(AdBrief, brief_id)
 
 
+def set_marking(
+    brief_id: int,
+    *,
+    advertiser_legal_name: str | None,
+    advertiser_inn: str | None,
+    erid: str | None,
+) -> bool:
+    """Проставить маркировку на бриф (F62). `False` — брифа нет.
+
+    Пустая строка сохраняется как `None`, а не как "": «не заполнено» и
+    «заполнено пустотой» должны выглядеть одинаково, иначе проверка
+    готовности маркировки начнёт зависеть от того, чистил ли кто-то поле
+    руками.
+    """
+    with session_scope() as session:
+        brief = session.get(AdBrief, brief_id)
+        if brief is None:
+            return False
+        brief.advertiser_legal_name = (advertiser_legal_name or "").strip() or None
+        brief.advertiser_inn = (advertiser_inn or "").strip() or None
+        brief.erid = (erid or "").strip() or None
+        return True
+
+
 def disable_brief(brief_id: int) -> bool:
     with session_scope() as session:
         brief = session.get(AdBrief, brief_id)
