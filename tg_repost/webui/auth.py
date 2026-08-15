@@ -41,6 +41,12 @@ _MAX_FAILED_ATTEMPTS = 5
 _LOGIN_LOCKOUT_SECONDS = 30
 _failed_attempts: dict[str, list[float]] = {}
 
+# Заведомо неподходящий хэш для сверки, когда имени нет в базе. Нужен, чтобы
+# ответ занимал столько же времени, сколько при существующем пользователе:
+# иначе разница по времени выдаёт, какие имена заведены, и подбор пароля
+# начинается уже с известного логина (F37).
+_DUMMY_HASH = _pwd_context.hash("несуществующий-пользователь")
+
 
 class NotAuthenticatedError(Exception):
     """Запрос к защищённому роуту без активной сессии.
@@ -68,8 +74,8 @@ def is_bootstrapped() -> bool:
         return session.query(AdminUser.id).first() is not None
 
 
-def create_admin(password: str) -> None:
-    """Создать единственную учётку администратора.
+def create_admin(password: str, username: str = "owner") -> None:
+    """Создать ПЕРВУЮ учётку — владельца.
 
     Бросает `RuntimeError`, если администратор уже существует — либо
     обнаружен предварительной проверкой, либо (при гонке двух одновременных
@@ -77,31 +83,69 @@ def create_admin(password: str) -> None:
     аудите Фазы 5) отловлен через `IntegrityError` на фиксированном `id=1`:
     вторая одновременная вставка с тем же PK гарантированно упадёт на
     уровне БД, а не просто на прочитанном раньше состоянии в Python.
+
+    Первая учётка ВСЕГДА владелец: иначе установка могла бы закончиться
+    системой, в которую некому войти за настройками.
     """
+    from tg_repost.webui.access import ROLE_OWNER
+
     with session_scope() as session:
         if session.query(AdminUser.id).first() is not None:
             raise RuntimeError("Администратор уже создан")
-        session.add(AdminUser(id=1, password_hash=hash_password(password)))
+        session.add(
+            AdminUser(
+                id=1,
+                username=(username or "owner").strip().lower(),
+                role=ROLE_OWNER,
+                password_hash=hash_password(password),
+            )
+        )
         try:
             session.flush()
         except IntegrityError as exc:
             raise RuntimeError("Администратор уже создан") from exc
-    logger.info("Создан администратор веб-админки")
+    logger.info("Создан владелец веб-админки")
 
 
-def verify_login(password: str) -> bool:
-    """Проверить пароль против сохранённого администратора."""
+def verify_login(password: str, username: str | None = None) -> str | None:
+    """Проверить вход. Возвращает РОЛЬ вошедшего или `None`.
+
+    `username` необязателен ради совместимости со старыми вызовами и с
+    установками, где учётка одна: если имя не передано, а пользователь в
+    системе ровно один, сверяется только пароль. Как только заведён второй
+    человек, имя обязательно — иначе непонятно, чей пароль проверять и чью
+    роль выдавать.
+
+    Пароль сверяется ВСЕГДА, даже когда имя не найдено: ранний выход по
+    отсутствию пользователя даёт разницу во времени ответа, по которой
+    перебираются существующие имена.
+    """
     with session_scope() as session:
-        admin = session.query(AdminUser).first()
+        if username:
+            admin = (
+                session.query(AdminUser)
+                .filter(AdminUser.username == username.strip().lower())
+                .first()
+            )
+        else:
+            rows = session.query(AdminUser).limit(2).all()
+            admin = rows[0] if len(rows) == 1 else None
+
         if admin is None:
-            return False
-        return verify_password(password, admin.password_hash)
+            # Сверяем с заведомо неподходящим хэшем, чтобы время ответа не
+            # выдавало, существует ли такое имя.
+            verify_password(password, _DUMMY_HASH)
+            return None
+        if not verify_password(password, admin.password_hash):
+            return None
+        return admin.role
 
 
-def log_in(request: Request) -> None:
-    """Отметить сессию запроса как авторизованную."""
+def log_in(request: Request, role: str = "owner") -> None:
+    """Отметить сессию запроса как авторизованную и запомнить роль."""
     now = time.time()
     request.session[_SESSION_KEY] = True
+    request.session["role"] = role
     request.session[_LOGIN_AT_KEY] = now
     request.session[_LAST_SEEN_KEY] = now
 

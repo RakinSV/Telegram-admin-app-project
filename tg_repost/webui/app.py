@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -20,6 +20,7 @@ from tg_repost import crypto, languages
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
+    access,
     audit,
     dashboard,
     i18n,
@@ -44,6 +45,7 @@ from tg_repost.webui.ad_requests_routes import build_ad_requests_router
 from tg_repost.webui.broadcasts_routes import build_broadcasts_router
 from tg_repost.webui.contacts_routes import build_contacts_router
 from tg_repost.webui.mediakit_routes import build_mediakit_router
+from tg_repost.webui.users_routes import build_users_router
 from tg_repost.webui.crud_routes import build_crud_router
 from tg_repost.webui.form_utils import coerce_form_value
 from tg_repost.webui.guardian_routes import build_guardian_router
@@ -89,6 +91,39 @@ class LanguageMiddleware:
         if scope["type"] == "http":
             session = scope.get("session", {})
             i18n.set_current_lang(session.get("lang", i18n.DEFAULT_LANG))
+        await self.app(scope, receive, send)
+
+
+class RoleMiddleware:
+    """Проверка роли на КАЖДЫЙ запрос (F37).
+
+    Почему middleware, а не зависимость роутера: зависимость надо не забыть
+    добавить к новому роутеру, а забытая она означает страницу вообще без
+    проверки прав. Middleware пропустить нельзя — это и есть разница между
+    «мы стараемся проверять» и «проверка есть».
+
+    Не вошедших НЕ трогает: ими занимается `require_login`, и отдавать им
+    403 вместо переадресации на вход означало бы показывать «недостаточно
+    прав» человеку, который просто не залогинен.
+
+    Обычный ASGI-мидлварь, а не `BaseHTTPMiddleware` — тот ломает потоковые
+    ответы (SSE в `/logs/stream`), та же причина, что у LanguageMiddleware.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            session = scope.get("session", {})
+            path = scope.get("path", "/")
+            if session.get("logged_in") and not access.is_exempt(path):
+                if not access.can(session.get("role"), access.required_role(path)):
+                    response = PlainTextResponse(
+                        i18n.t("access.denied"), status_code=403,
+                    )
+                    await response(scope, receive, send)
+                    return
         await self.app(scope, receive, send)
 
 
@@ -460,7 +495,9 @@ def _public_router() -> APIRouter:
         return _templates.TemplateResponse(request, "login.html", {"error": None})
 
     @router.post("/login")
-    async def login_submit(request: Request, password: str = Form(...)) -> Response:
+    async def login_submit(
+        request: Request, password: str = Form(...), username: str = Form(""),
+    ) -> Response:
         client_key = request.client.host if request.client else "unknown"
         if is_login_locked(client_key):
             return _templates.TemplateResponse(
@@ -469,7 +506,10 @@ def _public_router() -> APIRouter:
                 {"error": i18n.t("login.error_locked")},
                 status_code=429,
             )
-        if not verify_login(password):
+        # F37: имя необязательно, пока пользователь в системе один — иначе
+        # обновление сломало бы вход тем, кто ставил систему до ролей.
+        role = verify_login(password, username or None)
+        if role is None:
             register_failed_login(client_key)
             return _templates.TemplateResponse(
                 request,
@@ -478,7 +518,7 @@ def _public_router() -> APIRouter:
                 status_code=401,
             )
         clear_failed_logins(client_key)
-        log_in(request)
+        log_in(request, role)
         return RedirectResponse(url="/", status_code=303)
 
     @router.post("/logout")
@@ -733,6 +773,12 @@ def create_app() -> FastAPI:
     # scope["session"] от SessionMiddleware — поэтому Language добавляется
     # ПЕРВЫМ (окажется внутренним), Session — ПОСЛЕДНИМ (внешний, успевает
     # отработать раньше).
+    # F37: проверка роли — ОДНИМ middleware, а не зависимостью на каждом
+    # роутере. Зависимость легко забыть добавить к новому роутеру, и забытая
+    # она означает страницу без проверки прав; middleware пропустить нельзя.
+    # Добавляется раньше Session (окажется внутреннее) — ему нужна уже
+    # распарсенная сессия, как и LanguageMiddleware.
+    app.add_middleware(RoleMiddleware)
     app.add_middleware(LanguageMiddleware)
     app.add_middleware(
         SessionMiddleware,
@@ -776,4 +822,5 @@ def create_app() -> FastAPI:
     app.include_router(build_broadcasts_router())
     app.include_router(build_mediakit_router())
     app.include_router(build_ad_requests_router())
+    app.include_router(build_users_router())
     return app

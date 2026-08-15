@@ -113,6 +113,62 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
     "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
     "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
+    "nav.users": {"ru": "Пользователи", "en": "Users"},
+
+    # --- F37: роли и доступ ---
+    "access.denied": {
+        "ru": "Недостаточно прав для этой страницы.",
+        "en": "Not enough permissions for this page.",
+    },
+    "login.username_placeholder": {"ru": "Имя", "en": "Username"},
+    "login.username_hint": {
+        "ru": "Если пользователь в системе один, имя можно не вводить. "
+              "У учётки, созданной до появления ролей, имя — owner.",
+        "en": "If there is only one user, the name can be left empty. An "
+              "account created before roles existed is named owner.",
+    },
+    "users.title": {"ru": "Пользователи", "en": "Users"},
+    "users.intro": {
+        "ru": "Роли вложены: владелец может всё, редактор — контент и "
+              "модерацию, аналитик — только смотреть статистику. Страница, "
+              "не описанная в политике доступа, открыта ТОЛЬКО владельцу — "
+              "так забытая настройка не превращается в дыру.",
+        "en": "Roles are nested: the owner can do everything, the editor "
+              "handles content and moderation, the analyst only views stats. "
+              "A page not listed in the access policy is open to the OWNER "
+              "ONLY — so a forgotten entry never becomes a hole.",
+    },
+    "users.name": {"ru": "Имя", "en": "Name"},
+    "users.role": {"ru": "Роль", "en": "Role"},
+    "users.created": {"ru": "Создан", "en": "Created"},
+    "users.role_owner": {"ru": "владелец — всё, включая секреты", "en": "owner — everything, including secrets"},
+    "users.role_editor": {"ru": "редактор — контент и модерация", "en": "editor — content and moderation"},
+    "users.role_analyst": {"ru": "аналитик — только чтение статистики", "en": "analyst — read-only stats"},
+    "users.new": {"ru": "Новый пользователь", "en": "New user"},
+    "users.password": {"ru": "Пароль", "en": "Password"},
+    "users.add": {"ru": "Добавить", "en": "Add"},
+    "users.delete": {"ru": "Удалить", "en": "Delete"},
+    "users.confirm_delete": {
+        "ru": "Удалить пользователя? Он потеряет доступ немедленно.",
+        "en": "Delete this user? Access is lost immediately.",
+    },
+    "users.error_exists": {
+        "ru": "Такое имя уже занято.", "en": "That name is already taken.",
+    },
+    "users.error_short_password": {
+        "ru": "Пароль слишком короткий — минимум 12 символов.",
+        "en": "Password is too short — 12 characters minimum.",
+    },
+    "users.error_need_fields": {
+        "ru": "Нужны имя и пароль.", "en": "Name and password are required.",
+    },
+    "users.error_last_owner": {
+        "ru": "Это последний владелец. Удалить его — значит остаться без "
+              "доступа к настройкам и секретам, откуда уже не выбраться.",
+        "en": "This is the last owner. Deleting them means losing access to "
+              "settings and secrets with no way back.",
+    },
+    "users.you": {"ru": "это вы", "en": "that's you"},
 
     # --- F66: заявки рекламодателей и бронь мест ---
     "ad_requests.title": {"ru": "Заявки на рекламу", "en": "Ad requests"},

@@ -80,20 +80,38 @@ def test_create_admin_twice_raises():
 
 
 def test_verify_login_correct_password():
+    """С F37 возвращается РОЛЬ вошедшего, а не просто «да».
+
+    Сессии нужна роль сразу: спрашивать её вторым запросом означало бы
+    момент, когда человек уже вошёл, но система ещё не знает, что ему можно.
+    """
     _clear_admin_users()
     create_admin("the-real-password")
-    assert verify_login("the-real-password") is True
+    assert verify_login("the-real-password") == "owner"
+
+
+def test_verify_login_by_username():
+    _clear_admin_users()
+    create_admin("the-real-password", username="boss")
+    assert verify_login("the-real-password", "boss") == "owner"
+    assert verify_login("the-real-password", "BOSS") == "owner"  # регистр не важен
 
 
 def test_verify_login_wrong_password():
     _clear_admin_users()
     create_admin("the-real-password")
-    assert verify_login("not-the-password") is False
+    assert verify_login("not-the-password") is None
 
 
-def test_verify_login_false_when_no_admin():
+def test_verify_login_none_when_no_admin():
     _clear_admin_users()
-    assert verify_login("anything") is False
+    assert verify_login("anything") is None
+
+
+def test_verify_login_unknown_username_is_none():
+    _clear_admin_users()
+    create_admin("the-real-password", username="boss")
+    assert verify_login("the-real-password", "нетакого") is None
 
 
 def test_log_in_sets_session_keys_and_require_login_passes():

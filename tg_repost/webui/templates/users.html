@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('users.title') }}</h1>
+<p class="muted">{{ t('users.intro') }}</p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+<table>
+  <tr>
+    <th>{{ t('users.name') }}</th>
+    <th>{{ t('users.role') }}</th>
+    <th>{{ t('users.created') }}</th>
+    <th></th>
+  </tr>
+  {% for user in users %}
+  <tr>
+    <td>{{ user.username }}</td>
+    <td>{{ t('users.role_' + user.role) }}</td>
+    <td>{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</td>
+    <td>
+      <form method="post" action="/users/{{ user.id }}/delete"
+            onsubmit="return confirm('{{ t('users.confirm_delete') }}');">
+        <button type="submit" class="secondary">{{ t('users.delete') }}</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>{{ t('users.new') }}</h2>
+<form method="post" action="/users">
+  <div class="field-row">
+    <label for="username">{{ t('users.name') }}</label>
+    <input type="text" id="username" name="username" required autocomplete="off">
+    <label for="password">{{ t('users.password') }}</label>
+    <input type="password" id="password" name="password" required
+           autocomplete="new-password" minlength="12">
+  </div>
+  <div class="field-row">
+    <label for="role">{{ t('users.role') }}</label>
+    <select id="role" name="role">
+      {% for role in roles %}
+      <option value="{{ role }}" {{ 'selected' if role == 'editor' else '' }}>
+        {{ t('users.role_' + role) }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">{{ t('users.add') }}</button>
+</form>
+{% endblock %}

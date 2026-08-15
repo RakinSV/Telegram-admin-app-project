@@ -1100,16 +1100,33 @@ class Secret(Base):
 
 
 class AdminUser(Base):
-    """Учётка администратора веб-панели (F23, Фаза 5).
+    """Учётка администратора веб-панели (F23, роли — F37).
 
-    Один владелец системы (см. CLAUDE.md) — таблица рассчитана на ровно одну
-    строку, но названа во множественном числе на случай будущего расширения
-    до нескольких пользователей (не потребует миграции схемы).
+    Раньше строка была ровно одна, а вход — по одному паролю без имени. F37
+    это меняет: у бизнеса появляются сотрудники, а пригласить редактора,
+    не отдав ему заодно токены ботов и session string, при одном пароле
+    невозможно — это полный доступ к аккаунту, а не к контенту.
+
+    РОЛЬ ХРАНИТСЯ СТРОКОЙ, а не ссылкой на таблицу прав: ролей три, они
+    заданы кодом, и таблица «права роли» превратила бы понятную проверку в
+    цепочку join-ов ради гибкости, которая никому не нужна.
     """
 
     __tablename__ = "admin_users"
+    __table_args__ = (
+        # Имя индекса совпадает с миграцией 0038 НАМЕРЕННО. Тесты поднимают
+        # схему через `create_all`, прод — через alembic; если объявить
+        # уникальность только в миграции, тесты будут гонять схему БЕЗ неё, и
+        # дубли имён пройдут в тестах, но упадут у пользователя. Поймано
+        # ровно так: тест на дубликат зеленел, пока индекса не было в модели.
+        Index("ux_admin_users_username", "username", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # NULL только у строк, созданных до F37; миграция проставляет «owner».
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # owner | editor | analyst — см. `webui/access.py`.
+    role: Mapped[str] = mapped_column(String(16), default="owner", nullable=False)
     password_hash: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
