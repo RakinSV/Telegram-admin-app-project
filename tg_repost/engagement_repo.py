@@ -29,7 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from tg_repost.db.models import ChannelGrowthSnapshot, Post, PostStat, PostStatus
+from tg_repost import post_stats_repo
+from tg_repost.db.models import ChannelGrowthSnapshot, Post, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 
@@ -85,29 +86,14 @@ def _latest_stat_per_post(session, post_ids: list[int]) -> dict[int, tuple[int, 
     один и тот же пост, набравший 900, а не 1400 просмотров у трёх постов.
     Сумма завысила бы охват в разы, среднее — занизило. Верен только
     последний снимок: счётчики Telegram монотонно растут.
-    """
-    if not post_ids:
-        return {}
 
-    # Сортировка ПО ВОЗРАСТАНИЮ, а последний выигрывает за счёт того, что
-    # затирает предыдущий в словаре. Так «последний» определён однозначно.
-    #
-    # Тай-брейк по `id` обязателен, а не для красоты: гранулярность системных
-    # часов на Windows ~15 мс, поэтому два снимка подряд регулярно получают
-    # ОДИНАКОВЫЙ `captured_at`. При равенстве порядок строк не определён, и
-    # выбор «последнего» становился случайным — поймано прогоном одного теста
-    # десять раз подряд: 4 прохода, 6 падений.
-    rows = (
-        session.query(
-            PostStat.post_id, PostStat.view_count, PostStat.reaction_count, PostStat.forward_count,
-        )
-        .filter(PostStat.post_id.in_(post_ids))
-        .order_by(PostStat.captured_at.asc(), PostStat.id.asc())
-        .all()
-    )
+    Сам отбор «последнего» живёт в `post_stats_repo` — он нужен ещё трём
+    местам, и раньше был скопирован в каждое (см. docstring того модуля).
+    Здесь остаётся только распаковка под нужды расчёта.
+    """
     return {
-        post_id: (views or 0, reactions or 0, forwards or 0)
-        for post_id, views, reactions, forwards in rows
+        post_id: (stat.view_count or 0, stat.reaction_count or 0, stat.forward_count or 0)
+        for post_id, stat in post_stats_repo.latest_stats_for(session, post_ids).items()
     }
 
 

@@ -12,8 +12,9 @@ from datetime import datetime, timedelta, timezone
 
 from telegram.ext import Application
 
+from tg_repost import post_stats_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostKind, PostStat, PostStatus
+from tg_repost.db.models import Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, load_prompt
@@ -45,19 +46,10 @@ def select_top_posts_for_digest(window_days: int, top_n: int) -> list[Post]:
         if not posts:
             return []
 
-        rows: list[tuple[int, int]] = []
-        for post in posts:
-            last = (
-                session.query(PostStat)
-                .filter(PostStat.post_id == post.id)
-                # Тай-брейк по `id`: при совпадении меток времени (часы на
-                # Windows тикают ~15 мс) порядок иначе не определён — см. F53,
-                # где это ловилось прогоном одного теста десять раз подряд.
-                .order_by(PostStat.captured_at.desc(), PostStat.id.desc())
-                .first()
-            )
-            views = last.view_count if last and last.view_count is not None else 0
-            rows.append((post.id, views))
+        # Один запрос на все посты (было N+1), отбор «последнего снимка» —
+        # общий с F14/F53/F55, см. `post_stats_repo`.
+        views_by_post = post_stats_repo.latest_views_for(session, [p.id for p in posts])
+        rows: list[tuple[int, int]] = [(post.id, views_by_post.get(post.id, 0)) for post in posts]
 
         top_ids = rank_posts_by_views(rows, top_n)
         by_id = {p.id: p for p in posts}

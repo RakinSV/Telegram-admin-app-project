@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from telegram.ext import Application
 from telethon import TelegramClient
 
-from tg_repost import post_targets_repo
+from tg_repost import post_stats_repo, post_targets_repo
 from tg_repost.antiban import HourlyRateLimiter, jitter_sleep
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStat, PostStatus
@@ -273,21 +273,16 @@ def compute_stats_summary(window_days: int) -> StatsSummary:
                 avg_views=0.0, top_post_id=None, top_post_views=0,
             )
 
+        # Один запрос на все посты вместо запроса на каждый: раньше здесь был
+        # N+1, а отбор «последнего снимка» — своя копия, разошедшаяся с тремя
+        # другими такими же (см. `post_stats_repo`).
+        latest = post_stats_repo.latest_stats_for(session, [p.id for p in posts])
+
         total_views = 0
         counted = 0
         best: tuple[int, int | None] = (0, None)  # (views, post_id)
         for post in posts:
-            last = (
-                session.query(PostStat)
-                .filter(PostStat.post_id == post.id)
-                # Тай-брейк по `id` — не косметика: гранулярность системных
-                # часов на Windows ~15 мс, два снимка подряд регулярно
-                # получают одинаковый `captured_at`, и без него «последний»
-                # выбирался случайно. Поймано на F53 прогоном одного теста
-                # десять раз: 4 прохода, 6 падений.
-                .order_by(PostStat.captured_at.desc(), PostStat.id.desc())
-                .first()
-            )
+            last = latest.get(post.id)
             if last and last.view_count is not None:
                 total_views += last.view_count
                 counted += 1

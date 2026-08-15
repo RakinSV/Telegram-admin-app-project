@@ -25,8 +25,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from tg_repost import post_stats_repo
 from tg_repost.config import get_settings
-from tg_repost.db.models import Post, PostKind, PostStat, PostStatus
+from tg_repost.db.models import Post, PostKind, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
 
@@ -88,22 +89,17 @@ def select_recycle_candidates(
         if not candidates:
             return []
 
-        rows: list[tuple[int, int]] = []
-        for post_id in candidates:
-            last = (
-                session.query(PostStat)
-                .filter(PostStat.post_id == post_id)
-                # Тай-брейк по `id` — см. F53: при совпадении меток времени
-                # порядок иначе не определён.
-                .order_by(PostStat.captured_at.desc(), PostStat.id.desc())
-                .first()
-            )
-            views = last.view_count if last and last.view_count is not None else 0
+        # Один запрос на всех кандидатов (было N+1), отбор «последнего
+        # снимка» — общий с F14/F20/F53, см. `post_stats_repo`.
+        views_by_post = post_stats_repo.latest_views_for(session, candidates)
+        rows: list[tuple[int, int]] = [
+            (post_id, views_by_post.get(post_id, 0))
+            for post_id in candidates
             # Правило 4: порог. Пост без единого снимка метрик считается за 0
             # просмотров и при любом положительном пороге не проходит — это
             # верно: «не знаем, выстрелил ли» не повод повторять.
-            if views >= min_views:
-                rows.append((post_id, views))
+            if views_by_post.get(post_id, 0) >= min_views
+        ]
 
     # При равенстве просмотров — меньший id первым, чтобы порядок был
     # воспроизводимым (тот же приём, что в `digest.rank_posts_by_views`).
