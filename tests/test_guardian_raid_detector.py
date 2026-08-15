@@ -1,4 +1,4 @@
-"""Тесты антирейда (G14) — независимо на каждую защищаемую группу (F28)."""
+﻿"""Тесты антирейда (G14) — независимо на каждую защищаемую группу (F28)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from guardian import settings_store
 from guardian.config import invalidate_settings_cache
 from guardian.db.models import BotConfig, Member, ModerationLog
 from guardian.db.session import session_scope
-from guardian.handlers import admin as admin_module
+from guardian.handlers import admin as admin_module  # noqa: F401 — см. ниже
+from guardian.services import chat_admins as chat_admins_module
 from guardian.services import raid_detector
 
 CHAT_ID = -100123
@@ -205,7 +206,7 @@ async def test_check_raid_one_chat_failure_does_not_abort_the_rest(monkeypatch):
 
 
 async def test_manual_unfreeze_callback_restores_permissions():
-    admin_module._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     raid_detector._get_state(CHAT_ID).active = True
     raid_detector._get_state(CHAT_ID).saved_permissions = SimpleNamespace(can_send_messages=True)
 
@@ -228,7 +229,7 @@ async def test_manual_unfreeze_callback_restores_permissions():
 
 
 async def test_raid_callback_denied_for_non_admin():
-    admin_module._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     raid_detector._get_state(CHAT_ID).active = True
 
     callback = AsyncMock()
@@ -253,7 +254,7 @@ async def test_raid_callback_checks_admin_of_group_not_of_log_channel():
     поэтому проверка админства ДОЛЖНА идти по chat_id ИЗ КНОПКИ, а не по
     чату, откуда пришёл callback (в старой версии — уязвимость: админ
     лог-канала мог разморозить чужую группу)."""
-    admin_module._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     raid_detector._get_state(CHAT_ID).active = True
     LOG_CHANNEL_ID = -100999
 
@@ -282,7 +283,7 @@ async def test_raid_callback_checks_admin_of_group_not_of_log_channel():
 async def test_raid_callback_unfreezes_only_the_encoded_chat():
     """F28: разморозка кнопкой из уведомления об одной группе не должна
     задевать состояние другой защищаемой группы."""
-    admin_module._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     settings_store.sync_protected_chat_ids([CHAT_ID, OTHER_CHAT_ID])
     raid_detector._get_state(CHAT_ID).active = True
     raid_detector._get_state(OTHER_CHAT_ID).active = True

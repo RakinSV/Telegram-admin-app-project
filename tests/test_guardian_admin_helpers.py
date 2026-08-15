@@ -1,4 +1,4 @@
-"""Тесты чистых хелперов guardian/handlers/admin.py (парсинг длительности,
+﻿"""Тесты чистых хелперов guardian/handlers/admin.py (парсинг длительности,
 резолв цели команды из reply/числового id, кэш списка админов)."""
 
 import time
@@ -6,7 +6,8 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from guardian.handlers import admin
+from guardian.handlers import admin  # noqa: F401 — псевдонимы после переезда кэша
+from guardian.services import chat_admins as chat_admins_module
 from guardian.handlers.admin import (
     _MAX_MUTE_DURATION,
     _get_admin_ids,
@@ -81,7 +82,7 @@ async def _admins_response(*user_ids: int) -> list[SimpleNamespace]:
 
 
 async def test_get_admin_ids_calls_api_once_then_uses_cache():
-    admin._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     bot = AsyncMock()
     bot.get_chat_administrators = AsyncMock(return_value=await _admins_response(1, 2))
 
@@ -94,16 +95,16 @@ async def test_get_admin_ids_calls_api_once_then_uses_cache():
 
 
 async def test_get_admin_ids_refreshes_after_ttl_expires():
-    admin._admin_cache.clear()
+    chat_admins_module._admin_cache.clear()
     bot = AsyncMock()
     bot.get_chat_administrators = AsyncMock(return_value=await _admins_response(1))
 
     await _get_admin_ids(bot, chat_id=-100)
     # Искусственно "состариваем" запись вместо реального сна на TTL.
-    ids, _ts = admin._admin_cache[-100]
-    admin._admin_cache[-100] = (
+    ids, _ts = chat_admins_module._admin_cache[-100]
+    chat_admins_module._admin_cache[-100] = (
         ids,
-        time.monotonic() - admin._ADMIN_CACHE_TTL_SECONDS - 1,
+        time.monotonic() - chat_admins_module._ADMIN_CACHE_TTL_SECONDS - 1,
     )
 
     await _get_admin_ids(bot, chat_id=-100)

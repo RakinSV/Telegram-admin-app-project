@@ -15,6 +15,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
+from guardian import spam_reviews_repo
 from guardian.config import get_guardian_settings
 from guardian.logging_conf import get_logger
 
@@ -55,6 +56,13 @@ async def classify(text: str) -> ClassificationResult | None:
     вызывающий код пропускает сообщение (fail-open, см. docstring модуля)."""
     settings = get_guardian_settings()
     prompt = _load_prompt().format(message_text=text)
+    # F57: примеры, размеченные владельцем, идут ПОСЛЕ основного промпта —
+    # чтобы перебивать общие правила, а не тонуть в них. Блок пустой, пока
+    # разметки нет, поэтому на чистой установке ничего не меняется.
+    if settings.spam_learning_enabled:
+        prompt += spam_reviews_repo.format_examples_block(
+            spam_reviews_repo.few_shot_examples(settings.spam_learning_examples_per_label)
+        )
     client = AsyncOpenAI(base_url=settings.openai_base_url, api_key=settings.openai_api_key)
 
     try:

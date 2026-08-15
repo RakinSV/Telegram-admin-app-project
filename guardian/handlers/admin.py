@@ -13,7 +13,6 @@ user_id первым аргументом: `/ban 123456789 причина`.
 from __future__ import annotations
 
 import re
-import time
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, Router
@@ -27,6 +26,7 @@ from guardian.db.models import Member, ModerationLog, Warning
 from guardian.db.session import session_scope
 from guardian.handlers import messages as messages_handlers
 from guardian.logging_conf import get_logger
+from guardian.services import chat_admins
 from guardian.services.log_channel import log_action
 from guardian.services.warn_system import add_warn
 
@@ -64,35 +64,12 @@ def _resolve_target(message: Message, args: str) -> tuple[int | None, str]:
     return None, args
 
 
-# Кэш id админов группы (TTL, не персистентный) — раньше каждая команда (в
-# т.ч. от НЕ-админа, до отказа) дёргала `get_chat_member` живьём, что даёт
-# любому участнику дешёвый способ засыпать Bot API запросами, просто спамя
-# любую /-команду (найдено при security-аудите). `get_chat_administrators`
-# возвращает весь список админов ОДНИМ вызовом — на порядки дешевле per-user
-# `get_chat_member`, вызываемого на каждую команду каждого участника.
-# TTL — компромисс между "не долбить API" и "снятые права админа должны
-# перестать работать не мгновенно, а в течение TTL", разумно для чата с
-# нечастой сменой модераторов.
-_ADMIN_CACHE_TTL_SECONDS = 60
-_admin_cache: dict[int, tuple[set[int], float]] = {}
-
-
-async def _get_admin_ids(bot: Bot, chat_id: int) -> set[int]:
-    cached = _admin_cache.get(chat_id)
-    now = time.monotonic()
-    if cached is not None and now - cached[1] < _ADMIN_CACHE_TTL_SECONDS:
-        return cached[0]
-    try:
-        admins = await bot.get_chat_administrators(chat_id)
-    except TelegramBadRequest:
-        return cached[0] if cached is not None else set()
-    ids = {admin.user.id for admin in admins}
-    _admin_cache[chat_id] = (ids, now)
-    return ids
-
-
-async def _is_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
-    return user_id in await _get_admin_ids(bot, chat_id)
+# Кэш админов переехал в `services/chat_admins.py`: с приходом F57 проверка
+# прав понадобилась и в `handlers/messages.py`, а тот импортируется отсюда —
+# получался цикл. Псевдонимы оставлены, чтобы не переписывать все вызовы и
+# тесты ради переезда.
+_get_admin_ids = chat_admins.get_admin_ids
+_is_admin = chat_admins.is_chat_admin
 
 
 async def _require_admin(message: Message, bot: Bot) -> int | None:

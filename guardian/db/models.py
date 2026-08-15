@@ -161,6 +161,50 @@ class BotConfig(Base):
     )
 
 
+class SpamReview(Base):
+    """Спорный вердикт AI-фильтра, отданный владельцу на разметку (F57).
+
+    ЗАЧЕМ. `filters/ai_filter.py` объявлен fail-open: при ошибке, таймауте
+    или невалидном ответе он возвращает `None`, и сообщение проходит. Решение
+    верное — лучше пропустить спам, чем удалить живого человека, — но у него
+    был изъян: обратной связи не было вообще. Фильтр ошибался и не узнавал об
+    этом, владелец тоже. Точность не росла НИКОГДА.
+
+    Теперь спорные случаи попадают сюда и уходят в лог-канал с кнопками
+    «спам / не спам». Размеченные примеры подмешиваются в промпт few-shot —
+    так классификатор дообучается на ЭТОЙ аудитории, где граница между
+    спамом и своими шутками про заработок своя.
+
+    ВАЖНО: таблица ничего не удаляет и не банит. Она только наблюдает —
+    поведение модерации F57 не меняет.
+    """
+
+    __tablename__ = "spam_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    # Текст обрезается при записи: в промпт всё равно уйдёт короткий пример,
+    # а хранить у себя простыни чужой переписки незачем.
+    message_text: Mapped[str] = mapped_column(Text)
+    # Хэш нормализованного текста. Нужен НЕ для дедупа хранения, а чтобы один
+    # спамер, отправивший пятьдесят одинаковых сообщений, не превратил
+    # лог-канал в ленту из пятидесяти одинаковых запросов на разметку.
+    text_hash: Mapped[str] = mapped_column(String(64), index=True)
+    # Почему вердикт спорный: "no_verdict" — классификатор не ответил
+    # (ошибка/таймаут/битый JSON); "low_confidence" — ответил «спам», но
+    # уверенности не хватило до порога.
+    kind: Mapped[str] = mapped_column(String(16))
+    model_said_spam: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Решение владельца: "spam" | "ham". NULL — ещё не размечено.
+    label: Mapped[str | None] = mapped_column(String(8), nullable=True, index=True)
+    labeled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class DailyStats(Base):
     """Суточная агрегация метрик модерации на чат (G11/G17)."""
 
