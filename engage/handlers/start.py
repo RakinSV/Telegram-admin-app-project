@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from tg_repost.logging_conf import get_logger
 
@@ -61,6 +61,28 @@ def parse_payload(payload: str | None) -> DeepLink | None:
     if not kind:
         return None
     return DeepLink(kind=kind, value=value)
+
+
+@router.callback_query(F.data == "bcast:off")
+async def on_unsubscribe(callback: CallbackQuery) -> None:
+    """Отписка от рассылок кнопкой из самого сообщения (F64).
+
+    Кнопка есть в каждой рассылке намеренно: без неё единственным способом
+    прекратить поток осталась бы блокировка бота — а это потеря человека
+    целиком, включая ответы на его собственные вопросы.
+
+    Отписка НЕ мешает боту отвечать: человек отказался от рассылок, а не от
+    общения.
+    """
+    from tg_repost import subscribers_repo
+
+    changed = subscribers_repo.unsubscribe(callback.from_user.id)
+    await callback.answer(
+        "Больше не буду присылать рассылки. Отвечать на вопросы продолжу."
+        if changed
+        else "Вы уже отписаны от рассылок.",
+        show_alert=True,
+    )
 
 
 @router.message(CommandStart())

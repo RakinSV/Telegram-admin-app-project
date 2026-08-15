@@ -29,6 +29,7 @@ from telethon import TelegramClient
 from tg_repost.config import Settings, get_settings
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, invalidate_rewriter_cache
+from tg_repost import broadcasts_repo, task_queue
 from tg_repost.scheduler.channel_stats import collect_channel_stats
 from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
@@ -43,6 +44,17 @@ from tg_repost.telegram.moderation_bot import build_application
 from tg_repost.webui import runtime_state
 
 logger = get_logger(__name__)
+
+# Обработчики очереди регистрируются при импорте супервизора: он поднимается
+# раньше планировщика, и к моменту первого прохода воркера все виды задач
+# уже известны. Иначе задача, поставленная до регистрации, ушла бы в failed
+# с «нет обработчика» — см. `task_queue.run_once`.
+broadcasts_repo.register_handler()
+
+
+async def _run_task_queue() -> None:
+    """Один проход воркера очереди (F64 и далее F71)."""
+    await task_queue.run_pending()
 
 
 @dataclass
@@ -186,6 +198,15 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         run_digest_job, [rewriter, application],
         CronTrigger(day_of_week=settings.digest_day_of_week,
                     hour=settings.digest_hour, minute=settings.digest_minute),
+    )
+    # F64: воркер очереди. Всегда включён и стоит копейки на холостом ходу —
+    # `run_pending` при пустой очереди делает один SELECT и выходит. Прятать
+    # его за настройку значило бы дать возможность выключить доставку уже
+    # созданных рассылок, не заметив этого.
+    _resync_optional_job(
+        scheduler, "task_queue_worker", True,
+        _run_task_queue, [],
+        IntervalTrigger(seconds=settings.task_queue_interval_seconds),
     )
     _resync_optional_job(
         scheduler, "channel_stats_job", settings.channel_stats_enabled,

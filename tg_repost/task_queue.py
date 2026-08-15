@@ -27,7 +27,7 @@ Redis и Celery НЕ вводятся сознательно: они дали б
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -57,7 +57,13 @@ def _utcnow() -> datetime:
 # Обработчик получает задачу и возвращает новый курсор (или None, если
 # работа закончена). Так решение «продолжать или нет» остаётся у того, кто
 # знает предметную область, а очередь остаётся про механику.
-Handler = Callable[["TaskView"], "str | None"]
+#
+# ОБРАБОТЧИК АСИНХРОННЫЙ. Очередь существует ради долгих операций, а долгие
+# они потому, что ходят в сеть: рассылка шлёт сообщения через Bot API, шаги
+# воронок делают то же самое. Синхронная сигнатура заставила бы каждого
+# вызывать `asyncio.run` внутри уже работающего цикла событий — то есть не
+# работала бы вовсе.
+Handler = Callable[["TaskView"], Awaitable["str | None"]]
 
 _handlers: dict[str, Handler] = {}
 
@@ -195,7 +201,7 @@ def _finish(task_id: int, status: str, error: str | None = None) -> None:
         task.updated_at = _utcnow()
 
 
-def run_once(kinds: list[str] | None = None) -> bool:
+async def run_once(kinds: list[str] | None = None) -> bool:
     """Выполнить одну задачу. `False` — очередь пуста.
 
     Возвращает bool, а не число: вызывающий крутит это в цикле, пока есть
@@ -215,7 +221,7 @@ def run_once(kinds: list[str] | None = None) -> bool:
         return True
 
     try:
-        next_cursor = handler(view)
+        next_cursor = await handler(view)
     except Exception as exc:  # noqa: BLE001 — обработчик произвольный
         message = str(exc)[:2000]
         if view.attempts >= MAX_ATTEMPTS:
@@ -250,14 +256,14 @@ def run_once(kinds: list[str] | None = None) -> bool:
     return True
 
 
-def run_pending(kinds: list[str] | None = None, max_tasks: int = 20) -> int:
+async def run_pending(kinds: list[str] | None = None, max_tasks: int = 20) -> int:
     """Прокрутить очередь. Возвращает число обработанных задач.
 
     `max_tasks` — предохранитель от бесконечного цикла: задача, возвращающая
     курсор всегда, иначе заняла бы воркер навсегда.
     """
     processed = 0
-    while processed < max_tasks and run_once(kinds):
+    while processed < max_tasks and await run_once(kinds):
         processed += 1
     return processed
 

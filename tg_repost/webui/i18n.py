@@ -1632,6 +1632,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Once a week the AI compiles top posts into a digest and "
         "publishes it like a regular post.",
     },
+    "settings.group.task_queue.title": {
+        "ru": "Очередь задач", "en": "Task queue",
+    },
+    "settings.group.task_queue.desc": {
+        "ru": "Воркер, выполняющий долгие операции: рассылки по сегменту и "
+        "(в будущем) шаги воронок. Всегда включён — выключателя нет "
+        "намеренно, иначе можно было бы незаметно остановить доставку уже "
+        "созданных рассылок.",
+        "en": "The worker that runs long operations: segment broadcasts and "
+        "(later) funnel steps. Always on — there is deliberately no off "
+        "switch, otherwise delivery of already-created broadcasts could be "
+        "stopped without anyone noticing.",
+    },
     "settings.group.channel_stats.title": {
         "ru": "Статистика канала (MTProto)", "en": "Channel stats (MTProto)",
     },
@@ -2174,6 +2187,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.digest_minute.label": {"ru": "Минута", "en": "Minute"},
     "settings.field.digest_top_n.label": {"ru": "Постов в дайджест", "en": "Posts in digest"},
     "settings.field.digest_window_days.label": {"ru": "Окно отбора, дней", "en": "Selection window, days"},
+    # F64 — очередь задач.
+    "settings.field.task_queue_interval_seconds.label": {
+        "ru": "Период проверки, сек", "en": "Check period, sec",
+    },
     # F56 — статистика канала через MTProto.
     "settings.field.channel_stats_enabled.label": {"ru": "Включена", "en": "Enabled"},
     "settings.field.channel_stats_interval_hours.label": {

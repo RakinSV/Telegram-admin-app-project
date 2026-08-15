@@ -656,6 +656,50 @@ class ContactTag(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class Broadcast(Base):
+    """Рассылка по сегменту (F64) — что отправили и чем это кончилось.
+
+    Отдельно от `queued_tasks` намеренно. Задача — это МЕХАНИКА (курсор,
+    попытки, аренда), и она живёт ровно до завершения. Рассылка — ДОКУМЕНТ:
+    владельцу через месяц важно знать, что именно он отправлял, кому и
+    сколько человек это получило. Смешав их, мы либо потеряли бы историю
+    вместе с выполненными задачами, либо превратили бы служебную таблицу
+    очереди в хранилище текстов.
+
+    Счётчики раздельные, потому что означают РАЗНОЕ: `sent` — доставлено,
+    `blocked` — человек заблокировал бота (не наша ошибка и не повод
+    повторять), `failed` — всё прочее. Одна цифра «не дошло» скрыла бы, что
+    именно происходит.
+    """
+
+    __tablename__ = "broadcasts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    segment_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # Имя сегмента НА МОМЕНТ отправки: сегмент могут переименовать или
+    # удалить, а отчёт должен остаться читаемым (тот же приём, что с
+    # `invite_name` в F41).
+    segment_name: Mapped[str] = mapped_column(String(128))
+    text: Mapped[str] = mapped_column(Text)
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # planned | running | done | canceled
+    status: Mapped[str] = mapped_column(String(16), default="planned", index=True)
+    # Сколько было в сегменте и скольким МОЖНО было написать — снимок на
+    # момент запуска. Разрыв между ними объясняет владельцу результат.
+    segment_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reachable_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    blocked_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class BotSubscriber(Base):
     """Человек, с которым бот ВООБЩЕ может заговорить (F64).
 

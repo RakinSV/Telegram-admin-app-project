@@ -671,6 +671,12 @@ class Settings(BaseSettings):
     digest_top_n: int = Field(5, alias="DIGEST_TOP_N")
     digest_window_days: int = Field(7, alias="DIGEST_WINDOW_DAYS")
 
+    # --- F64: очередь задач и рассылки ---
+    # Как часто воркер заглядывает в очередь. На холостом ходу это один
+    # SELECT, поэтому частота дешёвая; но и слишком частой её делать незачем —
+    # рассылка всё равно ограничена паузами между сообщениями.
+    task_queue_interval_seconds: int = Field(30, alias="TASK_QUEUE_INTERVAL_SECONDS")
+
     # --- F56: статистика канала через MTProto Stats API ---
     # Данные, которых нет у ботов-конкурентов: Bot API методов stats.* не
     # имеет. Требует прав АДМИНИСТРАТОРА в канале — без них вызов вернёт
