@@ -266,6 +266,7 @@ async def publish_post(bot: Bot, post_id: int) -> None:
         # остального: пост без erid не должен уйти ни в одну цель, а
         # обнаружить это после первой успешной отправки уже поздно.
         marking_settings = get_settings()
+        marking = None
         if marking_settings.ad_marking_enabled and post.kind == PostKind.AD:
             marking = ad_marking.marking_of(post.ad_brief_id)
             if marking is None or not marking.is_complete:
@@ -276,21 +277,6 @@ async def publish_post(bot: Bot, post_id: int) -> None:
                 logger.error("Публикация поста %s отменена: %s", post_id, reason)
                 post.set_status(PostStatus.FAILED, reason=reason)
                 return
-            text = ad_marking.apply_label(text or "", marking)
-        # F59: метки проставляются В МОМЕНТ ПУБЛИКАЦИИ, а не при рерайте.
-        # Так их видно в превью модерации ровно такими, какими они уйдут, и
-        # смена настроек не требует переписывать уже готовые посты.
-        settings_for_utm = get_settings()
-        if settings_for_utm.utm_enabled and text:
-            text = utm.tag_links(
-                text,
-                utm.build_params(
-                    source=settings_for_utm.utm_source,
-                    medium=settings_for_utm.utm_medium,
-                    campaign_template=settings_for_utm.utm_campaign,
-                    post_id=post.id,
-                ),
-            )
         media_path = post.media_path
         # F33: опрос не может нести медиа — игнорируем media_path, если он
         # каким-то образом оказался задан на POLL-посте (валидация на входе
@@ -306,6 +292,21 @@ async def publish_post(bot: Bot, post_id: int) -> None:
         # включено настройкой И у поста реально есть на что ссылаться
         # (AD/DIGEST/POLL никогда не имеют source_link, кнопка на них не
         # появится независимо от настройки).
+        # F59: метки считаются В МОМЕНТ ПУБЛИКАЦИИ, а не при рерайте — смена
+        # настроек не требует переписывать уже готовые посты. Сами параметры
+        # собираются здесь (нужен `post.id`), а применяются ниже ко всем
+        # языкам сразу.
+        settings_for_utm = get_settings()
+        utm_params = (
+            utm.build_params(
+                source=settings_for_utm.utm_source,
+                medium=settings_for_utm.utm_medium,
+                campaign_template=settings_for_utm.utm_campaign,
+                post_id=post.id,
+            )
+            if settings_for_utm.utm_enabled else None
+        )
+
         settings = get_settings()
         reply_markup = None
         if settings.post_source_button_enabled and post.source_link:
@@ -317,6 +318,28 @@ async def publish_post(bot: Bot, post_id: int) -> None:
     # именно он отражает правку владельца через ✏️ (варианты при этом не
     # переписываются); остальные языки читаются из своих вариантов.
     text_by_language, target_language = _texts_by_language(post_id, text)
+
+    # МЕТКИ И ПОМЕТКИ СТАВЯТСЯ НА КАЖДЫЙ ЯЗЫК, А НЕ ТОЛЬКО НА АКТИВНЫЙ.
+    # Раньше и UTM (F59), и маркировка (F62) применялись к переменной `text`,
+    # то есть к тексту активного варианта, а в группы с другим языком уходил
+    # текст ИЗ ВАРИАНТА — без меток и без пометки «Реклама». Для UTM это
+    # означало потерянную аналитику, а для маркировки — немаркированное
+    # размещение при включённой проверке, ровно то, что F62 обязана
+    # исключить. Поэтому преобразования живут здесь, ПОСЛЕ сборки словаря
+    # языков, и применяются ко всем его значениям.
+    def _decorate(value: str) -> str:
+        result = value
+        if utm_params is not None and result:
+            result = utm.tag_links(result, utm_params)
+        if marking is not None:
+            result = ad_marking.apply_label(result, marking)
+        return result
+
+    text_by_language = {lang: _decorate(v) for lang, v in text_by_language.items()}
+    # `text` остаётся запасным вариантом для языка, которого нет в словаре, —
+    # его надо оформить тем же способом, иначе именно запасной путь и уйдёт
+    # неразмеченным.
+    text = _decorate(text or "")
 
     chat_ids = resolve_targets_for_post(post_id)
     if not chat_ids:

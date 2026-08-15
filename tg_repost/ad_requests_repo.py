@@ -263,10 +263,29 @@ def mark_published(request_id: int, *, amount: float | None = None) -> int | Non
 
 
 def delete(request_id: int) -> bool:
-    """Удалить заявку. Уже опубликованную не трогаем: за ней стоит доход."""
+    """Удалить заявку. Уже опубликованную не трогаем: за ней стоит доход.
+
+    БРИФ ПРИНЯТОЙ ЗАЯВКИ ГАСИТСЯ ВМЕСТЕ С НЕЙ. Раньше он оставался активным,
+    и реклама по отменённой сделке всё равно выходила: инжектор (F21) берёт
+    любой активный бриф и не знает, что заявки за ним больше нет.
+    Воспроизведено на живой базе, а не вычитано.
+
+    Именно гасится, а не удаляется: бриф мог уже сработать, и на него
+    ссылаются опубликованные посты — вместе с реквизитами и erid для отчёта
+    ОРД (F62). Удалить его значило бы обнулить отчётность по уже вышедшей
+    рекламе.
+    """
     with session_scope() as session:
         row = session.get(AdRequest, request_id)
         if row is None or row.status == STATUS_PUBLISHED:
             return False
+        if row.ad_brief_id is not None:
+            brief = session.get(AdBrief, row.ad_brief_id)
+            if brief is not None:
+                brief.is_active = False
+                logger.info(
+                    "F66: заявка #%d удалена, бриф #%d погашен",
+                    row.id, brief.id,
+                )
         session.delete(row)
         return True
