@@ -656,6 +656,38 @@ class ContactTag(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class ContactSegment(Base):
+    """Сохранённый сегмент участников (F63) — ЗАПРОС, а не список.
+
+    Материализованный список людей устаревает молча: человек ушёл из чата или
+    перестал подходить под условие, а рассылка всё равно уходит ему — и
+    узнаётся это по жалобам. Поэтому здесь хранится только определение
+    фильтра; кто именно в сегменте, вычисляется в момент использования.
+
+    Правила проверки фильтра — в `segments_repo.validate`, и они строгие:
+    неизвестное условие или пустой фильтр превратили бы узкий сегмент во
+    «всю базу», а разосланные сообщения не отзываются.
+    """
+
+    __tablename__ = "contact_segments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_contact_segment_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    # JSON с условиями. Набор ключей меняется вместе с фичами, и колонки под
+    # каждое условие означали бы миграцию на каждую новую возможность отбора.
+    filter_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
 class ContactNote(Base):
     """Заметка владельца об участнике (F63). Одна на человека."""
 
