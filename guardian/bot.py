@@ -23,7 +23,16 @@ from guardian import settings_store, trusted_repo
 from guardian.config import get_guardian_settings
 from guardian.db.models import Member, StopWord, TrustedUser
 from guardian.db.session import session_scope
-from guardian.handlers import admin, autoreply, chat_member, hygiene, join, messages, stats
+from guardian.handlers import (
+    admin,
+    autoreply,
+    chat_member,
+    hygiene,
+    join,
+    messages,
+    purge_report,
+    stats,
+)
 from guardian.logging_conf import get_logger, setup_logging
 from guardian.services import daily_stats_repo, raid_detector
 from guardian.services.warn_system import reset_expired_warns
@@ -337,6 +346,9 @@ async def main() -> None:
     dp.include_router(raid_detector.router)
     dp.include_router(admin.router)
     dp.include_router(stats.router)
+    # F58: /purge и /report — тоже команды, поэтому ДО messages.router:
+    # иначе /report дошёл бы до спам-фильтра как обычный текст.
+    dp.include_router(purge_report.router)
     dp.include_router(messages.router)
     # F48: чистка служебных сообщений. Строго ПОСЛЕ messages.router —
     # обычное общение должно сначала пройти антиспам.
