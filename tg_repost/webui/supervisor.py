@@ -29,6 +29,7 @@ from telethon import TelegramClient
 from tg_repost.config import Settings, get_settings
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, invalidate_rewriter_cache
+from tg_repost.scheduler.channel_stats import collect_channel_stats
 from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
 from tg_repost.scheduler.jobs import pipeline_tick
@@ -185,6 +186,11 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         run_digest_job, [rewriter, application],
         CronTrigger(day_of_week=settings.digest_day_of_week,
                     hour=settings.digest_hour, minute=settings.digest_minute),
+    )
+    _resync_optional_job(
+        scheduler, "channel_stats_job", settings.channel_stats_enabled,
+        collect_channel_stats, [tele_client],
+        IntervalTrigger(hours=settings.channel_stats_interval_hours),
     )
     _resync_optional_job(
         scheduler, "recycle_job", settings.recycle_enabled,

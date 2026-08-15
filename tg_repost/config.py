@@ -671,6 +671,16 @@ class Settings(BaseSettings):
     digest_top_n: int = Field(5, alias="DIGEST_TOP_N")
     digest_window_days: int = Field(7, alias="DIGEST_WINDOW_DAYS")
 
+    # --- F56: статистика канала через MTProto Stats API ---
+    # Данные, которых нет у ботов-конкурентов: Bot API методов stats.* не
+    # имеет. Требует прав АДМИНИСТРАТОРА в канале — без них вызов вернёт
+    # ошибку, и это будет видно в логе отдельной строкой, а не как «сбой».
+    channel_stats_enabled: bool = Field(False, alias="CHANNEL_STATS_ENABLED")
+    # Раз в сутки достаточно: Telegram пересчитывает эти агрегаты не чаще.
+    channel_stats_interval_hours: int = Field(24, alias="CHANNEL_STATS_INTERVAL_HOURS")
+    # Окно, за которое считается динамика включённых уведомлений.
+    channel_stats_window_days: int = Field(30, alias="CHANNEL_STATS_WINDOW_DAYS")
+
     # --- F55: повтор выстреливших постов (recycling) ---
     # Почти бесплатный охват из уже проверенного контента. Данные для отбора
     # уже лежат в метриках (F14/F31) — здесь только правила и постановка

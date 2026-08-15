@@ -360,4 +360,36 @@ def engagement_lines(window_days: int) -> list[str]:
                 f"  • ⚠️ метрики есть у {report.posts_with_stats} из "
                 f"{report.posts_total} постов — средние по ним"
             )
+        out.extend(_mute_lines(target.chat_id, window_days))
     return out
+
+
+def _mute_lines(chat_id: int, window_days: int) -> list[str]:
+    """Динамика включённых уведомлений (F56), если она собрана.
+
+    Молчим, когда снимков меньше двух: одна точка — это не динамика, а по
+    одному значению «60% включили уведомления» владелец всё равно ничего не
+    решит. Тревога поднимается только на падении, потому что рост здесь —
+    хорошая новость, а не повод для строки в сводке.
+    """
+    from tg_repost.scheduler.channel_stats import mute_trend
+
+    trend = mute_trend(chat_id, window_days)
+    if not trend.enough_data:
+        return []
+
+    line = (
+        f"  • Уведомления включены у {trend.last_pct}% "
+        f"(было {trend.first_pct}%, за {window_days} дн.)"
+    )
+    # `is_alarming` уже гарантирует непустую дельту, но связываем её явно:
+    # иначе проверка живёт в одном месте, а разыменование в другом, и любая
+    # правка условия молча ломает вторую половину.
+    delta = trend.delta
+    if trend.is_alarming and delta is not None:
+        return [
+            line,
+            f"  • ⚠️ ТИХИЙ ОТТОК: доля упала на {abs(delta)} п.п. "
+            f"Люди ещё подписаны, но отключили звук — отписка обычно следом",
+        ]
+    return [line]

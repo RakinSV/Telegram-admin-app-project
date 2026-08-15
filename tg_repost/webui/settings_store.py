@@ -398,6 +398,23 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "обзор и ставит его в обычный пайплайн модерации/публикации.",
     ),
     SettingsGroup(
+        "channel_stats", "Статистика канала (MTProto) — F56",
+        (
+            SettingField(
+                "channel_stats_enabled", "Включена", "bool", needs_resync=True,
+            ),
+            SettingField(
+                "channel_stats_interval_hours", "Период сбора, часов", "int",
+                needs_resync=True,
+            ),
+            SettingField("channel_stats_window_days", "Окно динамики, дней", "int"),
+        ),
+        "Собирает данные, которых нет у ботов: доля подписчиков с ВКЛЮЧЁННЫМИ "
+        "уведомлениями, средние просмотры/репосты/реакции от самого Telegram. "
+        "Падение доли уведомлений — отток ДО отписки: люди ещё подписаны, но "
+        "уже не читают. Требует прав АДМИНИСТРАТОРА в канале.",
+    ),
+    SettingsGroup(
         "recycle", "Повтор выстреливших постов — F55",
         (
             SettingField("recycle_enabled", "Включён", "bool", needs_resync=True),

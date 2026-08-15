@@ -1509,6 +1509,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Once a week the AI compiles top posts into a digest and "
         "publishes it like a regular post.",
     },
+    "settings.group.channel_stats.title": {
+        "ru": "Статистика канала (MTProto)", "en": "Channel stats (MTProto)",
+    },
+    "settings.group.channel_stats.desc": {
+        "ru": "Собирает данные, которых нет у ботов: долю подписчиков с "
+        "ВКЛЮЧЁННЫМИ уведомлениями и средние просмотры/репосты/реакции от "
+        "самого Telegram. Падение доли уведомлений — отток ДО отписки: люди "
+        "ещё подписаны, но уже не читают. Требует прав АДМИНИСТРАТОРА.",
+        "en": "Collects data bots cannot get: the share of subscribers with "
+        "notifications ENABLED, plus average views/shares/reactions straight "
+        "from Telegram. A falling notification share means churn BEFORE "
+        "unsubscribing — people are still subscribed but no longer reading. "
+        "Requires ADMIN rights in the channel.",
+    },
     "settings.group.recycle.title": {
         "ru": "Повтор выстреливших постов", "en": "Recycling top posts",
     },
@@ -2037,6 +2051,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.digest_minute.label": {"ru": "Минута", "en": "Minute"},
     "settings.field.digest_top_n.label": {"ru": "Постов в дайджест", "en": "Posts in digest"},
     "settings.field.digest_window_days.label": {"ru": "Окно отбора, дней", "en": "Selection window, days"},
+    # F56 — статистика канала через MTProto.
+    "settings.field.channel_stats_enabled.label": {"ru": "Включена", "en": "Enabled"},
+    "settings.field.channel_stats_interval_hours.label": {
+        "ru": "Период сбора, часов", "en": "Collection period, hours",
+    },
+    "settings.field.channel_stats_window_days.label": {
+        "ru": "Окно динамики, дней", "en": "Trend window, days",
+    },
     # F55 — повтор выстреливших постов.
     "settings.field.recycle_enabled.label": {"ru": "Включён", "en": "Enabled"},
     "settings.field.recycle_interval_hours.label": {

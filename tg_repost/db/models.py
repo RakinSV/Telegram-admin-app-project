@@ -624,6 +624,49 @@ class ChannelGrowthSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class ChannelStatsSnapshot(Base):
+    """Снимок статистики канала из MTProto Stats API (F56).
+
+    ЧИСЛА ПОДПИСЧИКОВ ЗДЕСЬ НЕТ НАМЕРЕННО. Его уже собирает F22 в
+    `channel_growth_snapshots`, и вторая колонка с тем же смыслом означала бы
+    два источника правды: рано или поздно они разойдутся (разные моменты
+    съёма, разные ошибки сети), и никто не сможет сказать, какой верный.
+
+    Здесь только то, чего иначе взять негде:
+
+    * `notifications_enabled_pct` — ГЛАВНОЕ. Доля подписчиков, у которых
+      уведомления ВКЛЮЧЕНЫ. Её падение — отток за неделю до самой отписки:
+      человек ещё числится подписчиком, но уже не читает. Никаким другим
+      способом это не вычисляется: Bot API такого не отдаёт, а по своим
+      данным этого не видно вообще.
+    * `views_per_post` / `shares_per_post` / `reactions_per_post` — средние
+      от самого Telegram. Не дубль наших метрик (F14/F31): те считаются по
+      постам, которые опубликовали МЫ, а эти — по всем постам канала,
+      включая опубликованные вручную.
+
+    Хранится ИСТОРИЯ, а не последнее значение: Telegram отдаёт срез, а вся
+    ценность в динамике (см. `mute_trend`).
+    """
+
+    __tablename__ = "channel_stats_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Новая таблица, поэтому ключ арендатора закладывается сразу — решение 1
+    # в FEATURES.md. Формально оно писалось про фазы 11–14, но довод («одна
+    # колонка сейчас против миграции по всей базе потом») к новой таблице
+    # относится ровно так же, а таблицы F01–F51 мы по-прежнему не трогаем.
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    views_per_post: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shares_per_post: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reactions_per_post: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Доля в процентах, 0–100. NULL — Telegram не отдал это поле.
+    notifications_enabled_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class InviteLink(Base):
     """Инвайт-ссылка целевой группы, созданная через бота (F32).
 
