@@ -111,6 +111,67 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.contacts": {"ru": "Участники", "en": "Contacts"},
     "nav.segments": {"ru": "Сегменты", "en": "Segments"},
     "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
+    "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
+
+    # --- F65: медиакит для рекламодателя ---
+    "mediakit.title": {"ru": "Медиакит", "en": "Media kit"},
+    "mediakit.intro": {
+        "ru": "Карточка канала для рекламодателя. Собрана из уже накопленных "
+              "данных — ничего дополнительно не измеряется.",
+        "en": "A channel card for advertisers. Assembled from data already "
+              "collected — nothing extra is measured.",
+    },
+    "mediakit.channel": {"ru": "Канал", "en": "Channel"},
+    "mediakit.period": {"ru": "Период", "en": "Period"},
+    "mediakit.days": {"ru": "{n} дн.", "en": "{n} days"},
+    "mediakit.show": {"ru": "Показать", "en": "Show"},
+    "mediakit.print_hint": {
+        "ru": "Чтобы отправить рекламодателю — распечатайте страницу в PDF "
+              "(Ctrl+P). Публичной ссылки нет намеренно: она сделала бы "
+              "админку доступной снаружи.",
+        "en": "To send it to an advertiser, print the page to PDF (Ctrl+P). "
+              "There is deliberately no public link: it would expose the "
+              "admin panel to the outside.",
+    },
+    "mediakit.no_channels": {
+        "ru": "Сначала добавьте целевой канал.", "en": "Add a target channel first.",
+    },
+    "mediakit.subtitle": {
+        "ru": "Данные за {days} дн. · собрано {date}",
+        "en": "Data for {days} days · compiled {date}",
+    },
+    "mediakit.not_enough": {
+        "ru": "Данных пока мало: нет ни одного поста со снятыми метриками. "
+              "Медиакит без охватов рекламодателю ничего не скажет.",
+        "en": "Not enough data yet: not a single post has measured metrics. "
+              "A media kit without reach tells an advertiser nothing.",
+    },
+    "mediakit.subscribers": {"ru": "Подписчиков", "en": "Subscribers"},
+    "mediakit.for_period": {"ru": "за период", "en": "for the period"},
+    "mediakit.avg_views": {"ru": "Средний охват поста", "en": "Average post reach"},
+    "mediakit.err": {"ru": "ERR", "en": "ERR"},
+    "mediakit.err_hint": {
+        "ru": "охват к подписчикам", "en": "reach to subscribers",
+    },
+    "mediakit.er": {"ru": "ER", "en": "ER"},
+    "mediakit.er_hint": {
+        "ru": "реакции и репосты к охвату", "en": "reactions and shares to reach",
+    },
+    "mediakit.notifications": {"ru": "Уведомления включены", "en": "Notifications on"},
+    "mediakit.notifications_hint": {
+        "ru": "доля подписчиков", "en": "share of subscribers",
+    },
+    "mediakit.posts": {"ru": "Постов", "en": "Posts"},
+    "mediakit.coverage": {
+        "ru": "Средние посчитаны по {measured} постам из {total} — по "
+              "остальным метрики ещё не снимались.",
+        "en": "Averages are based on {measured} posts out of {total} — the "
+              "rest have no measured metrics yet.",
+    },
+    "mediakit.top_posts": {"ru": "Лучшие посты периода", "en": "Top posts"},
+    "mediakit.post": {"ru": "Пост", "en": "Post"},
+    "mediakit.views": {"ru": "Просмотры", "en": "Views"},
+    "mediakit.date": {"ru": "Дата", "en": "Date"},
 
     # --- F64: рассылки по сегменту ---
     "broadcasts.title": {"ru": "Рассылки", "en": "Broadcasts"},

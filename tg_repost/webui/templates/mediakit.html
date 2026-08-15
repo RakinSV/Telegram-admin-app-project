@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  /* Разметка под печать: рекламодателю уходит PDF, а не скриншот админки.
+     Публичной ссылки нет намеренно — см. docstring mediakit_routes.py. */
+  @media print {
+    .sidebar, .no-print { display: none !important; }
+    body, .content { margin: 0; padding: 0; }
+    .kit-card { page-break-inside: avoid; }
+  }
+  .kit-figure { font-size: 2em; font-weight: 600; line-height: 1.1; }
+  .kit-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px;
+              margin: 0 8px 12px 0; display: inline-block; min-width: 150px; }
+</style>
+
+<div class="no-print">
+  <h1>{{ t('mediakit.title') }}</h1>
+  <p class="muted">{{ t('mediakit.intro') }}</p>
+
+  {% if targets %}
+  <form method="get" action="/mediakit" class="field-row">
+    <label for="chat_id">{{ t('mediakit.channel') }}</label>
+    <select id="chat_id" name="chat_id">
+      {% for tg in targets %}
+      <option value="{{ tg.chat_id }}" {{ 'selected' if tg.chat_id == selected else '' }}>
+        {{ tg.title or tg.chat_id }}
+      </option>
+      {% endfor %}
+    </select>
+    <label for="days">{{ t('mediakit.period') }}</label>
+    <select id="days" name="days">
+      {% for w in windows %}
+      <option value="{{ w }}" {{ 'selected' if w == window else '' }}>
+        {{ t('mediakit.days', n=w) }}
+      </option>
+      {% endfor %}
+    </select>
+    <button type="submit">{{ t('mediakit.show') }}</button>
+  </form>
+  <p class="hint">{{ t('mediakit.print_hint') }}</p>
+  {% else %}
+  <p class="muted">{{ t('mediakit.no_channels') }}</p>
+  {% endif %}
+</div>
+
+{% if kit %}
+<hr class="no-print">
+
+<h1>{{ kit.channel_title }}</h1>
+<p class="muted">
+  {{ t('mediakit.subtitle', days=kit.window_days,
+        date=kit.generated_at.strftime('%Y-%m-%d')) }}
+</p>
+
+{% if not kit.has_enough_data %}
+<p class="badge warn">{{ t('mediakit.not_enough') }}</p>
+{% else %}
+
+<div>
+  {% if kit.subscribers is not none %}
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.subscribers') }}</div>
+    <div class="kit-figure">{{ kit.subscribers }}</div>
+    {% if kit.subscribers_delta is not none %}
+    <div class="muted">
+      {{ '+' if kit.subscribers_delta >= 0 else '' }}{{ kit.subscribers_delta }}
+      {{ t('mediakit.for_period') }}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.avg_views') }}</div>
+    <div class="kit-figure">{{ kit.avg_views }}</div>
+  </div>
+
+  {% if kit.reach_rate is not none %}
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.err') }}</div>
+    <div class="kit-figure">{{ kit.reach_rate }}%</div>
+    <div class="muted">{{ t('mediakit.err_hint') }}</div>
+  </div>
+  {% endif %}
+
+  {% if kit.engagement_rate is not none %}
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.er') }}</div>
+    <div class="kit-figure">{{ kit.engagement_rate }}%</div>
+    <div class="muted">{{ t('mediakit.er_hint') }}</div>
+  </div>
+  {% endif %}
+
+  {% if kit.notifications_enabled_pct is not none %}
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.notifications') }}</div>
+    <div class="kit-figure">{{ kit.notifications_enabled_pct }}%</div>
+    <div class="muted">{{ t('mediakit.notifications_hint') }}</div>
+  </div>
+  {% endif %}
+
+  <div class="kit-card">
+    <div class="muted">{{ t('mediakit.posts') }}</div>
+    <div class="kit-figure">{{ kit.posts_published }}</div>
+    <div class="muted">{{ t('mediakit.for_period') }}</div>
+  </div>
+</div>
+
+{% if kit.coverage_note_needed %}
+<p class="hint">
+  {{ t('mediakit.coverage', measured=kit.posts_with_metrics, total=kit.posts_published) }}
+</p>
+{% endif %}
+
+{% if kit.top_posts %}
+<h2>{{ t('mediakit.top_posts') }}</h2>
+<table>
+  <tr>
+    <th>{{ t('mediakit.post') }}</th>
+    <th>{{ t('mediakit.views') }}</th>
+    <th>{{ t('mediakit.date') }}</th>
+  </tr>
+  {% for post in kit.top_posts %}
+  <tr>
+    <td>{{ post.snippet }}{% if post.snippet|length >= 160 %}…{% endif %}</td>
+    <td>{{ post.views }}</td>
+    <td>{{ post.posted_at.strftime('%Y-%m-%d') if post.posted_at else '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% endif %}
+{% endif %}
+{% endblock %}
