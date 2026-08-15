@@ -624,6 +624,57 @@ class ChannelGrowthSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class ContactTag(Base):
+    """Ручная метка на участнике (F63).
+
+    ЗАЧЕМ ЗДЕСЬ НЕТ ТАБЛИЦЫ «КОНТАКТ». Личность участника уже хранится:
+    имя и username — в `guardian.members`, откуда пришёл — в `member_origins`
+    (F41), кто привёл — в `referrals` (F42), активность — в `user_activity`
+    (F43). Своя копия карточки означала бы второй источник правды, который
+    неминуемо разойдётся с первым — ровно та ошибка, из-за которой пришлось
+    отменять журнал событий. Карточка собирается ЧТЕНИЕМ, а хранится только
+    то, чего больше нигде нет: ручные теги и заметка владельца.
+
+    Ключ — `user_id` без `chat_id`: тег вешается на ЧЕЛОВЕКА, а не на его
+    участие в конкретном чате. «Постоянный покупатель» остаётся таковым во
+    всех группах владельца.
+    """
+
+    __tablename__ = "contact_tags"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", "tag", name="uq_contact_tag"),
+        Index("ix_contact_tags_tag", "tenant_id", "tag"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    tag: Mapped[str] = mapped_column(String(64))
+    added_by: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ContactNote(Base):
+    """Заметка владельца об участнике (F63). Одна на человека."""
+
+    __tablename__ = "contact_notes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_contact_note"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    note: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )
+
+
 class QueuedTask(Base):
     """Долгая операция, переживающая рестарт процесса (фаза 11, решение 3).
 
