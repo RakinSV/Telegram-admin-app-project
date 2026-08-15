@@ -280,7 +280,12 @@ def compute_stats_summary(window_days: int) -> StatsSummary:
             last = (
                 session.query(PostStat)
                 .filter(PostStat.post_id == post.id)
-                .order_by(PostStat.captured_at.desc())
+                # Тай-брейк по `id` — не косметика: гранулярность системных
+                # часов на Windows ~15 мс, два снимка подряд регулярно
+                # получают одинаковый `captured_at`, и без него «последний»
+                # выбирался случайно. Поймано на F53 прогоном одного теста
+                # десять раз: 4 прохода, 6 падений.
+                .order_by(PostStat.captured_at.desc(), PostStat.id.desc())
                 .first()
             )
             if last and last.view_count is not None:
@@ -314,4 +319,50 @@ def stats_summary(window_days: int) -> str:
     ]
     if summary.top_post_id is not None:
         lines.append(f"• Топ-пост: #{summary.top_post_id} ({summary.top_post_views} просмотров)")
+
+    engagement = engagement_lines(window_days)
+    if engagement:
+        lines.extend(["", *engagement])
     return "\n".join(lines)
+
+
+def engagement_lines(window_days: int) -> list[str]:
+    """Блок ERR/ER по каждому активному каналу (F53).
+
+    Отдельной функцией, а не внутри `stats_summary`: те же строки нужны
+    веб-странице, а дублировать формулировки в двух местах — верный способ
+    получить два разных числа под одним названием.
+
+    Каналы без данных пропускаются молча. Показывать «ERR: —» по каналу, где
+    ещё нет ни одного замера, значит засорять сводку строками, из которых
+    ничего не следует.
+    """
+    from tg_repost import engagement_repo, targets_repo
+
+    out: list[str] = []
+    for target in targets_repo.list_targets():
+        if not target.is_active:
+            continue
+        report = engagement_repo.build_engagement_report(target.chat_id, window_days)
+        if not report.enough_data:
+            continue
+
+        title = target.title or str(target.chat_id)
+        out.append(f"📈 {title}:")
+        if report.reach_rate is not None:
+            out.append(
+                f"  • ERR (охват к подписчикам): {report.reach_rate}% "
+                f"— {report.avg_views} из {report.subscribers}"
+            )
+        else:
+            # Причину называем прямо: без снимка подписчиков ERR не считается,
+            # и это чинится включением growth-трекера, а не ожиданием.
+            out.append("  • ERR: нет снимка подписчиков (F22)")
+        if report.engagement_rate is not None:
+            out.append(f"  • ER (реакции+репосты к охвату): {report.engagement_rate}%")
+        if report.posts_with_stats < report.posts_total:
+            out.append(
+                f"  • ⚠️ метрики есть у {report.posts_with_stats} из "
+                f"{report.posts_total} постов — средние по ним"
+            )
+    return out
