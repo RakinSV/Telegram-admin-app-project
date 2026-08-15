@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/support">&larr; {{ t('support.title') }}</a></p>
+<h1>
+  {% if thread.username %}@{{ thread.username }}{% else %}id{{ thread.user_id }}{% endif %}
+</h1>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+<div class="field-row" style="align-items: flex-start;">
+  <div style="flex:2;">
+    <h2>{{ t('support.conversation') }}</h2>
+    {% for msg in messages %}
+    <div style="margin-bottom:10px; padding:8px 12px; border-radius:8px;
+                {% if msg.direction == 'in' %}background:#f2f2f2;{% else %}background:#e8f0fe;{% endif %}">
+      <div class="muted" style="font-size:0.85em;">
+        {% if msg.direction == 'in' %}{{ t('support.from_person') }}{% else %}{{ t('support.from_us') }}{% if msg.author %} · {{ msg.author }}{% endif %}{% endif %}
+        · {{ msg.created_at.strftime('%Y-%m-%d %H:%M') }}
+      </div>
+      <div style="white-space: pre-wrap;">{{ msg.text }}</div>
+    </div>
+    {% endfor %}
+
+    {% if thread.status == 'open' %}
+    <form method="post" action="/support/{{ thread.id }}/reply">
+      <textarea name="text" rows="4" style="width:100%;" required
+                placeholder="{{ t('support.reply_placeholder') }}"></textarea>
+      <button type="submit">{{ t('support.send') }}</button>
+    </form>
+    <form method="post" action="/support/{{ thread.id }}/close" style="margin-top:8px;">
+      <button type="submit" class="secondary">{{ t('support.close_thread') }}</button>
+    </form>
+    {% else %}
+    <p class="muted">{{ t('support.closed_hint') }}</p>
+    <form method="post" action="/support/{{ thread.id }}/reopen">
+      <button type="submit" class="secondary">{{ t('support.reopen') }}</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div style="flex:1;">
+    <h2>{{ t('support.who_is_it') }}</h2>
+    <p class="hint">{{ t('support.card_hint') }}</p>
+    <table>
+      <tr>
+        <td>{{ t('contact_detail.origin') }}</td>
+        <td>{{ card.origin or t('contacts.organic') }}</td>
+      </tr>
+      <tr>
+        <td>{{ t('contact_detail.membership') }}</td>
+        <td>{{ t('contact_detail.still_in') if card.is_active_member else t('contacts.left') }}</td>
+      </tr>
+      <tr>
+        <td>{{ t('contact_detail.confirmed_invites') }}</td>
+        <td>{{ card.confirmed_invites }}</td>
+      </tr>
+      <tr>
+        <td>{{ t('contacts.points') }}</td>
+        <td>{{ card.points }}</td>
+      </tr>
+      <tr>
+        <td>{{ t('contact_detail.moderation') }}</td>
+        <td>
+          {% if card.moderation.is_banned %}<span class="badge warn">{{ t('contacts.banned') }}</span>{% endif %}
+          {% if card.moderation.is_trusted %}<span class="badge">{{ t('contacts.trusted') }}</span>{% endif %}
+          {% if card.moderation.known %}{{ t('contact_detail.warns', n=card.moderation.warn_count) }}
+          {% else %}<span class="muted">—</span>{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>{{ t('contacts.tags') }}</td>
+        <td>
+          {% for tag in card.tags %}<span class="badge muted">{{ tag }}</span>{% else %}—{% endfor %}
+        </td>
+      </tr>
+    </table>
+    <p><a href="/contacts/{{ card.user_id }}">{{ t('support.full_card') }}</a></p>
+  </div>
+</div>
+{% endblock %}

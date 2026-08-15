@@ -115,6 +115,57 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
     "nav.users": {"ru": "Пользователи", "en": "Users"},
     "nav.calendar": {"ru": "Календарь", "en": "Calendar"},
+    "nav.support": {"ru": "Поддержка", "en": "Support"},
+
+    # --- F68: инбокс поддержки ---
+    "support.title": {"ru": "Поддержка", "en": "Support"},
+    "support.intro": {
+        "ru": "Сюда попадают личные сообщения боту, не подошедшие ни одной "
+              "команде. Ответ уходит тем же ботом, которому человек написал.",
+        "en": "Private messages to the bot that matched no command land here. "
+              "The reply goes out through the same bot the person wrote to.",
+    },
+    "support.all": {"ru": "все", "en": "all"},
+    "support.open": {"ru": "открытые", "en": "open"},
+    "support.closed": {"ru": "закрытые", "en": "closed"},
+    "support.unread_n": {"ru": "без ответа: {n}", "en": "unanswered: {n}"},
+    "support.person": {"ru": "Человек", "en": "Person"},
+    "support.messages": {"ru": "Сообщений", "en": "Messages"},
+    "support.last": {"ru": "Последнее", "en": "Last"},
+    "support.status": {"ru": "Статус", "en": "Status"},
+    "support.status_open": {"ru": "открыт", "en": "open"},
+    "support.status_closed": {"ru": "закрыт", "en": "closed"},
+    "support.new": {"ru": "новое", "en": "new"},
+    "support.empty": {"ru": "Обращений пока нет.", "en": "No requests yet."},
+    "support.conversation": {"ru": "Переписка", "en": "Conversation"},
+    "support.from_person": {"ru": "от человека", "en": "from the person"},
+    "support.from_us": {"ru": "наш ответ", "en": "our reply"},
+    "support.reply_placeholder": {
+        "ru": "Ответ уйдёт человеку в личку", "en": "The reply goes to their DM",
+    },
+    "support.send": {"ru": "Отправить", "en": "Send"},
+    "support.close_thread": {"ru": "Закрыть обращение", "en": "Close request"},
+    "support.reopen": {"ru": "Открыть заново", "en": "Reopen"},
+    "support.closed_hint": {
+        "ru": "Обращение закрыто. Новое сообщение от человека откроет его "
+              "заново — значит он вернулся с тем же вопросом.",
+        "en": "The request is closed. A new message from the person reopens "
+              "it — meaning they came back with the same question.",
+    },
+    "support.who_is_it": {"ru": "Кто это", "en": "Who is this"},
+    "support.card_hint": {
+        "ru": "Отвечать незнакомцу и отвечать человеку, который привёл вам "
+              "десять друзей, — разные разговоры.",
+        "en": "Answering a stranger and answering someone who brought you ten "
+              "friends are different conversations.",
+    },
+    "support.full_card": {"ru": "Полная карточка →", "en": "Full card →"},
+    "support.error_not_sent": {
+        "ru": "Ответ сохранён, но не доставлен: проверьте токен Engage. "
+              "Текст не потерян — можно отправить снова.",
+        "en": "The reply was saved but not delivered: check the Engage token. "
+              "The text is not lost — you can send it again.",
+    },
 
     # --- F72: контент-календарь ---
     "calendar.title": {"ru": "Контент-календарь", "en": "Content calendar"},

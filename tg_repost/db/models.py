@@ -734,6 +734,60 @@ class ContactTag(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class SupportThread(Base):
+    """Переписка с одним человеком в поддержке (F68).
+
+    ОДИН ТРЕД НА ЧЕЛОВЕКА, А НЕ НА ОБРАЩЕНИЕ. Человек не мыслит «тикетами»:
+    он пишет боту, потом дописывает, потом возвращается через неделю. Нарезка
+    на отдельные обращения по таймауту породила бы три треда об одном и том
+    же и заставила оператора собирать историю по кускам.
+
+    Статус живёт на треде: закрытый тред открывается заново новым сообщением
+    — это и есть «человек вернулся с тем же вопросом».
+    """
+
+    __tablename__ = "support_threads"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", name="uq_support_thread_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # open | closed
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)
+    # Есть ли непрочитанное от человека. Отдельный флаг, а не сравнение дат:
+    # оператор мог открыть тред и не ответить, и тогда «прочитано» — это его
+    # решение, а не факт открытия страницы.
+    has_unread: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default="1"
+    )
+    last_message_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class SupportMessage(Base):
+    """Одно сообщение в переписке поддержки (F68)."""
+
+    __tablename__ = "support_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[int] = mapped_column(
+        ForeignKey("support_threads.id", ondelete="CASCADE"), index=True
+    )
+    # "in" — от человека, "out" — ответ оператора.
+    direction: Mapped[str] = mapped_column(String(4))
+    text: Mapped[str] = mapped_column(Text)
+    # Кто ответил. NULL у входящих: там автор и так известен по треду.
+    author: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Broadcast(Base):
     """Рассылка по сегменту (F64) — что отправили и чем это кончилось.
 

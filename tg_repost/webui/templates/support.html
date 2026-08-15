@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('support.title') }}</h1>
+<p class="muted">{{ t('support.intro') }}</p>
+
+<div class="check-list">
+  <a href="/support" class="badge {{ 'muted' if selected_status else '' }}">{{ t('support.all') }}</a>
+  <a href="/support?status=open" class="badge {{ '' if selected_status == 'open' else 'muted' }}">{{ t('support.open') }}</a>
+  <a href="/support?status=closed" class="badge {{ '' if selected_status == 'closed' else 'muted' }}">{{ t('support.closed') }}</a>
+  {% if unread %}<span class="badge warn">{{ t('support.unread_n', n=unread) }}</span>{% endif %}
+</div>
+
+<table>
+  <tr>
+    <th>{{ t('support.person') }}</th>
+    <th>{{ t('support.messages') }}</th>
+    <th>{{ t('support.last') }}</th>
+    <th>{{ t('support.status') }}</th>
+  </tr>
+  {% for thread in threads %}
+  <tr>
+    <td>
+      <a href="/support/{{ thread.id }}">
+        {% if thread.username %}@{{ thread.username }}{% else %}id{{ thread.user_id }}{% endif %}
+      </a>
+      {% if thread.has_unread %}<span class="badge warn">{{ t('support.new') }}</span>{% endif %}
+    </td>
+    <td>{{ thread.message_count }}</td>
+    <td>{{ thread.last_message_at.strftime('%Y-%m-%d %H:%M') }}</td>
+    <td>{{ t('support.status_' + thread.status) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="muted">{{ t('support.empty') }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

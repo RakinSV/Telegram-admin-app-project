@@ -1,4 +1,4 @@
-"""FastAPI-приложение веб-админки (F23, Фаза 5.1).
+﻿"""FastAPI-приложение веб-админки (F23, Фаза 5.1).
 
 Встраивается в общий asyncio-процесс через `main.py` (uvicorn как таска в том
 же event loop, что и Telethon listener/бот/планировщик) — НЕ отдельный
@@ -46,6 +46,7 @@ from tg_repost.webui.broadcasts_routes import build_broadcasts_router
 from tg_repost.webui.calendar_routes import build_calendar_router
 from tg_repost.webui.contacts_routes import build_contacts_router
 from tg_repost.webui.mediakit_routes import build_mediakit_router
+from tg_repost.webui.support_routes import build_support_router
 from tg_repost.webui.users_routes import build_users_router
 from tg_repost.webui.crud_routes import build_crud_router
 from tg_repost.webui.form_utils import coerce_form_value
@@ -825,4 +826,5 @@ def create_app() -> FastAPI:
     app.include_router(build_ad_requests_router())
     app.include_router(build_users_router())
     app.include_router(build_calendar_router())
+    app.include_router(build_support_router())
     return app

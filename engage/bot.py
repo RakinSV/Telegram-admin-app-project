@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from engage.config import get_engage_settings
-from engage.handlers import contest, quiz, referral, start, suggest
+from engage.handlers import contest, quiz, referral, start, suggest, support
 from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
@@ -46,6 +46,24 @@ def _build_bot(token: str) -> Bot:
     )
 
 
+def build_reply_bot() -> Bot | None:
+    """Бот Engage для разовой отправки из веб-админки (F68).
+
+    `None` — токен не настроен. Отдельная функция, а не переиспользование
+    работающего экземпляра: веб-процесс и процесс Engage разные, общего
+    объекта у них нет, а поднимать ради одного сообщения весь диспетчер
+    незачем.
+
+    Отвечать нужно именно ЭТИМ ботом — тем, которому человек написал. Ответ
+    от другого бота для него сообщение от неизвестного адресата, и половина
+    решит, что это спам.
+    """
+    settings = get_engage_settings()
+    if not settings.is_configured:
+        return None
+    return _build_bot(settings.engage_bot_token)
+
+
 async def main() -> None:
     setup_logging()
     settings = get_engage_settings()
@@ -66,6 +84,11 @@ async def main() -> None:
     dp.include_router(referral.router)
     dp.include_router(contest.router)
     dp.include_router(suggest.router)
+    # F68: поддержка — СТРОГО ПОСЛЕДНЯЯ. Она ловит любое личное сообщение,
+    # не разобранное выше; поставь её раньше — и она проглотит текст, который
+    # ждёт предложка (FSM-состояние в suggest.router), а обнаружится это по
+    # тишине в ответ на обычные команды.
+    dp.include_router(support.router)
 
     # Публикация созревших викторин (F43). Минутный тик: сама задержка
     # после поста задаётся настройкой quiz_delay_minutes, здесь только
