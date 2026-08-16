@@ -95,6 +95,12 @@ async def on_shop(message: Message) -> None:
 
 @router.callback_query(F.data.startswith("buy:"))
 async def on_buy(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
+    """Показать способы оплаты. Счёт выставляется следующим шагом.
+
+    ДВА СПОСОБА ПРЕДЛАГАЮТСЯ, КОГДА ОБА НАСТРОЕНЫ. Выбирать за человека
+    нельзя: у карты и крипты разные комиссии и разная скорость, и это его
+    деньги. Если настроен один — лишнего вопроса не задаём.
+    """
     await callback.answer()
     if not _enabled():
         return
@@ -103,6 +109,108 @@ async def on_buy(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
     except ValueError:
         return
 
+    product = shop.get_product(product_id)
+    if product is None or not product.is_active or not product.in_stock:
+        await callback.message.answer("Этого товара уже нет.")
+        return
+
+    from tg_repost import crypto_rails_repo
+
+    rail = crypto_rails_repo.rail_for_product(product_id)
+    has_card = bool(_provider_token())
+
+    if rail is not None and has_card:
+        await callback.message.answer(
+            f"{product.name} — {product.price_human}\nКак будете платить?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Картой", callback_data=f"pay:card:{product_id}")],
+                [InlineKeyboardButton(text="Криптой", callback_data=f"pay:crypto:{product_id}")],
+            ]),
+        )
+        return
+    if rail is not None:
+        await _send_crypto_invoice(callback, product_id)
+        return
+    await _send_card_invoice(callback, bot, product_id)
+
+
+@router.callback_query(F.data.startswith("pay:card:"))
+async def on_pay_card(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
+    await callback.answer()
+    try:
+        product_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        return
+    await _send_card_invoice(callback, bot, product_id)
+
+
+@router.callback_query(F.data.startswith("pay:crypto:"))
+async def on_pay_crypto(callback) -> None:  # noqa: ANN001 — CallbackQuery
+    await callback.answer()
+    try:
+        product_id = int(callback.data.rsplit(":", 1)[1])
+    except ValueError:
+        return
+    await _send_crypto_invoice(callback, product_id)
+
+
+async def _send_crypto_invoice(callback, product_id: int) -> None:  # noqa: ANN001
+    """Выставить криптосчёт и завести неоплаченный заказ.
+
+    ЗАКАЗ СОЗДАЁТСЯ ПОСЛЕ УСПЕШНОГО СЧЁТА, а не до: заказ без счёта — это
+    строка, которую никто никогда не оплатит, и она будет висеть в списке
+    неоплаченных, изображая потерянную продажу.
+    """
+    from tg_repost import crypto_rails_repo, shop_repo
+    from tg_repost.crypto_rails import RailError
+    from tg_repost.crypto_rails.polling import schedule
+
+    product = shop.get_product(product_id)
+    rail = crypto_rails_repo.rail_for_product(product_id)
+    if product is None or rail is None:
+        await callback.message.answer("Оплата криптой сейчас недоступна.")
+        return
+
+    # Сумма: посреднику — в валюте товара, он пересчитает сам; прямому
+    # переводу — только TON, и товар для него должен быть оценён в TON.
+    amount = f"{product.price / 100:.2f}"
+    try:
+        adapter = crypto_rails_repo.build(rail.id)
+        invoice = await adapter.create_invoice(
+            amount=amount,
+            asset=product.currency,
+            order_id=0,
+            description=product.name,
+        )
+    except (RailError, crypto_rails_repo.InvalidRail) as exc:
+        logger.warning("F70: счёт для товара #%s не выставлен: %s", product_id, exc)
+        await callback.message.answer(
+            "Не получилось выставить счёт. Попробуйте позже или выберите другой способ.",
+        )
+        return
+
+    order = shop_repo.create_crypto_order(
+        user_id=callback.from_user.id,
+        product_id=product_id,
+        rail_id=rail.id,
+        invoice_id=invoice.external_id,
+        crypto_amount=invoice.amount,
+        crypto_asset=invoice.asset,
+    )
+    if order is None:
+        await callback.message.answer("Этого товара уже нет.")
+        return
+
+    schedule(order.id)
+    await callback.message.answer(
+        f"Заказ №{order.id}: {product.name}\n"
+        f"К оплате: {invoice.amount} {invoice.asset}\n\n"
+        f"{invoice.pay_url}\n\n"
+        "Как только перевод придёт, я подтвержу заказ здесь же.",
+    )
+
+
+async def _send_card_invoice(callback, bot: Bot, product_id: int) -> None:  # noqa: ANN001
     product = shop.get_product(product_id)
     if product is None or not product.is_active or not product.in_stock:
         await callback.message.answer("Этого товара уже нет.")

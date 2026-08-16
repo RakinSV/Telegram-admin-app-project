@@ -1763,6 +1763,21 @@ class Order(Base):
     # new | paid | shipped | canceled
     status: Mapped[str] = mapped_column(String(16), default="new", index=True)
     charge_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    # --- F70: оплата криптой ---
+    # Каким кошельком платят. Хранится В ЗАКАЗЕ, а не берётся заново по
+    # товару: владелец может переназначить кошелёк группы, пока счёт висит
+    # неоплаченным, и проверять тогда надо СТАРЫЙ — деньги придут туда, куда
+    # человеку показали ссылку.
+    crypto_rail_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Идентификатор счёта у провайдера либо комментарий перевода для TON.
+    crypto_invoice_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+    # Сумма и актив, в которых счёт реально выставлен: у посредников это
+    # фиат, у прямого перевода — TON. Нужны, чтобы в карточке заказа было
+    # видно, за что человек платил, а не только сколько это в рублях.
+    crypto_amount: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    crypto_asset: Mapped[str | None] = mapped_column(String(16), nullable=True)
     shipping: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Продано больше, чем было на складе: двое оплатили последний товар
     # одновременно. Отказать ПОСЛЕ оплаты нельзя, поэтому заказ принимается,

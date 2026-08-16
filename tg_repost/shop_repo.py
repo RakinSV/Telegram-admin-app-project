@@ -87,6 +87,11 @@ class OrderView:
     is_oversold: bool
     created_at: datetime
     paid_at: datetime | None
+    # F70: заполнено только у заказов, оплачиваемых криптой.
+    crypto_rail_id: int | None = None
+    crypto_invoice_id: str | None = None
+    crypto_amount: str | None = None
+    crypto_asset: str | None = None
 
     @property
     def amount_human(self) -> str:
@@ -107,6 +112,10 @@ def _order_view(row: Order) -> OrderView:
         product_name=row.product_name, quantity=row.quantity, amount=row.amount,
         currency=row.currency, status=row.status, shipping=row.shipping,
         is_oversold=row.is_oversold, created_at=row.created_at, paid_at=row.paid_at,
+        crypto_rail_id=row.crypto_rail_id,
+        crypto_invoice_id=row.crypto_invoice_id,
+        crypto_amount=row.crypto_amount,
+        crypto_asset=row.crypto_asset,
     )
 
 
@@ -325,6 +334,100 @@ def _create_paid_order(
             row.id, name, quantity, amount, currency,
         )
         return _order_view(row)
+
+
+def create_crypto_order(
+    *,
+    user_id: int,
+    product_id: int,
+    rail_id: int,
+    invoice_id: str,
+    crypto_amount: str,
+    crypto_asset: str,
+    quantity: int = 1,
+) -> OrderView | None:
+    """Завести НЕОПЛАЧЕННЫЙ заказ под криптосчёт (F70).
+
+    Крипта устроена наоборот по сравнению с картой: там заказ рождается уже
+    оплаченным (Telegram сообщает о списании), здесь сначала выставляется
+    счёт, а деньги приходят когда придут — или не приходят вовсе.
+
+    ОСТАТОК ЗДЕСЬ НЕ СПИСЫВАЕТСЯ. Списать при выставлении счёта значило бы
+    отдать склад брошенным корзинам: человек нажал «оплатить криптой»,
+    передумал, а товар числится занятым до истечения счёта. Списание — в
+    момент подтверждения оплаты, вместе с проверкой на перепродажу.
+    """
+    with session_scope() as session:
+        product = session.get(Product, product_id)
+        if product is None:
+            return None
+        row = Order(
+            user_id=user_id,
+            product_id=product_id,
+            product_name=product.name,
+            quantity=quantity,
+            amount=product.price * quantity,
+            currency=product.currency,
+            status=STATUS_NEW,
+            crypto_rail_id=rail_id,
+            crypto_invoice_id=invoice_id,
+            crypto_amount=crypto_amount,
+            crypto_asset=crypto_asset,
+        )
+        session.add(row)
+        session.flush()
+        logger.info(
+            "F70: заказ #%d ждёт оплаты криптой (%s %s)",
+            row.id, crypto_amount, crypto_asset,
+        )
+        return _order_view(row)
+
+
+def mark_crypto_order_paid(order_id: int) -> OrderView | None:
+    """Подтвердить оплату криптой. `None` — заказ уже не ждёт оплаты.
+
+    Списание остатка происходит ИМЕННО ЗДЕСЬ, по тем же правилам, что у
+    оплаты картой: если товар закончился, пока счёт висел, заказ всё равно
+    принимается и помечается — деньги уже пришли, и отказать нельзя.
+    """
+    with session_scope() as session:
+        row = session.get(Order, order_id)
+        if row is None or row.status != STATUS_NEW:
+            # Повторный проход опроса по уже подтверждённому заказу — не
+            # ошибка: опрос идёт по расписанию и мог наложиться.
+            return None
+
+        product = session.get(Product, row.product_id)
+        if product is not None and product.stock is not None:
+            if product.stock >= row.quantity:
+                product.stock -= row.quantity
+            else:
+                product.stock = 0
+                row.is_oversold = True
+                logger.warning(
+                    "F70: заказ #%d оплачен сверх остатка товара #%s",
+                    order_id, row.product_id,
+                )
+
+        row.status = STATUS_PAID
+        row.paid_at = _utcnow()
+        logger.info("F70: заказ #%d оплачен криптой", order_id)
+        return _order_view(row)
+
+
+def pending_crypto_orders() -> list[OrderView]:
+    """Заказы, ждущие оплаты криптой — для опроса статуса."""
+    with session_scope() as session:
+        rows = (
+            session.query(Order)
+            .filter(
+                Order.status == STATUS_NEW,
+                Order.crypto_invoice_id.isnot(None),
+            )
+            .order_by(Order.id.asc())
+            .all()
+        )
+        return [_order_view(row) for row in rows]
 
 
 def list_orders(status: str | None = None, user_id: int | None = None) -> list[OrderView]:
