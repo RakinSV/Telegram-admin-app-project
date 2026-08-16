@@ -180,6 +180,46 @@ def test_dashboard_shows_own_subscription(_paid_channel):
     assert "Активна до" in body
 
 
+def test_inviter_leaderboard_counts_confirmed_only():
+    """Лидерборд пригласивших считает ЗАСЧИТАННЫЕ приглашения.
+
+    Считай он переходы — первое место занял бы тот, кто нагнал
+    мультиаккаунтов, и таблица стала бы рекламой накрутки.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from tg_repost import targets_repo
+    from tg_repost.db.models import Referral, TargetGroup
+
+    with session_scope() as session:
+        session.query(TargetGroup).delete()
+        session.query(Referral).delete()
+        session.add(TargetGroup(chat_id=-100777, title="Канал", is_active=True))
+        # Честный: приглашение засчитано. Накрутчик: три перехода без
+        # подтверждения.
+        session.add(Referral(
+            inviter_user_id=ALICE, invited_user_id=5001, chat_id=-100777,
+            joined_at=datetime.now(timezone.utc) - timedelta(days=10),
+            first_message_at=datetime.now(timezone.utc) - timedelta(days=9),
+            confirmed_at=datetime.now(timezone.utc),
+        ))
+        for invited in (5002, 5003, 5004):
+            session.add(Referral(
+                inviter_user_id=BOB, invited_user_id=invited, chat_id=-100777,
+            ))
+    del targets_repo
+
+    client = _client()
+    body = client.post("/app/data", data={"init_data": _init_data(ALICE)}).text
+
+    with session_scope() as session:
+        session.query(Referral).delete()
+        session.query(TargetGroup).delete()
+
+    assert "Кто привёл больше всех" in body
+    assert str(BOB) not in body, "накрутчик попал в таблицу"
+
+
 def test_dashboard_never_shows_someone_elses_subscription(_paid_channel):
     """ГЛАВНОЕ ОБЕЩАНИЕ МИНИ-АППА.
 

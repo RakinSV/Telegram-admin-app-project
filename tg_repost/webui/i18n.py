@@ -1884,6 +1884,9 @@ STRINGS: dict[str, dict[str, str]] = {
               "multi-account farm.",
     },
     "miniapp.leaderboard": {"ru": "Таблица лидеров", "en": "Leaderboard"},
+    "miniapp.top_inviters": {
+        "ru": "Кто привёл больше всех", "en": "Top inviters",
+    },
     "miniapp.shop": {"ru": "Каталог", "en": "Catalogue"},
     "miniapp.shop_hint": {
         "ru": "Купить — командой /shop в боте: оплата идёт через Telegram.",

@@ -96,6 +96,15 @@ def build_miniapp_router() -> APIRouter:
         leaders = quiz_repo.leaderboard(chat_id, limit=10) if chat_id else []
         referrals = referrals_repo.stats_for(user.id)
 
+        # Лидерборд пригласивших. Был написан в F42 и НИКОМУ не показывался —
+        # найдено сквозным аудитом. Место ему здесь: он мотивирует участника,
+        # а участник живёт в мини-аппе, не в админке.
+        #
+        # Считаются ЗАСЧИТАННЫЕ приглашения, а не переходы: иначе первое
+        # место займёт тот, кто нагнал мультиаккаунтов, и таблица станет
+        # рекламой накрутки.
+        inviters = referrals_repo.top_inviters(chat_id, limit=10) if chat_id else []
+
         products = (
             [p for p in shop_repo.list_products(only_active=True) if p.in_stock]
             if settings.shop_enabled else []
@@ -111,6 +120,7 @@ def build_miniapp_router() -> APIRouter:
             {
                 "user": user,
                 "leaders": leaders,
+                "inviters": inviters,
                 "referrals": referrals,
                 "products": products,
                 "subscription": subscription,

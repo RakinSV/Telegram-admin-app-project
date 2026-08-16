@@ -40,6 +40,18 @@
 </div>
 <p class="muted">{{ t('miniapp.ref_hint') }}</p>
 
+{% if inviters %}
+<h2>{{ t('miniapp.top_inviters') }}</h2>
+<div class="card">
+  {% for row in inviters %}
+  <div class="row{{ ' me' if row[0] == user.id else '' }}">
+    <span>{{ loop.index }}. {{ row[0] }}</span>
+    <span>{{ row[1] }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% if leaders %}
 <h2>{{ t('miniapp.leaderboard') }}</h2>
 <div class="card">
