@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 ```
 ╔══════════════════════════════════════════════════════════════════╗
@@ -23,7 +23,7 @@ Three independent bots, one web admin panel, all self-hosted.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/RakinSV/Telegram-admin-app-project/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/RakinSV/Telegram-admin-app-project?style=flat-square)](https://github.com/RakinSV/Telegram-admin-app-project/stargazers)
-[![Tests](https://img.shields.io/badge/tests-1266%20passing-brightgreen?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-2226%20passing-brightgreen?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-red?style=flat-square)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/type--checked-mypy-blue?style=flat-square)](https://mypy-lang.org/)
@@ -51,7 +51,7 @@ spam, bots, and raids, so the audience the first bot grows doesn't drown.
 themselves, a referral programme with real anti-fraud, and verifiable
 contest draws.
 
-All three are production-ready: Alembic migrations from day one, 1266 tests,
+All three are production-ready: Alembic migrations from day one, 2226 tests,
 CI running lint/type-check/security-scan on every push, Docker packaging for
 VPS/Proxmox deployment, and a single web admin panel instead of poking at
 `.env` files and a database by hand.
@@ -701,7 +701,7 @@ python -m tg_repost.tools.backup --keep 14
 ## Tests and code quality
 
 ```bash
-pytest                                            # 1266 tests
+pytest                                            # 2226 tests
 ruff check tg_repost guardian                     # linter
 mypy tg_repost guardian                           # static typing — 0 errors
 bandit -r tg_repost guardian -c pyproject.toml     # security scanner, documented baseline
@@ -754,7 +754,7 @@ guardian/                # AI group moderator (separate bot, own database)
 engage/                  # audience engagement bot (shares tg_repost's database)
   handlers/                # quiz, referral, contest, suggest, start (deep links)
 
-tests/                   # 1266 tests — pytest + pytest-asyncio
+tests/                   # 2226 tests — pytest + pytest-asyncio
 .github/workflows/       # CI: ruff, mypy, pytest, bandit, pip-audit
 ```
 
@@ -767,8 +767,70 @@ would mean syncing all three across process boundaries.
 
 ## Implementation status
 
-**46 of 50 planned features are implemented.** The remaining 4 are deferred
-on purpose, not unfinished — see the bottom of this section.
+**70 of 74 planned features are implemented.** Of the remaining four, two
+were closed by other features, one was rejected on purpose, and one is
+deliberately left open — see the bottom of this section. There is no
+unstarted work left in the plan.
+
+The backlog grew from 51 to 74 after a review of 53 competing products: the
+goal changed from "a personal tool for my channels" to "one product that
+covers Telegram work for a business — groups, bots and the money around
+them".
+
+### Added since the 51-feature milestone
+
+- ✅ **CRM for members** — one card per person: where they came from, whom
+  they invited, tags and notes. Segments are saved queries, not frozen lists.
+- ✅ **Broadcasts by segment** — with a hard rule Telegram imposes: a bot
+  cannot write first, so recipients are always fewer than the segment. The
+  preview shows both numbers and explains the gap before anything is sent.
+- ✅ **Funnels** — chains of messages with delays, linear by design. No
+  branching: ask for branching and you are asked for loops next, then
+  variables, and you end up with a bad programming language inside an admin
+  panel.
+- ✅ **Support inbox** — one thread per person, not per ticket. People do not
+  think in tickets: they write, add to it, and come back a week later.
+- ✅ **Content calendar with owner approval** — the past is facts, the future
+  is commitments; undated posts are shown as a count rather than smeared
+  across days the system will not honour.
+- ✅ **Ad requests and slot booking**, **media kit** for advertisers,
+  **ad labelling (erid/ORD)** behind a switch.
+- ✅ **Paid access via Telegram Stars** — 0% commission, subscription renewals
+  handled by Telegram itself; our part is issuing and revoking access. Money
+  facts live in an append-only journal, because a payment update can arrive
+  twice and "grant if not already active" would grant twice.
+- ✅ **Affiliate programme** on top of referrals — a refund reverses the
+  commission, self-invites earn nothing.
+- ✅ **Shop in the bot** — physical goods via a payment provider, with prices
+  in minor units and stock decremented at payment, not at checkout.
+- ✅ **Crypto payments** — CryptoBot, Wallet Pay and direct transfers to a TON
+  wallet, configured per group. Rates are never fetched from third-party
+  services: a lying rate means silently getting underpaid on every sale.
+- ✅ **Roles for the admin panel** — owner / editor / analyst, default-deny.
+- ✅ **Public REST API and outgoing webhooks** — keys stored hashed, per-key
+  rate limiting, HMAC-signed deliveries, at-least-once with an event id.
+- ✅ **Mini App** — a member dashboard inside Telegram: subscription, invites,
+  catalogue, leaderboards. `initData` signature verified on every request.
+- ✅ **Fraud detector** for bought subscribers, **UTM tagging**, **engagement
+  metrics (ERR/ER)**, **post recycling**, **channel stats via MTProto**.
+
+### Known gaps, stated plainly
+
+- ⚠️ **No payment path has been exercised with real money.** Telegram Stars,
+  the fiat provider and all three crypto rails are written against
+  documentation, not against a live service. Each needs a small real
+  transaction before being switched on.
+- ⬜ **Real production tokens** — an operational step: create the Guardian and
+  Engage bots with @BotFather and add the tokens in `/settings`. Until then
+  those two processes refuse to start rather than run half-configured.
+- 💭 **Deliberately left open** — multi-tenant SaaS. The insurance was bought
+  where it was cheap (a tenant key in every new table), the rest is not
+  written speculatively.
+- 🚫 **Rejected on purpose** — cross-posting to other social networks. Tools
+  built for that cover 8–15 platforms; competing there would trade depth in
+  Telegram for breadth nobody asked for.
+
+### Previous milestone (kept for context)
 
 - ✅ **Repost bot** — collection, rewriting, dedup, moderation, publishing,
   stats, style profiles, source enrichment, article extraction, auto covers,
@@ -787,6 +849,13 @@ on purpose, not unfinished — see the bottom of this section.
 - ✅ **CI/CD** — GitHub Actions on every push/PR, fully clean
   mypy/ruff/bandit/pip-audit across all three packages.
 - ✅ **Auto-backup** — `.env` + both databases + logs in one script.
+- ✅ **Reachability guards** — a cross-cutting audit found four features that
+  were implemented, tested and unreachable: referrals were never confirmed
+  because nothing marked the two conditions, owner approval did nothing
+  because nothing set the flag, a contest could not be created at all, and an
+  unsubscribed person had no way back. Tests per function cannot see this —
+  they call what production does not. There are now guards that check the
+  path, not the function.
 - ✅ **Unified proxy support (MTProto / SOCKS5 / HTTP)** — one section, per-type
   enable + per-traffic usage toggles (Telegram / rewrite AI / image AI),
   configured on `/settings` (see [Proxies](#proxies-mtproto--socks5--http) — and read the fake-TLS
@@ -808,7 +877,7 @@ on purpose, not unfinished — see the bottom of this section.
 ## Support the project
 
 This project is written and maintained in spare time, with no grant and no
-company behind it — three bots, 1266 tests and 50 documented features, built
+company behind it — three bots, 2226 tests and 74 documented features, built
 nights and weekends. If it's been useful to you, a coffee helps keep the
 feature work going:
 
