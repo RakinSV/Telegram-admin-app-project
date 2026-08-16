@@ -165,9 +165,9 @@ async def on_successful_payment(message: Message, bot: Bot) -> None:
         else datetime.now(timezone.utc) + timedelta(seconds=SUBSCRIPTION_PERIOD)
     )
 
-    # СНАЧАЛА ЗАПИСЬ. `False` означает, что этот же апдейт уже обработан, и
+    # СНАЧАЛА ЗАПИСЬ. `None` означает, что этот же апдейт уже обработан, и
     # выдавать доступ второй раз нельзя — см. docstring модуля.
-    is_new = subs.record_event(
+    event_id = subs.record_event(
         kind=subs.KIND_PAYMENT,
         charge_id=payment.telegram_payment_charge_id,
         user_id=user.id,
@@ -178,9 +178,19 @@ async def on_successful_payment(message: Message, bot: Bot) -> None:
         is_first_recurring=bool(payment.is_first_recurring),
         period_end=period_end,
     )
-    if not is_new:
+    if event_id is None:
         logger.info("F49: повторный апдейт об оплате от %s — пропущен", user.id)
         return
+
+    # F67: комиссия тому, кто привёл этого человека. Сбой начисления не
+    # должен ломать выдачу доступа — человек заплатил за канал, а не за
+    # партнёрскую программу.
+    try:
+        from tg_repost import affiliate_repo
+
+        affiliate_repo.accrue_for_payment(event_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("F67: начисление за платёж #%s не прошло: %s", event_id, exc)
 
     existing = subs.get(chat_id, user.id)
     invite = existing.invite_link if existing is not None else None

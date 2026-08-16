@@ -1,4 +1,4 @@
-"""Платный доступ по подписке Stars (F49) — ядро.
+﻿"""Платный доступ по подписке Stars (F49) — ядро.
 
 Ошибка здесь стоит денег, а не неловкости: лишнее продление — месяц
 бесплатного доступа, пропущенное — человек заплатил и остался за дверью.
@@ -56,8 +56,8 @@ def test_same_payment_twice_is_recorded_once():
         kind=subs.KIND_PAYMENT, charge_id=CHARGE, user_id=ALICE, period_end=end,
     )
 
-    assert first is True
-    assert second is False
+    assert first is not None
+    assert second is None
     with session_scope() as session:
         assert session.query(PaymentEvent).count() == 1
 
@@ -78,7 +78,7 @@ def test_renewal_with_new_period_is_a_new_fact():
         kind=subs.KIND_PAYMENT, charge_id=CHARGE, user_id=ALICE, period_end=second_end,
     )
 
-    assert renewal is True
+    assert renewal is not None
 
 
 def test_renewal_with_new_charge_id_is_a_new_fact():
@@ -89,7 +89,7 @@ def test_renewal_with_new_charge_id_is_a_new_fact():
 
     assert subs.record_event(
         kind=subs.KIND_PAYMENT, charge_id="charge_2", user_id=ALICE, period_end=end,
-    ) is True
+    ) is not None
 
 
 def test_one_off_payments_are_deduplicated_too():
@@ -101,7 +101,8 @@ def test_one_off_payments_are_deduplicated_too():
     first = subs.record_event(kind=subs.KIND_PAYMENT, charge_id=CHARGE, user_id=ALICE)
     second = subs.record_event(kind=subs.KIND_PAYMENT, charge_id=CHARGE, user_id=ALICE)
 
-    assert (first, second) == (True, False)
+    assert first is not None
+    assert second is None
 
 
 def test_refund_of_the_same_charge_is_a_separate_fact():
@@ -110,7 +111,7 @@ def test_refund_of_the_same_charge_is_a_separate_fact():
 
     assert subs.record_event(
         kind=subs.KIND_REFUND, charge_id=CHARGE, user_id=ALICE,
-    ) is True
+    ) is not None
 
 
 def test_repeated_refund_is_rejected():
@@ -118,7 +119,7 @@ def test_repeated_refund_is_rejected():
 
     assert subs.record_event(
         kind=subs.KIND_REFUND, charge_id=CHARGE, user_id=ALICE,
-    ) is False
+    ) is None
 
 
 # --- выдача и продление доступа ---

@@ -1709,6 +1709,61 @@ STRINGS: dict[str, dict[str, str]] = {
         "Telegram's rules for digital goods.",
     },
 
+    # --- F67: партнёрская программа ---
+    "nav.affiliate": {"ru": "Партнёры", "en": "Partners"},
+    "affiliate.title": {"ru": "Партнёрская программа", "en": "Affiliate programme"},
+    "affiliate.intro": {
+        "ru": "Комиссия начисляется за ПОДТВЕРЖДЁННОГО реферала: приглашённый "
+        "вступил, написал и прожил заданное число дней. Возврат платежа "
+        "снимает начисление обратно, самому себе комиссия не начисляется.",
+        "en": "The commission is accrued for a CONFIRMED referral: the invited "
+        "person joined, posted and stayed the configured number of days. A "
+        "refund reverses the accrual; nobody earns commission on themselves.",
+    },
+    "affiliate.disabled": {
+        "ru": "Программа выключена: процент равен нулю. Включается в настройках.",
+        "en": "The programme is off: the percentage is zero. Enable it in settings.",
+    },
+    "affiliate.percent": {"ru": "Процент партнёру", "en": "Partner percentage"},
+    "affiliate.owed": {"ru": "Должны партнёрам", "en": "Owed to partners"},
+    "affiliate.col_partner": {"ru": "Партнёр", "en": "Partner"},
+    "affiliate.col_earned": {"ru": "Заработал", "en": "Earned"},
+    "affiliate.col_paid": {"ru": "Выплачено", "en": "Paid out"},
+    "affiliate.col_owed": {"ru": "К выплате", "en": "Owed"},
+    "affiliate.col_when": {"ru": "Когда", "en": "When"},
+    "affiliate.col_kind": {"ru": "Что", "en": "What"},
+    "affiliate.col_amount": {"ru": "Сумма", "en": "Amount"},
+    "affiliate.col_payer": {"ru": "За кого", "en": "For whom"},
+    "affiliate.col_note": {"ru": "Примечание", "en": "Note"},
+    "affiliate.kind_accrual": {"ru": "начислено", "en": "accrued"},
+    "affiliate.kind_reversal": {"ru": "снято (возврат)", "en": "reversed (refund)"},
+    "affiliate.kind_payout": {"ru": "выплачено", "en": "paid out"},
+    "affiliate.record_payout": {"ru": "Записать выплату", "en": "Record payout"},
+    "affiliate.note_placeholder": {
+        "ru": "как перевели", "en": "how it was transferred",
+    },
+    "affiliate.detail_title": {"ru": "Партнёр", "en": "Partner"},
+    "affiliate.back": {"ru": "К списку", "en": "Back to list"},
+    "affiliate.empty": {"ru": "Пока пусто.", "en": "Nothing yet."},
+    "affiliate.error_amount": {
+        "ru": "Сумма должна быть целым числом звёзд.",
+        "en": "The amount must be a whole number of stars.",
+    },
+    "affiliate.error_too_much": {
+        "ru": "Выплата больше долга — записать нельзя.",
+        "en": "The payout exceeds the debt and cannot be recorded.",
+    },
+    "affiliate.payout_note": {
+        "ru": "«Записать выплату» — это ЗАПИСЬ ФАКТА, а не перевод. Telegram "
+        "не даёт боту переслать звёзды человеку: вывод идёт через Fragment на "
+        "ваш кошелёк, а дальше вы платите партнёру как договорились. Кнопка, "
+        "которая делает вид, что переводит деньги, была бы обманом.",
+        "en": "«Record payout» RECORDS A FACT, it does not transfer anything. "
+        "Telegram does not let a bot send stars to a person: the withdrawal "
+        "goes through Fragment to your wallet, and you pay the partner as "
+        "agreed. A button pretending to move money would be a lie.",
+    },
+
     # --- F60: детектор накрутки ---
     "fraud.title": {"ru": "Признаки накрутки", "en": "Signs of inflated growth"},
     "fraud.desc": {
@@ -2333,6 +2388,26 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.field.paid_access_title.label": {
         "ru": "Название для счёта", "en": "Title shown on the invoice",
+    },
+    "settings.group.affiliate.title": {
+        "ru": "Партнёрская программа", "en": "Affiliate programme",
+    },
+    "settings.group.affiliate.desc": {
+        "ru": "Процент от каждой оплаты тому, кто привёл человека. НОЛЬ "
+        "выключает программу. Сложную часть уже сделал F42: комиссия "
+        "начисляется только за ПОДТВЕРЖДЁННОГО реферала (вступил, написал, "
+        "прожил N дней), самому себе не начисляется никогда, а возврат "
+        "платежа снимает начисление обратно. Выплаты записываются вручную: "
+        "Telegram не даёт боту переслать звёзды человеку.",
+        "en": "A percentage of every payment to whoever brought the person. "
+        "ZERO disables the programme. F42 already did the hard part: the "
+        "commission is accrued only for a CONFIRMED referral (joined, posted, "
+        "stayed N days), never for oneself, and a refund reverses the "
+        "accrual. Payouts are recorded manually: Telegram does not let a bot "
+        "send stars to a person.",
+    },
+    "settings.field.affiliate_percent.label": {
+        "ru": "Процент партнёру, %", "en": "Partner percentage, %",
     },
     "settings.group.ad_marking.title": {
         "ru": "Маркировка рекламы", "en": "Ad marking",

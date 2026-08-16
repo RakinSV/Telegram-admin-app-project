@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ t('affiliate.detail_title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('affiliate.detail_title') }} {{ balance.partner_user_id }}</h1>
+
+<div class="card grid">
+  <div class="stat">
+    <div class="num">{{ balance.earned }} ⭐</div>
+    <div class="label">{{ t('affiliate.col_earned') }}</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ balance.paid_out }} ⭐</div>
+    <div class="label">{{ t('affiliate.col_paid') }}</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ balance.owed }} ⭐</div>
+    <div class="label">{{ t('affiliate.col_owed') }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('affiliate.col_when') }}</th>
+      <th>{{ t('affiliate.col_kind') }}</th>
+      <th>{{ t('affiliate.col_amount') }}</th>
+      <th>{{ t('affiliate.col_payer') }}</th>
+      <th>{{ t('affiliate.col_note') }}</th>
+    </tr>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.created_at.strftime("%d.%m.%Y %H:%M") if row.created_at else "" }}</td>
+      <td>{{ t('affiliate.kind_' + row.kind) }}</td>
+      <td>{{ row.amount }} ⭐{% if row.percent %} <span class="muted">({{ row.percent }}%)</span>{% endif %}</td>
+      <td>{{ row.payer_user_id or "—" }}</td>
+      <td>{{ row.note or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('affiliate.empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p><a href="/affiliate">{{ t('affiliate.back') }}</a></p>
+{% endblock %}

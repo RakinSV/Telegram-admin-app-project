@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ t('affiliate.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('affiliate.title') }}</h1>
+<p class="muted">{{ t('affiliate.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+
+{% if not percent %}
+<p class="badge warn">{{ t('affiliate.disabled') }}</p>
+{% endif %}
+
+<div class="card grid">
+  <div class="stat">
+    <div class="num">{{ percent }}%</div>
+    <div class="label">{{ t('affiliate.percent') }}</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ total_owed }} ⭐</div>
+    <div class="label">{{ t('affiliate.owed') }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('affiliate.col_partner') }}</th>
+      <th>{{ t('affiliate.col_earned') }}</th>
+      <th>{{ t('affiliate.col_paid') }}</th>
+      <th>{{ t('affiliate.col_owed') }}</th>
+      <th></th>
+    </tr>
+    {% for p in partners %}
+    <tr>
+      <td><a href="/affiliate/{{ p.partner_user_id }}">{{ p.partner_user_id }}</a></td>
+      <td>{{ p.earned }} ⭐</td>
+      <td>{{ p.paid_out }} ⭐</td>
+      <td>{{ p.owed }} ⭐</td>
+      <td>
+        {% if p.owed > 0 %}
+        <form method="post" action="/affiliate/{{ p.partner_user_id }}/payout" class="inline-form">
+          <input type="text" name="amount" value="{{ p.owed }}" style="width:80px;">
+          <input type="text" name="note" placeholder="{{ t('affiliate.note_placeholder') }}">
+          <button type="submit" class="secondary">{{ t('affiliate.record_payout') }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('affiliate.empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p class="hint">{{ t('affiliate.payout_note') }}</p>
+{% endblock %}

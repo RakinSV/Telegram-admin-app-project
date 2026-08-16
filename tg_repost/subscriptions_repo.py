@@ -106,16 +106,20 @@ def record_event(
     invoice_payload: str | None = None,
     is_recurring: bool = False,
     is_first_recurring: bool = False,
-) -> bool:
-    """Записать платёжный факт. `False` — такой факт уже был.
+) -> int | None:
+    """Записать платёжный факт. `None` — такой факт уже был.
 
     Возвращаемое значение — ЕДИНСТВЕННОЕ основание что-то менять. Вызывающий
-    обязан ничего не делать при `False`, иначе идемпотентность бессмысленна.
+    обязан ничего не делать при `None`, иначе идемпотентность бессмысленна.
+
+    Возвращается именно ID записи, а не «да/нет»: к платёжному факту
+    привязываются партнёрские начисления (F67), и без его идентификатора
+    повторная обработка начислила бы комиссию второй раз.
     """
     end = period_end or NO_PERIOD
     try:
         with session_scope() as session:
-            session.add(PaymentEvent(
+            row = PaymentEvent(
                 kind=kind,
                 charge_id=charge_id,
                 user_id=user_id,
@@ -126,7 +130,10 @@ def record_event(
                 is_recurring=is_recurring,
                 is_first_recurring=is_first_recurring,
                 period_end=end,
-            ))
+            )
+            session.add(row)
+            session.flush()
+            return row.id
     except IntegrityError:
         # Ограничение в базе — вторая линия защиты. Первой (проверкой перед
         # вставкой) обойтись нельзя: между проверкой и вставкой помещается
@@ -134,8 +141,7 @@ def record_event(
         logger.info(
             "F49: повторный платёжный факт %s/%s — пропущен", kind, charge_id,
         )
-        return False
-    return True
+        return None
 
 
 def grant(
@@ -302,6 +308,14 @@ async def refund(chat_id: int, user_id: int) -> tuple[bool, str]:
         amount=refunded,
         period_end=view.paid_until,
     )
+    # F67: партнёрская комиссия с возвращённого платежа ОБЯЗАНА сняться.
+    # Иначе человек платит 100, партнёр получает 30, человек возвращает
+    # деньги — и у владельца минус 30 из воздуха.
+    from tg_repost import affiliate_repo
+
+    payment_id = _payment_event_id(view.charge_id)
+    if payment_id is not None:
+        affiliate_repo.reverse_for_payment(payment_id)
     mark_revoked(chat_id, user_id, status=STATUS_REFUNDED)
     logger.info("F49: возврат по %s (%d ⭐), доступ закрыт", view.charge_id, refunded)
     if not removed:
@@ -309,8 +323,7 @@ async def refund(chat_id: int, user_id: int) -> tuple[bool, str]:
     return True, "Деньги возвращены, доступ закрыт."
 
 
-def _paid_amount(charge_id: str) -> int:
-    """Сколько было получено по этому платежу — для суммы возврата."""
+def _last_payment(charge_id: str) -> PaymentEvent | None:
     with session_scope() as session:
         row = (
             session.query(PaymentEvent)
@@ -321,7 +334,20 @@ def _paid_amount(charge_id: str) -> int:
             .order_by(PaymentEvent.id.desc())
             .first()
         )
-        return row.amount if row is not None else 0
+        if row is not None:
+            session.expunge(row)
+        return row
+
+
+def _paid_amount(charge_id: str) -> int:
+    """Сколько было получено по этому платежу — для суммы возврата."""
+    row = _last_payment(charge_id)
+    return row.amount if row is not None else 0
+
+
+def _payment_event_id(charge_id: str) -> int | None:
+    row = _last_payment(charge_id)
+    return row.id if row is not None else None
 
 
 def history(user_id: int, limit: int = 50) -> list[PaymentEvent]:

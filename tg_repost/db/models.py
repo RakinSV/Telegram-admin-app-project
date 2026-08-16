@@ -1557,6 +1557,47 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class AffiliateReward(Base):
+    """Начисление партнёру за оплату приведённого им человека (F67).
+
+    ЖУРНАЛ, А НЕ БАЛАНС. Баланс партнёра — это сумма строк, а не поле:
+    поле пришлось бы менять при каждой оплате, возврате и выплате, и любая
+    потерянная правка расходилась бы с историей навсегда. Сумму пересчитать
+    можно всегда, потерянную запись — нет.
+
+    ПРИВЯЗКА К ПЛАТЕЖУ ОБЯЗАТЕЛЬНА И УНИКАЛЬНА. Начисление рождается из
+    конкретного платёжного факта; без этой связи повторная обработка того же
+    платежа начислила бы комиссию дважды, а возврат было бы нечем отменить.
+    """
+
+    __tablename__ = "affiliate_rewards"
+    __table_args__ = (
+        # Один платёж — одно начисление. Отрицательная строка отмены имеет
+        # свой `kind`, поэтому в ключ он входит тоже.
+        UniqueConstraint("payment_event_id", "kind", name="uq_affiliate_reward"),
+        Index("ix_affiliate_rewards_partner", "partner_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    # accrual | reversal | payout
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    partner_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # Кто заплатил. Нужен не для отчёта, а для разбора спорных случаев:
+    # «за кого мне начислили» партнёр спросит первым.
+    payer_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    payment_event_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # В звёздах. Отрицательное значение — отмена или выплата.
+    amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Процент на момент начисления. Хранится ИМЕННО ЗДЕСЬ: настройку
+    # поменяют, а прошлые начисления должны остаться объяснимыми.
+    percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ChannelSubscription(Base):
     """Платный доступ человека к каналу (F49).
 
