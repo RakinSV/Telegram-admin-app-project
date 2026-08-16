@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% import "_macros.html" as m %}
 {% block title %}{{ t('ads.title') }} — tg_repost admin{% endblock %}
 {% block content %}
@@ -69,7 +69,7 @@
       <td>{{ row.posted_at.strftime("%Y-%m-%d") if row.posted_at else "" }}</td>
       <td>
         {{ row.advertiser_legal_name or "—" }}
-        {% if row.advertiser_inn %}<div class="muted">ИНН {{ row.advertiser_inn }}</div>{% endif %}
+        {% if row.advertiser_inn %}<div class="muted">{{ t('ads.inn') }} {{ row.advertiser_inn }}</div>{% endif %}
       </td>
       <td>{% if row.erid %}{{ row.erid }}{% else %}<span class="badge warn">{{ t('ads.marking_missing') }}</span>{% endif %}</td>
       <td>{{ row.text[:80] }}{{ '…' if row.text|length > 80 else '' }}</td>

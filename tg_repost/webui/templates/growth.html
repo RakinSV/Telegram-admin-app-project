@@ -38,6 +38,8 @@
     <tr><th>{{ t('growth.col_style') }}</th><th>{{ t('growth.col_posts') }}</th></tr>
     {% for style, count in report.posts_by_style.items()|sort %}
     <tr><td>{{ style }}</td><td>{{ count }}</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="muted">{{ t('growth.by_style_empty') }}</td></tr>
     {% endfor %}
   </table>
 </div>

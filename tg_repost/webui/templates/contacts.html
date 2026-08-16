@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block content %}
 <h1>{{ t('contacts.title') }}</h1>
 <p class="muted">{{ t('contacts.intro') }}</p>
@@ -36,7 +36,7 @@
       {% for tag in card.tags %}<span class="badge muted">{{ tag }}</span>{% endfor %}
     </td>
     <td>{{ card.origin or t('contacts.organic') }}</td>
-    <td>{{ card.points }} <span class="muted">· ур. {{ card.level }}</span></td>
+    <td>{{ card.points }} <span class="muted">· {{ t('contacts.level') }} {{ card.level }}</span></td>
     <td>{{ card.confirmed_invites }}</td>
     <td>
       {% if card.moderation.is_banned %}<span class="badge warn">{{ t('contacts.banned') }}</span>{% endif %}

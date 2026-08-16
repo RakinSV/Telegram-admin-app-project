@@ -1713,6 +1713,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.crypto": {"ru": "Крипта", "en": "Crypto"},
     # Заголовки групп меню. Названы по ЗАДАЧЕ владельца, а не по устройству
     # кода: он ищет «где посмотреть выручку», а не «где F69».
+    # Найдено аудитом страниц 2026-08-16: текст стоял прямо в разметке и в
+    # английском интерфейсе показывался по-русски.
+    "ads.inn": {"ru": "ИНН", "en": "Tax ID"},
+    "contacts.level": {"ru": "ур.", "en": "lvl"},
+    "calendar.awaiting_empty": {
+        "ru": "Подтверждать нечего — все посты уже прошли согласование.",
+        "en": "Nothing to confirm — every post has been approved.",
+    },
+    "growth.by_style_empty": {
+        "ru": "Постов за период не было.", "en": "No posts in this period.",
+    },
+
     # --- Первые шаги на главной ---
     "onboarding.title": {"ru": "Первые шаги", "en": "Getting started"},
     "onboarding.intro": {
