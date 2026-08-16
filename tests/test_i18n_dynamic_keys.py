@@ -27,6 +27,7 @@ from tg_repost import (
     support_repo,
 )
 from tg_repost.rss import presets
+from tg_repost import crypto_rails
 from tg_repost.webui import access
 from tg_repost.webui.i18n import STRINGS
 
@@ -75,6 +76,9 @@ FAMILIES = [
         shop_repo.STATUS_SHIPPED,
         shop_repo.STATUS_CANCELED,
     )),
+    # F70: способы приёма крипты. Список из самого пакета — заведут
+    # четвёртый способ, и тест потребует перевод, а не промолчит.
+    ("crypto.kind_", crypto_rails.KINDS),
 ]
 
 

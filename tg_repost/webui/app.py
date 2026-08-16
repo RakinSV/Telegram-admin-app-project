@@ -50,6 +50,7 @@ from tg_repost.webui.mediakit_routes import build_mediakit_router
 from tg_repost.webui.affiliate_routes import build_affiliate_router
 from tg_repost.webui.api_routes import build_api_router
 from tg_repost.webui.contests_routes import build_contests_router
+from tg_repost.webui.crypto_routes import build_crypto_router
 from tg_repost.webui.integrations_routes import build_integrations_router
 from tg_repost.webui.miniapp_routes import build_miniapp_router
 from tg_repost.webui.shop_routes import build_shop_router
@@ -830,6 +831,7 @@ def create_app() -> FastAPI:
     app.include_router(build_api_router())
     app.include_router(build_integrations_router())
     app.include_router(build_contests_router())
+    app.include_router(build_crypto_router())
     app.include_router(build_mediakit_router())
     app.include_router(build_ad_requests_router())
     app.include_router(build_users_router())

@@ -226,6 +226,12 @@ class TargetGroup(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # F70: на какой кошелёк принимаем крипту в этой группе. NULL — способ по
+    # умолчанию. Именно так владелец и мыслит: «в этой группе один кошелёк,
+    # в той другой».
+    crypto_rail_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     # Может ли бот СЕЙЧАС слать сообщения сюда — как и DiscoveredChat.can_post,
     # но актуализируется и ПОСЛЕ того, как чат уже стал целью (F08-доп.,
     # раунд 3 аудита ведения групп): раньше можно было потерять права бота
@@ -1557,6 +1563,51 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class CryptoRail(Base):
+    """Способ приёма крипты: кошелёк или провайдер (F70).
+
+    НЕСКОЛЬКО ОДНОВРЕМЕННО — не роскошь, а требование владельца: у разных
+    групп разные условия и разные кошельки. Поэтому это ТАБЛИЦА, а не
+    настройка: настройка означала бы один способ на всю систему.
+
+    КЛЮЧИ ШИФРУЮТСЯ тем же мастер-ключом, что токены ботов. Токен CryptoBot
+    даёт доступ к деньгам напрямую — хранить его открытым в базе значит
+    отдать кассу вместе с бэкапом.
+
+    ТРИ ВИДА, И ОНИ РАЗНЫЕ ПО ПРИРОДЕ:
+
+    * `cryptobot` и `walletpay` — провайдеры. Принимают сумму В ФИАТЕ и сами
+      пересчитывают в криптовалюту по своему курсу; нам курс знать не надо;
+    * `ton_direct` — перевод прямо на кошелёк, без посредника. Комиссии нет
+      вовсе, но и пересчёта нет: сумма указывается в TON. Товар для такого
+      способа обязан быть в TON и оценён владельцем.
+    """
+
+    __tablename__ = "crypto_rails"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    # cryptobot | walletpay | ton_direct
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    # Токен провайдера ИЛИ адрес кошелька — зашифровано в обоих случаях.
+    # Адрес не секрет сам по себе, но шифровать всё одинаково дешевле, чем
+    # держать в голове, какое поле открытое.
+    credential_encrypted: Mapped[str] = mapped_column(Text)
+    # Только для `ton_direct`: адрес, на который придут деньги. Показывается
+    # владельцу в открытую — по нему он сверяется с кошельком.
+    public_address: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Способ по умолчанию: им платят товары, не привязанные к группе.
+    # Единственность обеспечивается кодом, а не ограничением: «ровно один
+    # true» в SQL выражается только триггером, а он на SQLite и Postgres
+    # пишется по-разному.
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class ApiKey(Base):
     """Ключ для внешнего доступа к API (F73).
 
@@ -1665,6 +1716,11 @@ class Product(Base):
     currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
     # NULL — остаток не ограничен. Ноль — закончился.
     stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # F70: к какой группе относится товар. NULL — общий каталог.
+    # Нужно, чтобы «в этой группе платим на один кошелёк, в той на другой»
+    # вообще имело смысл: заказ рождается из товара, а не из чата, и без
+    # этой связи привязать кошелёк к группе не к чему.
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_physical: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

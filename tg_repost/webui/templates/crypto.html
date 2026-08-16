@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ t('crypto.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('crypto.title') }}</h1>
+<p class="muted">{{ t('crypto.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+
+<div class="card">
+  <form method="post" action="/crypto">
+    <div class="field-row">
+      <label for="r_name">{{ t('crypto.name') }}</label>
+      <input id="r_name" name="name" style="flex:1;" required
+             placeholder="{{ t('crypto.name_placeholder') }}">
+    </div>
+    <div class="field-row">
+      <label for="r_kind">{{ t('crypto.kind') }}</label>
+      <select id="r_kind" name="kind">
+        {% for kind in kinds %}
+        <option value="{{ kind }}">{{ t('crypto.kind_' + kind) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="r_cred">{{ t('crypto.credential') }}</label>
+      <input id="r_cred" name="credential" style="flex:1;" required
+             placeholder="{{ t('crypto.credential_placeholder') }}">
+    </div>
+    <div class="field-row">
+      <label><input type="checkbox" name="is_active" value="1" checked>
+        {{ t('crypto.active') }}</label>
+      <label><input type="checkbox" name="is_default" value="1">
+        {{ t('crypto.default') }}</label>
+    </div>
+    <button type="submit">{{ t('crypto.add') }}</button>
+  </form>
+  <p class="hint">{{ t('crypto.kinds_hint') }}</p>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('crypto.name') }}</th>
+      <th>{{ t('crypto.kind') }}</th>
+      <th>{{ t('crypto.address') }}</th>
+      <th>{{ t('crypto.state') }}</th>
+      <th></th>
+    </tr>
+    {% for rail in rails %}
+    <tr>
+      <td>{{ rail.name }}{% if rail.is_default %}
+        <span class="badge">{{ t('crypto.default_short') }}</span>{% endif %}</td>
+      <td>{{ t('crypto.kind_' + rail.kind) }}</td>
+      <td style="word-break: break-all;">
+        {% if rail.public_address %}<code>{{ rail.public_address }}</code>
+        {% else %}<span class="muted">{{ t('crypto.key_hidden') }}</span>{% endif %}
+      </td>
+      <td>
+        {% if rail.is_active %}<span class="badge ok">{{ t('crypto.on') }}</span>
+        {% else %}<span class="muted">{{ t('crypto.off') }}</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/crypto/{{ rail.id }}/delete"
+              onsubmit="return confirm('{{ t('common.confirm_delete') }}');">
+          <button type="submit" class="secondary">{{ t('common.delete') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('crypto.empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>{{ t('crypto.by_group') }}</h2>
+<p class="muted">{{ t('crypto.by_group_intro') }}</p>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('crypto.group') }}</th>
+      <th>{{ t('crypto.wallet') }}</th>
+      <th></th>
+    </tr>
+    {% for row in groups %}
+    <tr>
+      <td>{{ row.target.title or row.target.chat_id }}</td>
+      <td>
+        {% if row.rail %}{{ row.rail.name }}
+        {% else %}<span class="muted">{{ t('crypto.uses_default') }}</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/crypto/bind">
+          <input type="hidden" name="chat_id" value="{{ row.target.chat_id }}">
+          <select name="rail_id">
+            <option value="">{{ t('crypto.uses_default') }}</option>
+            {% for rail in rails %}
+            <option value="{{ rail.id }}"
+              {{ 'selected' if row.rail_id == rail.id else '' }}>{{ rail.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="secondary">{{ t('crypto.bind') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">{{ t('crypto.no_groups') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p class="hint">{{ t('crypto.legal_note') }}</p>
+{% endblock %}

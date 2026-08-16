@@ -1709,6 +1709,75 @@ STRINGS: dict[str, dict[str, str]] = {
         "Telegram's rules for digital goods.",
     },
 
+    # --- F70: приём криптовалюты ---
+    "nav.crypto": {"ru": "Крипта", "en": "Crypto"},
+    "crypto.title": {"ru": "Приём криптовалюты", "en": "Accepting crypto"},
+    "crypto.intro": {
+        "ru": "Способов можно завести сколько угодно и назначить свой каждой "
+        "группе. Ключи хранятся зашифрованными и не показываются обратно "
+        "никогда — даже вам.",
+        "en": "You can configure any number of methods and assign one to each "
+        "group. Keys are stored encrypted and are never shown back — not even "
+        "to you.",
+    },
+    "crypto.name": {"ru": "Название", "en": "Name"},
+    "crypto.name_placeholder": {"ru": "Касса основного канала", "en": "Main channel till"},
+    "crypto.kind": {"ru": "Способ", "en": "Method"},
+    "crypto.kind_cryptobot": {"ru": "CryptoBot (Crypto Pay)", "en": "CryptoBot (Crypto Pay)"},
+    "crypto.kind_walletpay": {"ru": "Wallet Pay", "en": "Wallet Pay"},
+    "crypto.kind_ton_direct": {
+        "ru": "Прямо на TON-кошелёк", "en": "Straight to a TON wallet",
+    },
+    "crypto.credential": {"ru": "Токен или адрес", "en": "Token or address"},
+    "crypto.credential_placeholder": {
+        "ru": "токен провайдера либо адрес кошелька EQ…",
+        "en": "provider token or wallet address EQ…",
+    },
+    "crypto.kinds_hint": {
+        "ru": "CryptoBot и Wallet Pay — посредники: им называют сумму в рублях, "
+        "и они сами пересчитывают в криптовалюту. Прямой перевод посредника не "
+        "имеет: комиссии нет совсем, но и пересчитывать некому — товар для него "
+        "должен быть оценён в TON. Курс мы не берём со сторонних сервисов "
+        "намеренно: чужой сервис соврёт — вы недополучите деньги и заметите "
+        "через месяц.",
+        "en": "CryptoBot and Wallet Pay are intermediaries: you name the fiat "
+        "amount and they convert it. A direct transfer has no intermediary: "
+        "there is no fee at all, but nobody converts either — a product sold "
+        "this way must be priced in TON. We deliberately do not pull rates "
+        "from third-party services: if one lies, you get underpaid and notice "
+        "a month later.",
+    },
+    "crypto.address": {"ru": "Адрес", "en": "Address"},
+    "crypto.key_hidden": {"ru": "ключ скрыт", "en": "key hidden"},
+    "crypto.state": {"ru": "Состояние", "en": "State"},
+    "crypto.active": {"ru": "включён", "en": "enabled"},
+    "crypto.default": {"ru": "по умолчанию", "en": "default"},
+    "crypto.default_short": {"ru": "по умолчанию", "en": "default"},
+    "crypto.on": {"ru": "работает", "en": "on"},
+    "crypto.off": {"ru": "выключен", "en": "off"},
+    "crypto.add": {"ru": "Добавить способ", "en": "Add method"},
+    "crypto.empty": {"ru": "Способов пока нет.", "en": "No methods yet."},
+    "crypto.by_group": {"ru": "Какой кошелёк в какой группе", "en": "Which wallet in which group"},
+    "crypto.by_group_intro": {
+        "ru": "Товар, привязанный к группе, оплачивается её кошельком. Товары "
+        "общего каталога — способом по умолчанию.",
+        "en": "A product tied to a group is paid into that group's wallet. "
+        "Products in the shared catalogue use the default method.",
+    },
+    "crypto.group": {"ru": "Группа", "en": "Group"},
+    "crypto.wallet": {"ru": "Кошелёк", "en": "Wallet"},
+    "crypto.uses_default": {"ru": "по умолчанию", "en": "default"},
+    "crypto.bind": {"ru": "Назначить", "en": "Assign"},
+    "crypto.no_groups": {"ru": "Целевых групп пока нет.", "en": "No target groups yet."},
+    "crypto.legal_note": {
+        "ru": "Криптой оплачиваются ТОЛЬКО физические товары магазина. Доступ "
+        "в канал и другое цифровое — только за Telegram Stars: обход этого "
+        "правила ведёт к бану бота.",
+        "en": "Crypto pays for PHYSICAL shop goods only. Channel access and "
+        "anything digital go through Telegram Stars: bypassing that rule gets "
+        "the bot banned.",
+    },
+
     # --- F44: конкурсы ---
     "nav.contests": {"ru": "Конкурсы", "en": "Contests"},
     "contests.title": {"ru": "Конкурсы и розыгрыши", "en": "Contests and giveaways"},
