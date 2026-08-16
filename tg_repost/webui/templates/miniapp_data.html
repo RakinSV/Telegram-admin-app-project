@@ -1,0 +1,67 @@
+{# Содержимое витрины. Отдаётся ВТОРЫМ запросом, потому что `initData`
+   доступна только JavaScript'у внутри Telegram — в первом GET её нет. #}
+<h1>{{ t('miniapp.hello', name=user.first_name or user.username or '') }}</h1>
+<p class="muted">{{ t('miniapp.intro') }}</p>
+
+{% if subscription %}
+<h2>{{ t('miniapp.subscription') }}</h2>
+<div class="card">
+  {% if subscription.is_active %}
+  <div class="row">
+    <span>{{ t('miniapp.sub_active') }}</span>
+    <span class="me">{{ subscription.paid_until.strftime("%d.%m.%Y") }}</span>
+  </div>
+  {% if subscription.invite_link %}
+  <div class="row muted">{{ subscription.invite_link }}</div>
+  {% endif %}
+  {% else %}
+  <div class="row"><span>{{ t('miniapp.sub_inactive') }}</span></div>
+  <div class="muted">{{ t('miniapp.sub_hint') }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2>{{ t('miniapp.referrals') }}</h2>
+<div class="grid">
+  <div class="card">
+    <div class="num">{{ referrals.invited }}</div>
+    <div class="muted">{{ t('miniapp.ref_invited') }}</div>
+  </div>
+  <div class="card">
+    <div class="num">{{ referrals.confirmed }}</div>
+    <div class="muted">{{ t('miniapp.ref_confirmed') }}</div>
+  </div>
+  {% if balance.earned %}
+  <div class="card">
+    <div class="num">{{ balance.owed }} ⭐</div>
+    <div class="muted">{{ t('miniapp.ref_owed') }}</div>
+  </div>
+  {% endif %}
+</div>
+<p class="muted">{{ t('miniapp.ref_hint') }}</p>
+
+{% if leaders %}
+<h2>{{ t('miniapp.leaderboard') }}</h2>
+<div class="card">
+  {% for row in leaders %}
+  <div class="row{{ ' me' if row.user_id == user.id else '' }}">
+    <span>{{ loop.index }}. {{ row.display_name or row.user_id }}</span>
+    <span>{{ row.points }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if products %}
+<h2>{{ t('miniapp.shop') }}</h2>
+{% for p in products %}
+<div class="card">
+  <div class="row">
+    <span>{{ p.name }}</span>
+    <span class="me">{{ p.price_human }}</span>
+  </div>
+  {% if p.description %}<div class="muted">{{ p.description }}</div>{% endif %}
+</div>
+{% endfor %}
+<p class="muted">{{ t('miniapp.shop_hint') }}</p>
+{% endif %}

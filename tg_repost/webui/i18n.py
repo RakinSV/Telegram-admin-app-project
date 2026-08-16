@@ -1709,6 +1709,52 @@ STRINGS: dict[str, dict[str, str]] = {
         "Telegram's rules for digital goods.",
     },
 
+    # --- F74: Mini App ---
+    "miniapp.title": {"ru": "Личный кабинет", "en": "Your dashboard"},
+    "miniapp.loading": {"ru": "Загружаю…", "en": "Loading…"},
+    "miniapp.error": {
+        "ru": "Не удалось загрузить. Откройте ещё раз из бота.",
+        "en": "Could not load. Open it again from the bot.",
+    },
+    "miniapp.hello": {"ru": "Привет, {name}", "en": "Hi, {name}"},
+    "miniapp.intro": {
+        "ru": "Здесь видно только ваше: подписка, приглашённые вами люди и "
+              "текущий каталог.",
+        "en": "You only see your own: subscription, people you invited and "
+              "the current catalogue.",
+    },
+    "miniapp.subscription": {"ru": "Подписка", "en": "Subscription"},
+    "miniapp.sub_active": {"ru": "Активна до", "en": "Active until"},
+    "miniapp.sub_inactive": {"ru": "Не активна", "en": "Not active"},
+    "miniapp.sub_hint": {
+        "ru": "Оформить можно командой /subscribe в боте.",
+        "en": "Use /subscribe in the bot to get one.",
+    },
+    "miniapp.referrals": {"ru": "Приглашения", "en": "Invites"},
+    "miniapp.ref_invited": {"ru": "перешли", "en": "clicked"},
+    "miniapp.ref_confirmed": {"ru": "засчитаны", "en": "counted"},
+    "miniapp.ref_owed": {"ru": "к выплате", "en": "owed"},
+    "miniapp.ref_hint": {
+        "ru": "Приглашение засчитывается, когда человек вступил, написал и "
+              "прожил в группе заданное число дней — иначе это была бы ферма "
+              "мультиаккаунтов.",
+        "en": "An invite counts once the person has joined, posted and stayed "
+              "for the configured number of days — otherwise it would be a "
+              "multi-account farm.",
+    },
+    "miniapp.leaderboard": {"ru": "Таблица лидеров", "en": "Leaderboard"},
+    "miniapp.shop": {"ru": "Каталог", "en": "Catalogue"},
+    "miniapp.shop_hint": {
+        "ru": "Купить — командой /shop в боте: оплата идёт через Telegram.",
+        "en": "Buy with /shop in the bot: payment goes through Telegram.",
+    },
+    "miniapp.denied_title": {"ru": "Не получилось", "en": "Something went wrong"},
+    "miniapp.denied_hint": {
+        "ru": "Откройте кабинет заново из бота — данные для входа устарели.",
+        "en": "Open the dashboard again from the bot — the sign-in data is "
+              "out of date.",
+    },
+
     # --- F69/F70: магазин ---
     "nav.shop": {"ru": "Магазин", "en": "Shop"},
     "shop.title": {"ru": "Магазин", "en": "Shop"},
@@ -2496,6 +2542,27 @@ STRINGS: dict[str, dict[str, str]] = {
         "Stars subscription — no provider is involved there. The provider "
         "list has changed over time: verify availability when connecting. "
         "Engage reads it — restart it after saving.",
+    },
+    "settings.group.miniapp.title": {
+        "ru": "Личный кабинет (Mini App)", "en": "Dashboard (Mini App)",
+    },
+    "settings.group.miniapp.desc": {
+        "ru": "Кабинет внутри Telegram: своя подписка, свои приглашённые, "
+        "каталог и таблица лидеров. ПУСТО = кнопки в боте нет. Mini App — "
+        "единственная часть системы, которая обязана быть доступна из "
+        "интернета; вся остальная админка живёт за логином. Telegram "
+        "принимает только https и не открывает localhost. Доступ проверяется "
+        "подписью Telegram на каждый запрос, и человек видит только своё.",
+        "en": "A dashboard inside Telegram: your subscription, the people you "
+        "invited, the catalogue and the leaderboard. EMPTY = no button in the "
+        "bot. The Mini App is the only part of the system that has to be "
+        "reachable from the internet; everything else stays behind a login. "
+        "Telegram accepts https only and will not open localhost. Access is "
+        "verified by Telegram's signature on every request, and a person sees "
+        "only their own data.",
+    },
+    "settings.field.miniapp_url.label": {
+        "ru": "Публичный адрес (https://…)", "en": "Public URL (https://…)",
     },
     "settings.group.affiliate.title": {
         "ru": "Партнёрская программа", "en": "Affiliate programme",

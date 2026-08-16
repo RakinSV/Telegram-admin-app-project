@@ -22,6 +22,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from engage.config import get_engage_settings
 from engage.handlers import (
+    cabinet,
     contest,
     quiz,
     referral,
@@ -93,6 +94,9 @@ async def main() -> None:
     dp.include_router(quiz.router)
     dp.include_router(referral.router)
     dp.include_router(contest.router)
+    # F74: кнопка кабинета. Одна команда без состояния — порядок ей
+    # безразличен, лишь бы до поддержки, которая глотает всё подряд.
+    dp.include_router(cabinet.router)
     dp.include_router(suggest.router)
     # F49: платежи — до поддержки, но после предложки. Обработчик
     # `successful_payment` ловит служебное сообщение, а не текст, поэтому

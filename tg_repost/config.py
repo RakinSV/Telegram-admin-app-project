@@ -694,6 +694,13 @@ class Settings(BaseSettings):
     paid_access_price_stars: int = Field(0, alias="PAID_ACCESS_PRICE_STARS")
     paid_access_title: str = Field("Закрытый канал", alias="PAID_ACCESS_TITLE")
 
+    # --- F74: Mini App ---
+    # ПУБЛИЧНЫЙ HTTPS-адрес, по которому Telegram откроет кабинет. Пустой =
+    # кнопки нет вовсе, и это правильное умолчание: мини-апп требует, чтобы
+    # система торчала наружу, а вся остальная админка живёт за логином.
+    # Telegram принимает ТОЛЬКО https и не открывает localhost.
+    miniapp_url: str = Field("", alias="MINIAPP_URL")
+
     # --- F69/F70: магазин и эквайринг ---
     # ВЫКЛЮЧЕН по умолчанию: включённый магазин начинает принимать деньги
     # живых людей, а с ними появляются обязательства доставки.

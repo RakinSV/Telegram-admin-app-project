@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('miniapp.title') }}</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    /* Цвета берутся ИЗ ТЕМЫ TELEGRAM, а не задаются своими: мини-апп в
+       тёмной теме со светлой вёрсткой выглядит чужеродно, и человек читает
+       это как «сайт, а не часть Telegram». */
+    :root {
+      --bg: var(--tg-theme-bg-color, #fff);
+      --fg: var(--tg-theme-text-color, #000);
+      --muted: var(--tg-theme-hint-color, #707579);
+      --accent: var(--tg-theme-button-color, #2481cc);
+      --accent-fg: var(--tg-theme-button-text-color, #fff);
+      --card: var(--tg-theme-secondary-bg-color, #f4f4f5);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 16px;
+      font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--fg);
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 20px 0 8px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .card {
+      background: var(--card); border-radius: 12px;
+      padding: 12px 14px; margin-bottom: 10px;
+    }
+    .row { display: flex; justify-content: space-between; gap: 12px; }
+    .row + .row { margin-top: 8px; }
+    .num { font-size: 22px; font-weight: 600; }
+    .grid { display: flex; gap: 10px; }
+    .grid .card { flex: 1; text-align: center; }
+    .me { font-weight: 600; color: var(--accent); }
+    #loading { color: var(--muted); padding: 32px 0; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="loading">{{ t('miniapp.loading') }}</div>
+  <div id="content"></div>
+
+  <script>
+    // initData доступна ТОЛЬКО здесь, внутри Telegram: в первом GET её нет,
+    // поэтому страница приходит пустой и наполняется вторым запросом. Сама
+    // строка не разбирается на клиенте — ей верит только сервер, который
+    // умеет проверить подпись.
+    (function () {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      var initData = tg ? tg.initData : "";
+
+      var body = new URLSearchParams();
+      body.append("init_data", initData);
+
+      fetch("/app/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString()
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("content").innerHTML = html;
+        })
+        .catch(function () {
+          document.getElementById("loading").textContent =
+            {{ t('miniapp.error') | tojson }};
+        });
+    })();
+  </script>
+</body>
+</html>
