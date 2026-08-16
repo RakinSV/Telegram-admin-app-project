@@ -1831,6 +1831,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "a separate bot.",
     },
 
+    "nav.menu": {"ru": "Меню", "en": "Menu"},
     "nav.group.content": {"ru": "Контент", "en": "Content"},
     "nav.group.audience": {"ru": "Аудитория", "en": "Audience"},
     "nav.group.money": {"ru": "Деньги", "en": "Money"},

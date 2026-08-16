@@ -2,6 +2,12 @@
 <html lang="{{ current_lang() }}">
 <head>
   <meta charset="utf-8">
+  {#- Тот же мета-тег, что в `base.html`. Забыть его именно ЗДЕСЬ хуже
+      всего: экран входа — первое, что видят с телефона, и без него он
+      рисуется в десктопной ширине и уменьшается целиком. Найдено проверкой
+      в браузере, а не чтением: в разметке отсутствие тега не бросается в
+      глаза. -#}
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}tg_repost admin{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>

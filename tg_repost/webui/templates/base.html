@@ -2,6 +2,9 @@
 <html lang="{{ current_lang() }}">
 <head>
   <meta charset="utf-8">
+  {#- Без этого телефон рисует страницу в «десктопной» ширине и уменьшает
+      её целиком: текст становится нечитаемым, а нажать ни во что нельзя. -#}
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}tg_repost admin{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -16,6 +19,14 @@
   <a href="{{ href }}"{{ ' class="active"' if is_active else '' }}>{{ label }}</a>
   {%- endif -%}
   {%- endmacro %}
+  {#- Бургер БЕЗ JAVASCRIPT: чекбокс плюс подпись. Ради одного меню тащить
+      скрипт незачем, а так оно работает и при выключенном JS, и в момент
+      загрузки страницы, когда скрипт ещё не выполнился. На широком экране
+      и сам чекбокс, и подпись скрыты — меню видно всегда. -#}
+  <input type="checkbox" id="menu-toggle" class="menu-toggle" hidden>
+  <label for="menu-toggle" class="menu-button" aria-label="{{ t('nav.menu') }}">
+    <span></span><span></span><span></span>
+  </label>
   <div class="layout">
     <nav class="sidebar">
       <div class="brand">{{ t('app.brand') }}</div>

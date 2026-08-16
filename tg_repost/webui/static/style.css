@@ -247,3 +247,115 @@ button.small { padding: 4px 10px; font-size: 12px; }
 .checklist li > a:hover { color: var(--accent); }
 .checklist .muted { font-size: 13px; margin-top: 2px; }
 .onboarding-progress { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+
+/* ======================================================================
+   ТЕЛЕФОН И ПЛАНШЕТ
+   ======================================================================
+   Вёрстка писалась под десктоп: сайдбар в 220 пикселей и широкие таблицы
+   на телефоне ломались — меню занимало треть экрана, таблицы уезжали за
+   край и утаскивали за собой всю страницу.
+
+   Порог 900px, а не 768: при 220px меню плюс 980px содержимого сжатие
+   начинается заметно раньше «планшетной» границы.
+   ====================================================================== */
+
+/* Кнопка меню видна только на узком экране — на широком меню и так на
+   виду, и кнопка была бы лишним шагом к тому, что уже показано. */
+.menu-button { display: none; }
+
+@media (max-width: 900px) {
+  .layout { display: block; }
+
+  /* Меню скрыто, пока не нажали. Занимая треть экрана постоянно, оно
+     превращает каждую страницу в список ссылок с прокруткой. */
+  nav.sidebar {
+    display: none;
+    position: static;
+    width: auto;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-top: 56px;
+  }
+  .menu-toggle:checked ~ .layout nav.sidebar { display: block; }
+
+  .menu-button {
+    display: flex;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    /* 44 пикселя — размер, в который попадают пальцем без прицеливания.
+       Меньше делать нельзя: промах по кнопке меню означает случайный
+       переход по ссылке под ней. */
+    width: 44px;
+    height: 44px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .menu-button span {
+    display: block;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+  }
+
+  main {
+    padding: 64px 14px 24px;  /* сверху — место под кнопку меню */
+    max-width: none;
+  }
+
+  /* Пункты меню и кнопки — под палец, а не под курсор. */
+  nav.sidebar a { padding: 11px 10px; }
+  button, .card button { min-height: 40px; }
+
+  /* Таблица шире экрана прокручивается САМА, а не тащит страницу.
+     Горизонтальная прокрутка всего документа — худший исход: уезжает и
+     меню, и заголовок, и вернуться обратно нечем. */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Подпись над полем, а не слева: при ширине экрана в 360 пикселей на
+     строку из подписи и поля не остаётся места ни тому, ни другому. */
+  .field-row { flex-direction: column; align-items: stretch; }
+  .field-row label { min-width: 0; max-width: none; }
+  .field-row input[type=text], .field-row input[type=number],
+  .field-row input[type=password], .field-row select { width: 100%; }
+  .field-row input[type=checkbox] { align-self: flex-start; }
+
+  /* Ввод шрифтом мельче 16px заставляет iOS увеличивать страницу при
+     фокусе — и обратно она сама не возвращается.
+
+     Селекторы повторяют десктопные ОДИН В ОДИН, а не упрощены: правило
+     `.card input[type=number]` весит больше, чем `.card input`, и короткая
+     запись до него не достаёт. Проверено в браузере — из 63 полей на
+     странице настроек 46 оставались мелкими. */
+  .card input[type=text], .card input[type=number], .card input[type=password],
+  .card select, .card textarea,
+  .field-row input[type=text], .field-row input[type=number],
+  .field-row input[type=password], .field-row select,
+  .secret-row input, .inline-form input, .inline-form select,
+  input[type=text], input[type=password], input[type=number],
+  select, textarea, .auth-page input { font-size: 16px; }
+
+  .grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  /* Экран входа: поля во всю ширину и шрифт 16px — иначе iOS увеличивает
+     страницу при фокусе и обратно сама не возвращается. Отдельным блоком,
+     потому что вход рисуется другим каркасом (`auth_base.html`) и правила
+     для админки его не касаются. */
+  .auth-page { padding: 0 14px; }
+  .auth-page input { width: 100%; font-size: 16px; min-height: 40px; }
+  .auth-page button { width: 100%; min-height: 44px; }
+}
