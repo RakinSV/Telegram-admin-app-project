@@ -159,6 +159,17 @@ class ReachStats:
     unsubscribed: int
 
 
+def all_user_ids() -> list[int]:
+    """Все, кто когда-либо запускал бота.
+
+    Нужен, чтобы посчитать охват целиком (F73), не дублируя разбор на
+    категории: он живёт в `reach_stats` и должен остаться в одном месте —
+    «не запускал», «заблокировал» и «отписался» уже один раз путали.
+    """
+    with session_scope() as session:
+        return [row.user_id for row in session.query(BotSubscriber.user_id).all()]
+
+
 def reach_stats(user_ids: list[int]) -> ReachStats:
     """Разложить выборку по причинам недостижимости."""
     if not user_ids:

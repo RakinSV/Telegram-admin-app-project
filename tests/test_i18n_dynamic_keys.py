@@ -1,4 +1,4 @@
-"""Ключи переводов, которые собираются НА ЛЕТУ (аудит 2026-08-16).
+﻿"""Ключи переводов, которые собираются НА ЛЕТУ (аудит 2026-08-16).
 
 Шаблоны местами строят ключ из значения: `t('users.role_' ~ row.role)`,
 `t('broadcasts.status_' ~ row.status)`. Такой ключ не найти поиском по
@@ -20,6 +20,7 @@ import pytest
 from tg_repost import (
     ad_requests_repo,
     affiliate_repo,
+    api_keys_repo,
     broadcasts_repo,
     shop_repo,
     subscriptions_repo,
@@ -34,6 +35,9 @@ from tg_repost.webui.i18n import STRINGS
 # с ним и перестанет ловить именно то, ради чего написан.
 FAMILIES = [
     ("users.role_", access.ALL_ROLES),
+    # F73: области прав ключа API. Список берётся из самого репозитория —
+    # добавят новую область, и тест потребует перевод, а не промолчит.
+    ("integrations.scope_", api_keys_repo.SCOPES),
     ("sources.rss_preset.", tuple(presets.PRESET_GROUPS)),
     ("ad_requests.status_", (
         ad_requests_repo.STATUS_NEW,

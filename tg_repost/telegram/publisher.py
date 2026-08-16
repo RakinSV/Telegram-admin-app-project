@@ -438,6 +438,19 @@ async def publish_post(bot: Bot, post_id: int) -> None:
             )
             post.set_status(PostStatus.POSTED)
 
+    # F73: событие наружу. Здесь же, ПОСЛЕ смены статуса и вне транзакции —
+    # доставка ставится в очередь и уходит своим ходом. Сбой не должен
+    # трогать публикацию: пост уже в канале, и «откатить» его невозможно.
+    try:
+        from tg_repost import webhooks_repo
+
+        webhooks_repo.emit(
+            webhooks_repo.EVENT_POST_PUBLISHED,
+            {"post_id": post_id, "chat_ids": [int(c) for c in chat_ids]},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("F73: событие о посте %s не поставлено: %s", post_id, exc)
+
     # F43: викторина по опубликованному посту. ПОСЛЕ смены статуса и вне
     # session_scope — генерация ходит в LLM и может быть долгой, держать на
     # ней открытую транзакцию нельзя. Сбой ничего не ломает: пост уже

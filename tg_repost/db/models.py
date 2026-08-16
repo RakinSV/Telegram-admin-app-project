@@ -1557,6 +1557,87 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class ApiKey(Base):
+    """Ключ для внешнего доступа к API (F73).
+
+    КЛЮЧ ХРАНИТСЯ ХЭШЕМ, КАК ПАРОЛЬ. Утечка базы не должна давать доступ к
+    системе — а ключ в открытом виде даёт его немедленно и без следов.
+    Показать ключ повторно поэтому невозможно: показывается один раз при
+    создании, дальше только префикс.
+
+    ПРЕФИКС ХРАНИТСЯ ОТДЕЛЬНО И ОТКРЫТО. По нему ключ находится в базе за
+    один запрос (иначе пришлось бы сверять хэш с каждой строкой) и по нему
+    же владелец узнаёт ключ в журнале, не зная самого ключа.
+
+    ОБЛАСТЬ ПРАВ ОТДЕЛЬНАЯ ОТ РОЛЕЙ АДМИНКИ. Роль — про человека за
+    браузером, ключ — про программу. Ключ «только чтение» для дашборда на
+    сайте и ключ, умеющий публиковать, — разные риски, и смешивать их с
+    ролями значило бы выдать интеграции права сотрудника.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    # Видимая часть, по ней ищем. Уникальна: коллизия означала бы два ключа
+    # с одним «именем» в журнале.
+    prefix: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    key_hash: Mapped[str] = mapped_column(String(255))
+    # read | write. Список короткий намеренно: каждая новая область — это
+    # ещё одна комбинация, которую надо продумать и проверить.
+    scope: Mapped[str] = mapped_column(String(16), default="read", nullable=False)
+    # Запросов в минуту. Ноль означал бы «без ограничения» — такого варианта
+    # нет: ключ без предела превращает любую ошибку в чужом скрипте в отказ
+    # обслуживания для всей системы.
+    rate_limit: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class Webhook(Base):
+    """Подписка внешней системы на события (F73).
+
+    ИСХОДЯЩИЕ, А НЕ ВХОДЯЩИЕ. Мы шлём POST наружу; принимать чужие вебхуки
+    система не умеет намеренно — это была бы вторая публичная поверхность
+    со своей аутентификацией, а исходящие закрывают исходную задачу (связь
+    с 1С и CRM) без неё.
+
+    СЕКРЕТ ДЛЯ ПОДПИСИ ОБЯЗАТЕЛЕН. Без подписи получатель не может отличить
+    наш вызов от чужого, знающего адрес, — а адрес утечёт первым же
+    скриншотом настроек.
+    """
+
+    __tablename__ = "webhooks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    url: Mapped[str] = mapped_column(String(512))
+    # CSV из имён событий. Пусто = все.
+    events: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    secret: Mapped[str] = mapped_column(String(128))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Подряд неудачных доставок. Дошло — сбрасывается. По нему подписка
+    # отключается сама: вечно стучаться в мёртвый адрес значит тратить
+    # очередь на то, чего никто не ждёт.
+    failure_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_delivery_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class Product(Base):
     """Товар магазина в боте (F69).
 

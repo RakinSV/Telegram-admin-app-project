@@ -123,7 +123,22 @@ def create(
         logger.info(
             "F66: заявка #%d от «%s» на %s", row.id, who, slot_date,
         )
-        return row.id
+        request_id = row.id
+
+    # F73: событие наружу. ПОСЛЕ выхода из транзакции — доставка ставится в
+    # очередь, и делать это внутри открытой записи значило бы держать
+    # блокировку SQLite ради чужой интеграции. Сбой рассылки не должен
+    # ронять приём заявки: деньги приносит заявка, а не вебхук.
+    try:
+        from tg_repost import webhooks_repo
+
+        webhooks_repo.emit(
+            webhooks_repo.EVENT_AD_REQUEST,
+            {"id": request_id, "advertiser": who, "slot_date": str(slot_date)},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("F73: событие о заявке #%s не поставлено: %s", request_id, exc)
+    return request_id
 
 
 def get(request_id: int) -> AdRequestView | None:

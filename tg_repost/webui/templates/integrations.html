@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ t('integrations.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('integrations.title') }}</h1>
+<p class="muted">{{ t('integrations.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+
+{% if fresh_key %}
+<div class="card">
+  <p class="badge ok">{{ t('integrations.key_shown_once') }}</p>
+  <p style="font-family: monospace; word-break: break-all;">{{ fresh_key }}</p>
+  <p class="hint">{{ t('integrations.key_shown_once_hint') }}</p>
+</div>
+{% endif %}
+
+<h2>{{ t('integrations.keys') }}</h2>
+<div class="card">
+  <form method="post" action="/integrations/keys">
+    <div class="field-row">
+      <label for="key_name">{{ t('integrations.key_name') }}</label>
+      <input id="key_name" name="name" style="flex:1;" required
+             placeholder="{{ t('integrations.key_name_placeholder') }}">
+    </div>
+    <div class="field-row">
+      <label for="key_scope">{{ t('integrations.key_scope') }}</label>
+      <select id="key_scope" name="scope">
+        <option value="read">{{ t('integrations.scope_read') }}</option>
+        <option value="write">{{ t('integrations.scope_write') }}</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="key_rate">{{ t('integrations.key_rate') }}</label>
+      <input id="key_rate" name="rate_limit" type="number" min="1" style="width:110px;"
+             value="{{ 60 }}">
+    </div>
+    <button type="submit">{{ t('integrations.key_create') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('integrations.key_name') }}</th>
+      <th>{{ t('integrations.key_prefix') }}</th>
+      <th>{{ t('integrations.key_scope') }}</th>
+      <th>{{ t('integrations.key_rate') }}</th>
+      <th>{{ t('integrations.key_last_used') }}</th>
+      <th></th>
+    </tr>
+    {% for key in keys %}
+    <tr>
+      <td>{{ key.name }}</td>
+      <td><code>{{ key.prefix }}…</code></td>
+      <td>{{ t('integrations.scope_' + key.scope) }}</td>
+      <td>{{ key.rate_limit }}/{{ t('integrations.per_minute') }}</td>
+      <td>
+        {% if key.last_used_at %}{{ key.last_used_at.strftime("%d.%m.%Y") }}
+        {% else %}<span class="muted">{{ t('integrations.never_used') }}</span>{% endif %}
+      </td>
+      <td>
+        {% if key.is_active %}
+        <form method="post" action="/integrations/keys/{{ key.id }}/revoke"
+              onsubmit="return confirm('{{ t('integrations.confirm_revoke') }}');">
+          <button type="submit" class="secondary">{{ t('integrations.revoke') }}</button>
+        </form>
+        {% else %}
+        <span class="muted">{{ t('integrations.revoked') }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">{{ t('integrations.no_keys') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>{{ t('integrations.webhooks') }}</h2>
+<p class="muted">{{ t('integrations.webhooks_intro') }}</p>
+
+<div class="card">
+  <form method="post" action="/integrations/webhooks">
+    <div class="field-row">
+      <label for="hook_url">{{ t('integrations.hook_url') }}</label>
+      <input id="hook_url" name="url" style="flex:1;" required placeholder="https://…">
+    </div>
+    <div class="field-row" style="align-items: flex-start;">
+      <label>{{ t('integrations.hook_events') }}</label>
+      <div style="flex:1;">
+        {% for event in known_events %}
+        <label style="display:block; font-weight:normal;">
+          <input type="checkbox" name="events" value="{{ event }}"> {{ event }}
+        </label>
+        {% endfor %}
+        <div class="hint">{{ t('integrations.hook_events_hint') }}</div>
+      </div>
+    </div>
+    <button type="submit">{{ t('integrations.hook_create') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('integrations.hook_url') }}</th>
+      <th>{{ t('integrations.hook_events') }}</th>
+      <th>{{ t('integrations.hook_state') }}</th>
+      <th></th>
+    </tr>
+    {% for hook in webhooks %}
+    <tr>
+      <td style="word-break: break-all;">{{ hook.url }}</td>
+      <td>
+        {% if hook.events %}{{ hook.events | join(', ') }}
+        {% else %}<span class="muted">{{ t('integrations.all_events') }}</span>{% endif %}
+      </td>
+      <td>
+        {% if hook.is_active %}
+        <span class="badge ok">{{ t('integrations.hook_active') }}</span>
+        {% else %}
+        <span class="badge warn">{{ t('integrations.hook_off') }}</span>
+        {% endif %}
+        {% if hook.last_error %}
+        <div class="muted">{{ hook.last_error }}</div>
+        {% endif %}
+      </td>
+      <td>
+        <form method="post" action="/integrations/webhooks/{{ hook.id }}/delete"
+              onsubmit="return confirm('{{ t('common.confirm_delete') }}');">
+          <button type="submit" class="secondary">{{ t('common.delete') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">{{ t('integrations.no_hooks') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p class="hint">{{ t('integrations.security_note') }}</p>
+{% endblock %}

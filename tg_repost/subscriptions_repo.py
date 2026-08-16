@@ -133,7 +133,7 @@ def record_event(
             )
             session.add(row)
             session.flush()
-            return row.id
+            event_id = row.id
     except IntegrityError:
         # Ограничение в базе — вторая линия защиты. Первой (проверкой перед
         # вставкой) обойтись нельзя: между проверкой и вставкой помещается
@@ -142,6 +142,28 @@ def record_event(
             "F49: повторный платёжный факт %s/%s — пропущен", kind, charge_id,
         )
         return None
+
+    # F73: событие наружу — только про НОВЫЙ факт. Повтор сюда не доходит,
+    # поэтому внешняя система не получит два уведомления об одной оплате.
+    if kind == KIND_PAYMENT:
+        try:
+            from tg_repost import webhooks_repo
+
+            webhooks_repo.emit(
+                webhooks_repo.EVENT_PAYMENT,
+                {
+                    "event_db_id": event_id,
+                    "user_id": user_id,
+                    "amount": amount,
+                    "currency": CURRENCY,
+                    "is_recurring": is_recurring,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Деньги уже получены и записаны. Сбой рассылки не повод
+            # притворяться, что платежа не было.
+            logger.warning("F73: событие об оплате #%s не поставлено: %s", event_id, exc)
+    return event_id
 
 
 def grant(

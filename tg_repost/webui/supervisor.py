@@ -29,7 +29,7 @@ from telethon import TelegramClient
 from tg_repost.config import Settings, get_settings
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, invalidate_rewriter_cache
-from tg_repost import broadcasts_repo, funnels_repo, task_queue
+from tg_repost import broadcasts_repo, funnels_repo, webhooks_repo, task_queue
 from tg_repost.scheduler.channel_stats import collect_channel_stats
 from tg_repost.scheduler.digest import run_digest_job
 from tg_repost.scheduler.growth import collect_growth_snapshot
@@ -51,6 +51,7 @@ logger = get_logger(__name__)
 # с «нет обработчика» — см. `task_queue.run_once`.
 broadcasts_repo.register_handler()
 funnels_repo.register_handler()
+webhooks_repo.register_handler()
 
 
 async def _run_task_queue() -> None:

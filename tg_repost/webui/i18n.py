@@ -1709,6 +1709,83 @@ STRINGS: dict[str, dict[str, str]] = {
         "Telegram's rules for digital goods.",
     },
 
+    # --- F73: интеграции ---
+    "nav.integrations": {"ru": "Интеграции", "en": "Integrations"},
+    "integrations.title": {"ru": "Интеграции", "en": "Integrations"},
+    "integrations.intro": {
+        "ru": "Ключи для чужих программ и вебхуки на события. Всё это "
+        "публичная поверхность системы, поэтому доступ только у владельца.",
+        "en": "Keys for other programs and webhooks for events. All of this "
+        "is the system's public surface, so only the owner has access.",
+    },
+    "integrations.keys": {"ru": "Ключи API", "en": "API keys"},
+    "integrations.key_name": {"ru": "Название", "en": "Name"},
+    "integrations.key_name_placeholder": {
+        "ru": "Дашборд на сайте", "en": "Website dashboard",
+    },
+    "integrations.key_prefix": {"ru": "Префикс", "en": "Prefix"},
+    "integrations.key_scope": {"ru": "Права", "en": "Scope"},
+    "integrations.scope_read": {"ru": "только чтение", "en": "read only"},
+    "integrations.scope_write": {"ru": "чтение и запись", "en": "read and write"},
+    "integrations.key_rate": {"ru": "Запросов в минуту", "en": "Requests per minute"},
+    "integrations.per_minute": {"ru": "мин", "en": "min"},
+    "integrations.key_last_used": {"ru": "Последний раз", "en": "Last used"},
+    "integrations.never_used": {"ru": "ни разу", "en": "never"},
+    "integrations.key_create": {"ru": "Создать ключ", "en": "Create key"},
+    "integrations.key_shown_once": {
+        "ru": "Ключ создан — скопируйте его сейчас",
+        "en": "Key created — copy it now",
+    },
+    "integrations.key_shown_once_hint": {
+        "ru": "Показать его повторно невозможно: в базе лежит только хэш, "
+        "как у пароля. Потеряете — создайте новый и отзовите этот.",
+        "en": "It cannot be shown again: only a hash is stored, like for a "
+        "password. If you lose it, create a new one and revoke this.",
+    },
+    "integrations.revoke": {"ru": "Отозвать", "en": "Revoke"},
+    "integrations.revoked": {"ru": "отозван", "en": "revoked"},
+    "integrations.confirm_revoke": {
+        "ru": "Отозвать ключ? Программы, которые им ходят, сразу перестанут "
+        "работать.",
+        "en": "Revoke the key? Programs using it will stop working "
+        "immediately.",
+    },
+    "integrations.no_keys": {"ru": "Ключей пока нет.", "en": "No keys yet."},
+    "integrations.webhooks": {"ru": "Вебхуки", "en": "Webhooks"},
+    "integrations.webhooks_intro": {
+        "ru": "Система сама постучится по адресу, когда случится событие. "
+        "Каждый запрос подписан — получатель может проверить, что это мы. "
+        "Доставка «хотя бы один раз»: в теле есть event_id, повторы надо "
+        "отбрасывать по нему.",
+        "en": "The system will call the address itself when an event "
+        "happens. Every request is signed, so the receiver can verify it is "
+        "us. Delivery is at-least-once: the body carries an event_id, and "
+        "repeats must be discarded by it.",
+    },
+    "integrations.hook_url": {"ru": "Адрес", "en": "URL"},
+    "integrations.hook_events": {"ru": "События", "en": "Events"},
+    "integrations.hook_events_hint": {
+        "ru": "Ничего не выбрано — присылаем все.",
+        "en": "Nothing selected means all of them.",
+    },
+    "integrations.all_events": {"ru": "все", "en": "all"},
+    "integrations.hook_create": {"ru": "Добавить вебхук", "en": "Add webhook"},
+    "integrations.hook_state": {"ru": "Состояние", "en": "State"},
+    "integrations.hook_active": {"ru": "работает", "en": "active"},
+    "integrations.hook_off": {"ru": "отключён", "en": "off"},
+    "integrations.no_hooks": {"ru": "Вебхуков пока нет.", "en": "No webhooks yet."},
+    "integrations.security_note": {
+        "ru": "Внутренние адреса (localhost, 10.*, 192.168.*, метаданные "
+        "облака) отклоняются: запрос уходит с сервера системы, и такой адрес "
+        "отдал бы наружу её собственное окружение. Вебхук отключается сам "
+        "после серии отказов — правка адреса включает его обратно.",
+        "en": "Internal addresses (localhost, 10.*, 192.168.*, cloud "
+        "metadata) are refused: the request leaves from the system's own "
+        "server, and such an address would expose its own environment. A "
+        "webhook switches itself off after repeated failures — editing the "
+        "address turns it back on.",
+    },
+
     # --- F74: Mini App ---
     "miniapp.title": {"ru": "Личный кабинет", "en": "Your dashboard"},
     "miniapp.loading": {"ru": "Загружаю…", "en": "Loading…"},
