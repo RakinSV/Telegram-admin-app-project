@@ -240,6 +240,90 @@ def mark_revoked(chat_id: int, user_id: int, *, status: str = STATUS_EXPIRED) ->
         return True
 
 
+async def refund(chat_id: int, user_id: int) -> tuple[bool, str]:
+    """Вернуть деньги за подписку и закрыть доступ. `(успех, объяснение)`.
+
+    ВОЗВРАЩАЕТ ТОТ ЖЕ БОТ, КОТОРЫЙ ПОЛУЧИЛ ПЛАТЁЖ. `refundStarPayment`
+    привязан к токену: платил человек боту Engage, значит и возврат идёт
+    через него, а не через бота модерации. Веб-процесс поднимает его на один
+    вызов — тот же приём, что у ответов поддержки (F68).
+
+    ПОРЯДОК: сначала деньги, потом доступ. Закрыть доступ и не вернуть
+    деньги — худший из исходов: человек остался и без канала, и без денег.
+    Обратный порядок в худшем случае оставляет оплаченный доступ у того,
+    кому уже вернули, — это чинится вторым нажатием.
+    """
+    view = get(chat_id, user_id)
+    if view is None or not view.charge_id:
+        return False, "Нечего возвращать: платёж не найден."
+
+    from engage.bot import build_reply_bot
+
+    bot = build_reply_bot()
+    if bot is None:
+        return False, "Не настроен токен Engage — возврат делает тот же бот, что принял оплату."
+
+    removed = True
+    try:
+        await bot.refund_star_payment(
+            user_id=user_id, telegram_payment_charge_id=view.charge_id,
+        )
+        # Доступ снимается ЗДЕСЬ, а не джобой: та забирает только активные
+        # подписки по сроку, а у возвращённой статус другой и срок ещё не
+        # вышел — человек остался бы в канале навсегда с возвращёнными
+        # деньгами.
+        try:
+            await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+            await bot.unban_chat_member(
+                chat_id=chat_id, user_id=user_id, only_if_banned=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            removed = False
+            logger.warning(
+                "F49: деньги возвращены, но выгнать %s из %s не вышло: %s",
+                user_id, chat_id, exc,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("F49: возврат %s не прошёл: %s", view.charge_id, exc)
+        return False, f"Telegram отказал в возврате: {exc}"
+    finally:
+        await bot.session.close()
+
+    # Сумма берётся из ИСХОДНОГО платежа: иначе выручка после возврата
+    # осталась бы завышенной ровно на эту сумму.
+    refunded = _paid_amount(view.charge_id)
+    # Факт возврата — такая же запись в журнале, как оплата. Повторное
+    # нажатие её не задвоит: ключ идемпотентности тот же.
+    record_event(
+        kind=KIND_REFUND,
+        charge_id=view.charge_id,
+        user_id=user_id,
+        chat_id=chat_id,
+        amount=refunded,
+        period_end=view.paid_until,
+    )
+    mark_revoked(chat_id, user_id, status=STATUS_REFUNDED)
+    logger.info("F49: возврат по %s (%d ⭐), доступ закрыт", view.charge_id, refunded)
+    if not removed:
+        return True, "Деньги возвращены, но из канала выйти не удалось — проверьте права бота."
+    return True, "Деньги возвращены, доступ закрыт."
+
+
+def _paid_amount(charge_id: str) -> int:
+    """Сколько было получено по этому платежу — для суммы возврата."""
+    with session_scope() as session:
+        row = (
+            session.query(PaymentEvent)
+            .filter(
+                PaymentEvent.charge_id == charge_id,
+                PaymentEvent.kind == KIND_PAYMENT,
+            )
+            .order_by(PaymentEvent.id.desc())
+            .first()
+        )
+        return row.amount if row is not None else 0
+
+
 def history(user_id: int, limit: int = 50) -> list[PaymentEvent]:
     """Платёжная история человека — для карточки в CRM (F63)."""
     with session_scope() as session:

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ t('subscriptions.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('subscriptions.title') }}</h1>
+<p class="muted">{{ t('subscriptions.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+{% if ok %}<p class="badge ok">{{ ok }}</p>{% endif %}
+
+<div class="card grid">
+  <div class="stat">
+    <div class="num">{{ active_count }}</div>
+    <div class="label">{{ t('subscriptions.active') }}</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ revenue }} ⭐</div>
+    <div class="label">{{ t('subscriptions.revenue') }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('subscriptions.col_user') }}</th>
+      <th>{{ t('subscriptions.col_channel') }}</th>
+      <th>{{ t('subscriptions.col_paid_until') }}</th>
+      <th>{{ t('subscriptions.col_status') }}</th>
+      <th></th>
+    </tr>
+    {% for row in rows %}
+    <tr>
+      <td><a href="/contacts/{{ row.user_id }}">{{ row.user_id }}</a></td>
+      <td>{{ row.chat_id }}</td>
+      <td>{{ row.paid_until.strftime("%d.%m.%Y") }}</td>
+      <td>
+        {% if row.is_active %}
+        <span class="badge ok">{{ t('subscriptions.status_active') }}</span>
+        {% else %}
+        <span class="muted">{{ t('subscriptions.status_' + row.status) }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if row.is_active and row.charge_id %}
+        <form method="post" action="/subscriptions/{{ row.chat_id }}/{{ row.user_id }}/refund"
+              onsubmit="return confirm('{{ t('subscriptions.confirm_refund') }}');">
+          <button type="submit" class="secondary">{{ t('subscriptions.refund') }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('subscriptions.empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p class="hint">{{ t('subscriptions.stars_note') }}</p>
+{% endblock %}

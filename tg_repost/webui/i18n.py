@@ -1668,6 +1668,47 @@ STRINGS: dict[str, dict[str, str]] = {
         "draw cause-and-effect conclusions from them alone.",
     },
 
+    # --- F49: подписчики платного канала ---
+    "nav.subscriptions": {"ru": "Подписки", "en": "Subscriptions"},
+    "subscriptions.title": {"ru": "Платные подписки", "en": "Paid subscriptions"},
+    "subscriptions.intro": {
+        "ru": "Оплата идёт звёздами через Telegram — комиссии у него нет. "
+        "Списание следующего периода ведёт сам Telegram; наша часть — выдать "
+        "персональную ссылку и закрыть доступ, когда подписка кончилась.",
+        "en": "Payment goes through Telegram Stars — Telegram takes no "
+        "commission. Telegram itself charges the next period; our part is "
+        "issuing a personal invite link and revoking access when the "
+        "subscription ends.",
+    },
+    "subscriptions.active": {"ru": "Активных", "en": "Active"},
+    "subscriptions.revenue": {"ru": "Получено, за вычетом возвратов", "en": "Received, refunds deducted"},
+    "subscriptions.col_user": {"ru": "Человек", "en": "Person"},
+    "subscriptions.col_channel": {"ru": "Канал", "en": "Channel"},
+    "subscriptions.col_paid_until": {"ru": "Оплачено до", "en": "Paid until"},
+    "subscriptions.col_status": {"ru": "Состояние", "en": "State"},
+    "subscriptions.status_active": {"ru": "активна", "en": "active"},
+    "subscriptions.status_expired": {"ru": "истекла", "en": "expired"},
+    "subscriptions.status_canceled": {"ru": "отменена", "en": "canceled"},
+    "subscriptions.status_refunded": {"ru": "возвращена", "en": "refunded"},
+    "subscriptions.refund": {"ru": "Вернуть деньги", "en": "Refund"},
+    "subscriptions.confirm_refund": {
+        "ru": "Вернуть деньги и закрыть доступ? Отменить возврат нельзя.",
+        "en": "Refund the money and revoke access? A refund cannot be undone.",
+    },
+    "subscriptions.empty": {
+        "ru": "Подписок пока нет.", "en": "No subscriptions yet.",
+    },
+    "subscriptions.stars_note": {
+        "ru": "Звёзды выводятся в TON через Fragment — они доступны через 21 "
+        "день после получения. Человек может купить сами звёзды за TON, так "
+        "что оплата криптой для него возможна, а правила Telegram для "
+        "цифровых товаров при этом не нарушаются.",
+        "en": "Stars are withdrawn to TON via Fragment and become available 21 "
+        "days after being received. A person can buy the stars themselves for "
+        "TON, so paying with crypto is possible for them without breaking "
+        "Telegram's rules for digital goods.",
+    },
+
     # --- F60: детектор накрутки ---
     "fraud.title": {"ru": "Признаки накрутки", "en": "Signs of inflated growth"},
     "fraud.desc": {
