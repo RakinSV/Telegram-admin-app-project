@@ -1,4 +1,4 @@
-"""Двуязычный (RU/EN) слой текста веб-админки.
+﻿"""Двуязычный (RU/EN) слой текста веб-админки.
 
 Один источник истины для ВСЕХ строк UI — и статичного текста шаблонов
 (`{{ t('nav.dashboard') }}`), и динамического текста, собираемого в Python
@@ -1707,6 +1707,70 @@ STRINGS: dict[str, dict[str, str]] = {
         "days after being received. A person can buy the stars themselves for "
         "TON, so paying with crypto is possible for them without breaking "
         "Telegram's rules for digital goods.",
+    },
+
+    # --- F44: конкурсы ---
+    "nav.contests": {"ru": "Конкурсы", "en": "Contests"},
+    "contests.title": {"ru": "Конкурсы и розыгрыши", "en": "Contests and giveaways"},
+    "contests.intro": {
+        "ru": "Участие идёт по кнопке из поста, победителей тянет бот, когда "
+        "срок вышел. Розыгрыш воспроизводим: он считается по зерну, "
+        "записанному при создании, и любой участник может его проверить.",
+        "en": "People enter from a button in the post, and the bot draws the "
+        "winners once the deadline passes. The draw is reproducible: it is "
+        "computed from a seed recorded at creation, and any participant can "
+        "verify it.",
+    },
+    "contests.chat": {"ru": "Где проводим", "en": "Where"},
+    "contests.name": {"ru": "Название", "en": "Name"},
+    "contests.prize": {"ru": "Приз", "en": "Prize"},
+    "contests.winners": {"ru": "Победителей", "en": "Winners"},
+    "contests.ends_at": {"ru": "Окончание", "en": "Ends at"},
+    "contests.utc_note": {"ru": "время в UTC", "en": "time in UTC"},
+    "contests.min_points": {"ru": "Минимум очков", "en": "Minimum points"},
+    "contests.min_referrals": {"ru": "Минимум приглашённых", "en": "Minimum invites"},
+    "contests.create": {"ru": "Создать конкурс", "en": "Create contest"},
+    "contests.participants": {"ru": "Участников", "en": "Entries"},
+    "contests.result": {"ru": "Итог", "en": "Result"},
+    "contests.running": {"ru": "идёт", "en": "running"},
+    "contests.drawing": {"ru": "срок вышел, тянем", "en": "deadline passed, drawing"},
+    "contests.winners_are": {"ru": "Победители:", "en": "Winners:"},
+    "contests.empty": {"ru": "Конкурсов пока не было.", "en": "No contests yet."},
+    "contests.no_targets": {
+        "ru": "Сначала добавьте активную целевую группу — конкурс проводится в ней.",
+        "en": "Add an active target group first — a contest runs in one.",
+    },
+    "contests.draw_note": {
+        "ru": "Кнопки «разыграть сейчас» нет намеренно: конкурс, который "
+        "владелец может перетянуть, — это не конкурс. Победителей тянет бот "
+        "по истечении срока.",
+        "en": "There is deliberately no «draw now» button: a contest the "
+        "owner can re-roll is not a contest. The bot draws once the deadline "
+        "passes.",
+    },
+    "contests.error_need_title_and_prize": {
+        "ru": "Нужны название и приз.", "en": "A name and a prize are required.",
+    },
+    "contests.error_numbers": {
+        "ru": "Числовые поля должны быть числами.",
+        "en": "Numeric fields must be numbers.",
+    },
+    "contests.error_winners": {
+        "ru": "Победителей должно быть хотя бы один.",
+        "en": "There must be at least one winner.",
+    },
+    "contests.error_date": {
+        "ru": "Не разобрана дата окончания.", "en": "The end date is unreadable.",
+    },
+    "contests.error_past_date": {
+        "ru": "Дата окончания уже прошла: такой конкурс разыграется первым же "
+        "проходом, до того как кто-либо успеет участвовать.",
+        "en": "The end date is in the past: such a contest would be drawn on "
+        "the very first pass, before anyone could enter.",
+    },
+    "contests.error_not_created": {
+        "ru": "Конкурс не создан — проверьте поля.",
+        "en": "The contest was not created — check the fields.",
     },
 
     # --- F73: интеграции ---

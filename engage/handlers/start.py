@@ -1,4 +1,4 @@
-"""`/start` с deep-link — точка входа участника в Engage.
+﻿"""`/start` с deep-link — точка входа участника в Engage.
 
 Telegram позволяет привести человека в бота ссылкой `t.me/<bot>?start=PAYLOAD`
 (payload до 64 символов), и бот получает этот payload первым же сообщением.
@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aiogram import Bot, F, Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message
 
 from tg_repost.logging_conf import get_logger
@@ -77,12 +77,37 @@ async def on_unsubscribe(callback: CallbackQuery) -> None:
     from tg_repost import subscribers_repo
 
     changed = subscribers_repo.unsubscribe(callback.from_user.id)
+    # Путь назад называется ЗДЕСЬ и только здесь. Возможность вернуться,
+    # о которой человек не знает, — это отсутствие возможности: он отпишется
+    # один раз и останется отписанным навсегда, даже если передумает через
+    # день. Найдено аудитом: функция возврата была написана и не имела ни
+    # одного входа.
     await callback.answer(
-        "Больше не буду присылать рассылки. Отвечать на вопросы продолжу."
+        "Больше не буду присылать рассылки. Отвечать на вопросы продолжу.\n\n"
+        "Передумаете — команда /mailing вернёт их."
         if changed
-        else "Вы уже отписаны от рассылок.",
+        else "Вы уже отписаны от рассылок. Команда /mailing вернёт их.",
         show_alert=True,
     )
+
+
+@router.message(Command("mailing"))
+async def on_mailing(message: Message) -> None:
+    """Вернуть рассылки, от которых человек отказался (F64).
+
+    Отдельная команда, а не кнопка в сообщении: кнопка живёт в конкретной
+    рассылке, а отписавшемуся рассылки больше не приходят — нажимать было
+    бы негде.
+    """
+    from tg_repost import subscribers_repo
+
+    user = message.from_user
+    if user is None:
+        return
+    if subscribers_repo.resubscribe(user.id):
+        await message.answer("Готово, рассылки снова включены.")
+    else:
+        await message.answer("Рассылки и так включены.")
 
 
 @router.message(CommandStart())

@@ -68,6 +68,7 @@ _POLICY: dict[str, str] = {
     "/moderation": ROLE_EDITOR,
     "/ads": ROLE_EDITOR,
     "/polls": ROLE_EDITOR,
+    "/contests": ROLE_EDITOR,
     "/invites": ROLE_EDITOR,
     "/contacts": ROLE_EDITOR,
     "/segments": ROLE_EDITOR,

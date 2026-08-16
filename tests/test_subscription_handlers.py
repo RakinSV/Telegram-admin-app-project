@@ -1,4 +1,4 @@
-"""Обработчики платного доступа в Engage (F49).
+﻿"""Обработчики платного доступа в Engage (F49).
 
 Проверяется то, что нельзя проверить в репозитории: порядок шагов, заданный
 Telegram, и поведение на сбоях. Живыми платежами не проверялось — нужен бот,
@@ -193,7 +193,12 @@ async def test_repeated_payment_update_is_ignored_entirely(_plan_on):
     один раз.
     """
     bot = _bot()
-    first, second = _message(_payment()), _message(_payment())
+    # ОДИН объект платежа, доставленный дважды. Два вызова `_payment()`
+    # дали бы РАЗНЫЕ `subscription_expiration_date`, если попали в разные
+    # секунды, — и «дубль» перестал бы быть дублем. Это ловилось редким
+    # плавающим падением в общем прогоне (найдено аудитом).
+    payment = _payment()
+    first, second = _message(payment), _message(payment)
 
     await subscription.on_successful_payment(first, bot)
     await subscription.on_successful_payment(second, bot)
@@ -210,11 +215,12 @@ async def test_duplicate_payment_does_not_grant_when_link_was_not_issued(_plan_o
     создавать инвайт заново.
     """
     bot = _bot()
+    payment = _payment()  # см. комментарий выше: один платёж, две доставки
     bot.create_chat_invite_link.side_effect = Exception("нет прав")
-    await subscription.on_successful_payment(_message(_payment()), bot)
+    await subscription.on_successful_payment(_message(payment), bot)
     bot.create_chat_invite_link.side_effect = None
 
-    await subscription.on_successful_payment(_message(_payment()), bot)
+    await subscription.on_successful_payment(_message(payment), bot)
 
     assert bot.create_chat_invite_link.await_count == 1
 

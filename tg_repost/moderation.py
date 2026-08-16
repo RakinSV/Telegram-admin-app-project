@@ -36,13 +36,24 @@ def get_post(post_id: int) -> Post | None:
         return session.get(Post, post_id)
 
 
-async def approve_post(bot: Bot, post_id: int) -> str:
+async def approve_post(
+    bot: Bot,
+    post_id: int,
+    *,
+    by_username: str = "владелец",
+    by_role: str = "owner",
+) -> str:
     """Одобрить пост: APPROVED, затем публикация сразу или постановка в
     очередь слотов (F11). Возвращает человекочитаемый исход.
 
     Бросает `InvalidStatusTransition` (см. db.models), если пост не в
     состоянии, допускающем одобрение — вызывающий код решает, как это
     показать пользователю.
+
+    КТО ОДОБРИЛ — ОБЯЗАТЕЛЬНЫЙ ВХОД, а не деталь журнала. От роли зависит,
+    выйдет ли пост сразу или будет ждать владельца (F72). Умолчание —
+    владелец: так зовёт бот модерации, который разговаривает лично с ним и
+    ни с кем больше.
     """
     settings = get_settings()
     with session_scope() as session:
@@ -50,6 +61,23 @@ async def approve_post(bot: Bot, post_id: int) -> str:
         if post is None:
             return "пост не найден"
         post.set_status(PostStatus.APPROVED)
+
+    # F72: решение о втором подтверждении принимается ЗДЕСЬ, до публикации.
+    # Раньше эта функция вообще не спрашивала о согласовании: флаг
+    # выставлять было некому, и включённая настройка не делала ничего —
+    # редактор публиковал напрямую. Найдено аудитом.
+    from tg_repost import calendar_repo
+
+    calendar_repo.mark_approved(post_id, by_username=by_username, by_role=by_role)
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        awaiting = bool(post and post.needs_owner_approval)
+    if awaiting:
+        # Планировщик слотов такие посты и так не берёт (см.
+        # `scheduler/posting.py`), но при выключенном расписании публикация
+        # идёт отсюда напрямую — и без этой проверки согласование
+        # обходилось бы простым выключением расписания.
+        return "одобрен редактором, ждёт подтверждения владельца"
 
     if settings.scheduled_posting_enabled:
         slots = ", ".join(settings.posting_slots) or "не заданы"

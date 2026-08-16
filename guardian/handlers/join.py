@@ -93,6 +93,24 @@ async def on_new_member(
     if chat_id not in settings.protected_chat_ids or event.new_chat_member.user.is_bot:
         return
 
+    # F42: первое из двух условий реферала — «вступил». Отмечается ЗДЕСЬ,
+    # потому что Guardian единственный видит вступления: Engage работает в
+    # личке, а репост-бот с участниками не разговаривает.
+    #
+    # Отметка идёт ДО капчи и не зависит от её исхода: реферал засчитается
+    # только через N дней и только если человек ещё и напишет — не прошедший
+    # капчу до этого не доживёт, а завязывать одно на другое значило бы
+    # потерять отметку при любом сбое капчи.
+    #
+    # Сбой здесь НЕ ломает верификацию: капча — безопасность, реферал —
+    # бухгалтерия, и второе не имеет права мешать первому.
+    try:
+        from tg_repost import referrals_repo
+
+        referrals_repo.mark_joined(user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("F42: не удалось отметить вступление %s: %s", user_id, exc)
+
     with session_scope() as session:
         row = (
             session.query(Member)

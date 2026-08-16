@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ t('contests.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('contests.title') }}</h1>
+<p class="muted">{{ t('contests.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+
+{% if targets %}
+<div class="card">
+  <form method="post" action="/contests">
+    <div class="field-row">
+      <label for="c_chat">{{ t('contests.chat') }}</label>
+      <select id="c_chat" name="chat_id">
+        {% for target in targets %}
+        <option value="{{ target.chat_id }}">{{ target.title or target.chat_id }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row">
+      <label for="c_title">{{ t('contests.name') }}</label>
+      <input id="c_title" name="title" style="flex:1;" required>
+    </div>
+    <div class="field-row">
+      <label for="c_prize">{{ t('contests.prize') }}</label>
+      <input id="c_prize" name="prize" style="flex:1;" required>
+    </div>
+    <div class="field-row">
+      <label for="c_winners">{{ t('contests.winners') }}</label>
+      <input id="c_winners" name="winners_count" type="number" min="1" value="1"
+             style="width:90px;">
+    </div>
+    <div class="field-row">
+      <label for="c_ends">{{ t('contests.ends_at') }}</label>
+      <input id="c_ends" name="ends_at" type="datetime-local" required>
+      <span class="hint">{{ t('contests.utc_note') }}</span>
+    </div>
+    <div class="field-row">
+      <label for="c_points">{{ t('contests.min_points') }}</label>
+      <input id="c_points" name="require_min_points" type="number" min="0" value="0"
+             style="width:90px;">
+    </div>
+    <div class="field-row">
+      <label for="c_refs">{{ t('contests.min_referrals') }}</label>
+      <input id="c_refs" name="require_min_referrals" type="number" min="0" value="0"
+             style="width:90px;">
+    </div>
+    <button type="submit">{{ t('contests.create') }}</button>
+  </form>
+</div>
+{% else %}
+<p class="muted">{{ t('contests.no_targets') }}</p>
+{% endif %}
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('contests.name') }}</th>
+      <th>{{ t('contests.prize') }}</th>
+      <th>{{ t('contests.ends_at') }}</th>
+      <th>{{ t('contests.participants') }}</th>
+      <th>{{ t('contests.result') }}</th>
+    </tr>
+    {% for row in contests %}
+    <tr>
+      <td>{{ row.view.title }}</td>
+      <td>{{ row.view.prize }}</td>
+      <td>{{ row.view.ends_at.strftime("%d.%m.%Y %H:%M") }} UTC</td>
+      <td>{{ row.entries }}</td>
+      <td>
+        {% if row.winners %}
+        {{ t('contests.winners_are') }}
+        {% for winner in row.winners %}
+        <div>{{ winner.full_name or winner.username or winner.user_id }}</div>
+        {% endfor %}
+        {% elif row.is_over %}
+        <span class="muted">{{ t('contests.drawing') }}</span>
+        {% else %}
+        <span class="badge">{{ t('contests.running') }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('contests.empty') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<p class="hint">{{ t('contests.draw_note') }}</p>
+{% endblock %}

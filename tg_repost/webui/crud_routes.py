@@ -1,4 +1,4 @@
-"""CRUD-роуты веб-админки (F23, Фаза 5.3): источники, цели, модерация,
+﻿"""CRUD-роуты веб-админки (F23, Фаза 5.3): источники, цели, модерация,
 реклама, статистика/расписание/рост.
 
 Зеркалит существующую функциональность `cli.py` и `telegram/moderation_bot.py`
@@ -54,7 +54,7 @@ from tg_repost.scheduler.smart_schedule import apply_recommended_slots, compute_
 from tg_repost.scheduler.stats import compute_stats_summary
 from tg_repost.telegram.moderation_bot import forget_send_failures
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
-from tg_repost.webui import audit, i18n, log_broadcast, settings_store
+from tg_repost.webui import access, audit, i18n, log_broadcast, settings_store
 from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs, restart_telethon_listener
@@ -618,7 +618,14 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
         try:
-            outcome = await moderation_repo.approve_post(application.bot, post_id)
+            # F72: кто именно одобряет — из сессии. Роль решает, выйдет ли
+            # пост сразу или будет ждать владельца; подставить сюда «владелец»
+            # значило бы отключить согласование для всех.
+            outcome = await moderation_repo.approve_post(
+                application.bot, post_id,
+                by_username=request.session.get("username", "?"),
+                by_role=request.session.get("role", access.ROLE_EDITOR),
+            )
         except InvalidStatusTransition as exc:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
