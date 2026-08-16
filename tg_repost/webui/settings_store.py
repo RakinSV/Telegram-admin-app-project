@@ -412,6 +412,24 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "остаётся как есть.",
     ),
     SettingsGroup(
+        "paid_access", "Платный доступ (Stars) — F49",
+        (
+            SettingField("paid_access_enabled", "Включён", "bool"),
+            SettingField("paid_access_chat_id", "chat_id закрытого канала", "int"),
+            SettingField("paid_access_price_stars", "Цена в звёздах за 30 дней", "int"),
+            SettingField("paid_access_title", "Название для счёта", "str"),
+        ),
+        "Продажа доступа к закрытому каналу за Telegram Stars — 0% комиссии, "
+        "против 10–20% у Tribute, PaidSub и Paywall. Платёжный контур ведёт "
+        "Telegram: он принимает звёзды, сам списывает следующий период и сам "
+        "решает, когда подписка кончилась. Наша часть — выдать персональную "
+        "ссылку с лимитом в одно использование, закрыть доступ после "
+        "окончания и связать оплату с карточкой человека. Бот Engage должен "
+        "быть администратором канала с правом приглашать. С 2024 года Stars "
+        "ОБЯЗАТЕЛЬНЫ для цифровых товаров в ботах — обычный эквайринг здесь "
+        "ведёт к бану бота.",
+    ),
+    SettingsGroup(
         "ad_marking", "Маркировка рекламы — F62",
         (
             SettingField("ad_marking_enabled", "Включена", "bool"),

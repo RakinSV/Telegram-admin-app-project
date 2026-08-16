@@ -1505,6 +1505,96 @@ class ContestEntry(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class PaymentEvent(Base):
+    """Журнал платёжных фактов — ДОБАВЛЯЕМ, НИКОГДА НЕ МЕНЯЕМ (F49).
+
+    Это не «поле status у подписки», и разница принципиальна. Оплата
+    приходит апдейтом от Telegram, а апдейт может продублироваться:
+    переподключение, ретрай, перезапуск бота с недоставленной очередью. Если
+    решение «выдать доступ» принимается по текущему состоянию, повтор выдаст
+    доступ дважды или продлит подписку на второй срок бесплатно. Журнал
+    отвечает на другой вопрос — «этот факт мы уже видели?» — и на него можно
+    ответить точно.
+
+    КЛЮЧ ИДЕМПОТЕНТНОСТИ — (kind, charge_id, period_end), и это осознанный
+    компромисс при НЕПРОВЕРЕННОМ поведении Telegram. Достоверно неизвестно,
+    выдаёт ли продление подписки новый `telegram_payment_charge_id` или
+    повторяет прежний: проверить это можно только живой подпиской с
+    настоящими звёздами. Ключ из трёх полей верен в обоих случаях —
+    новый charge_id уникален сам по себе, а повторный отличается новой
+    датой окончания. Повторная доставка ОДНОГО апдейта совпадает по всем
+    трём полям и отсекается.
+
+    `period_end` НЕ NULL намеренно: в SQL уникальность не срабатывает на
+    NULL (NULL != NULL), и разовые платежи с пустой датой дублировались бы
+    беспрепятственно. Для них ставится метка-заглушка.
+    """
+
+    __tablename__ = "payment_events"
+    __table_args__ = (
+        UniqueConstraint("kind", "charge_id", "period_end", name="uq_payment_event"),
+        Index("ix_payment_events_user", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    # payment | refund | canceled
+    kind: Mapped[str] = mapped_column(String(16), index=True)
+    charge_id: Mapped[str] = mapped_column(String(128), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Сумма в звёздах (XTR не имеет дробной части, поэтому целое).
+    amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="XTR", nullable=False)
+    invoice_payload: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_recurring: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_first_recurring: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ChannelSubscription(Base):
+    """Платный доступ человека к каналу (F49).
+
+    Состояние, вычисляемое из журнала выше, а не источник правды. Здесь
+    удобно спросить «кому пора закрыть доступ», но любое изменение приходит
+    из платёжного факта.
+
+    Одна строка на пару (канал, человек): подписка продлевается, а не
+    заводится заново, иначе история доступа рассыплется на обрывки.
+    """
+
+    __tablename__ = "channel_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("chat_id", "user_id", name="uq_channel_subscription"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    # active | expired | canceled | refunded
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    # До какого момента доступ оплачен. По нему и только по нему решается,
+    # пора ли закрывать: полагаться на «прошло 30 дней с оплаты» нельзя —
+    # Telegram сам считает период и может его сдвинуть.
+    paid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    charge_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Персональная ссылка с лимитом в одно использование: общая ссылка
+    # означала бы, что один оплативший приводит весь чат.
+    invite_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
     """Разобрать CSV из chat_id (поле `Source.target_chat_ids`) в список int."""
     if not raw:

@@ -2262,6 +2262,37 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Every Nth published post is paired with an ad from a brief "
         "(the “Ads” page).",
     },
+    "settings.group.paid_access.title": {
+        "ru": "Платный доступ (Stars)", "en": "Paid access (Stars)",
+    },
+    "settings.group.paid_access.desc": {
+        "ru": "Продажа доступа к закрытому каналу за Telegram Stars — 0% "
+        "комиссии против 10–20% у Tribute, PaidSub и Paywall. Платёжный "
+        "контур ведёт Telegram: принимает звёзды, сам списывает следующий "
+        "период и сам решает, когда подписка кончилась. Наша часть — выдать "
+        "персональную ссылку с лимитом в одно использование, закрыть доступ "
+        "после окончания и связать оплату с карточкой человека. Бот Engage "
+        "должен быть администратором канала с правом приглашать.",
+        "en": "Selling access to a private channel for Telegram Stars — 0% "
+        "commission against 10–20% at Tribute, PaidSub and Paywall. Telegram "
+        "runs the payment loop: it takes the stars, charges the next period "
+        "itself and decides when the subscription ends. Our part is issuing a "
+        "single-use personal invite link, revoking access when it expires and "
+        "tying the payment to the person's card. The Engage bot must be an "
+        "administrator of the channel with the invite permission.",
+    },
+    "settings.field.paid_access_enabled.label": {
+        "ru": "Включён", "en": "Enabled",
+    },
+    "settings.field.paid_access_chat_id.label": {
+        "ru": "chat_id закрытого канала", "en": "Private channel chat_id",
+    },
+    "settings.field.paid_access_price_stars.label": {
+        "ru": "Цена в звёздах за 30 дней", "en": "Price in stars per 30 days",
+    },
+    "settings.field.paid_access_title.label": {
+        "ru": "Название для счёта", "en": "Title shown on the invoice",
+    },
     "settings.group.ad_marking.title": {
         "ru": "Маркировка рекламы", "en": "Ad marking",
     },

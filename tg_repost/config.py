@@ -683,6 +683,17 @@ class Settings(BaseSettings):
     # посты одного дня.
     utm_campaign: str = Field("post_{post_id}", alias="UTM_CAMPAIGN")
 
+    # --- F49: платный доступ по подписке Stars ---
+    # ВЫКЛЮЧЕНО по умолчанию: включённый платный доступ означает, что бот
+    # начинает выставлять счета живым людям, и цена ошибки в настройке —
+    # деньги, а не неловкость.
+    paid_access_enabled: bool = Field(False, alias="PAID_ACCESS_ENABLED")
+    # Канал, доступ к которому продаётся. Ноль — не настроено.
+    paid_access_chat_id: int = Field(0, alias="PAID_ACCESS_CHAT_ID")
+    # Цена в звёздах за 30 дней. XTR не имеет дробной части.
+    paid_access_price_stars: int = Field(0, alias="PAID_ACCESS_PRICE_STARS")
+    paid_access_title: str = Field("Закрытый канал", alias="PAID_ACCESS_TITLE")
+
     # --- F62: маркировка рекламы (ОРД, erid) ---
     # ВЫКЛЮЧЕНО по умолчанию: обязанность возникает, когда рекламу реально
     # продают, а до первого рекламодателя пометка на самореклАме только

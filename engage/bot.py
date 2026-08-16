@@ -21,7 +21,16 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from engage.config import get_engage_settings
-from engage.handlers import contest, quiz, referral, start, suggest, support
+from engage.handlers import (
+    contest,
+    quiz,
+    referral,
+    start,
+    subscription,
+    suggest,
+    support,
+)
+from tg_repost.scheduler.subscriptions import revoke_expired_subscriptions
 from tg_repost import proxy as proxy_module
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, setup_logging
@@ -84,6 +93,11 @@ async def main() -> None:
     dp.include_router(referral.router)
     dp.include_router(contest.router)
     dp.include_router(suggest.router)
+    # F49: платежи — до поддержки, но после предложки. Обработчик
+    # `successful_payment` ловит служебное сообщение, а не текст, поэтому
+    # предложке он не мешает; зато поставленный ПОСЛЕ поддержки он не
+    # сработал бы вовсе — та ловит любое личное сообщение.
+    dp.include_router(subscription.router)
     # F68: поддержка — СТРОГО ПОСЛЕДНЯЯ. Она ловит любое личное сообщение,
     # не разобранное выше; поставь её раньше — и она проглотит текст, который
     # ждёт предложка (FSM-состояние в suggest.router), а обнаружится это по
@@ -109,6 +123,14 @@ async def main() -> None:
     scheduler.add_job(
         contest.draw_due_contests, IntervalTrigger(minutes=5),
         args=[bot], id="draw_contests",
+    )
+    # F49: закрытие доступа по окончании подписки. Раз в час — у самой
+    # проверки уже есть запас в несколько часов (продление приходит
+    # отдельным апдейтом и может опоздать), поэтому частить нечем помочь, а
+    # каждый проход это лишние обращения к Telegram.
+    scheduler.add_job(
+        revoke_expired_subscriptions, IntervalTrigger(hours=1),
+        args=[bot], id="revoke_subscriptions",
     )
     scheduler.start()
 
