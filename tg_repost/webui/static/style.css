@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #0f1115;
   --panel: #181b22;
   --border: #2a2f3a;
@@ -36,6 +36,12 @@ body {
 
 nav.sidebar {
   width: 220px;
+  /* Меню длиннее экрана даже с группами: прокручиваем его отдельно, иначе
+     страница уезжает вместе с ним и содержимое приходится догонять. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px;
@@ -43,6 +49,18 @@ nav.sidebar {
 }
 
 nav.sidebar .brand { font-weight: 600; margin-bottom: 20px; color: var(--accent); }
+
+/* Заголовок группы. Мелкий и приглушённый намеренно: он ориентир при
+   поиске, а не самостоятельный пункт — конкурировать с названиями разделов
+   ему не нужно. */
+nav.sidebar .navgroup {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 18px 0 6px 10px;
+}
+nav.sidebar .navgroup:first-of-type { margin-top: 12px; }
 
 nav.sidebar a {
   display: block;

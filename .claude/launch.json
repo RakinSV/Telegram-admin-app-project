@@ -2,10 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "tg-admin",
-      "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "tg_repost.main"],
-      "port": 8000
+      "name": "admin",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m", "uvicorn",
+        "tg_repost.webui.app:create_app",
+        "--factory",
+        "--host", "127.0.0.1",
+        "--port", "8099"
+      ],
+      "port": 8099
     }
   ]
 }

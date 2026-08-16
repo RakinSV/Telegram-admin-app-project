@@ -1,4 +1,4 @@
-"""Одна точка сборки шаблонов админки.
+﻿"""Одна точка сборки шаблонов админки.
 
 ЗАЧЕМ. `base.html` один на всю админку, а `Jinja2Templates` заводился в
 КАЖДОМ модуле роутов — одиннадцать окружений, и в каждом свой набор
@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
 from tg_repost import languages
-from tg_repost.webui import access, i18n
+from tg_repost.webui import access, i18n, nav
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -56,4 +56,10 @@ def build_templates() -> Jinja2Templates:
     # справочник языков по HTML.
     templates.env.globals["language_label"] = languages.label
     templates.env.globals["can_open"] = _can_open
+    # Состав меню — данными, а не разметкой; см. `webui/nav.py`.
+    # ФУНКЦИЯ, А НЕ ГОТОВЫЙ КОРТЕЖ: иначе состав меню замораживается в момент
+    # сборки шаблонов, и защиту «группа без доступных пунктов не рисует
+    # заголовок» нечем проверить — подменить набор групп в тесте было бы
+    # невозможно.
+    templates.env.globals["NAV"] = lambda: nav.NAV
     return templates

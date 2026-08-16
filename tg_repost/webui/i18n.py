@@ -1711,6 +1711,13 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # --- F70: приём криптовалюты ---
     "nav.crypto": {"ru": "Крипта", "en": "Crypto"},
+    # Заголовки групп меню. Названы по ЗАДАЧЕ владельца, а не по устройству
+    # кода: он ищет «где посмотреть выручку», а не «где F69».
+    "nav.group.content": {"ru": "Контент", "en": "Content"},
+    "nav.group.audience": {"ru": "Аудитория", "en": "Audience"},
+    "nav.group.money": {"ru": "Деньги", "en": "Money"},
+    "nav.group.guardian": {"ru": "Guardian — защита группы", "en": "Guardian — group defence"},
+    "nav.group.system": {"ru": "Система", "en": "System"},
     "crypto.title": {"ru": "Приём криптовалюты", "en": "Accepting crypto"},
     "crypto.intro": {
         "ru": "Способов можно завести сколько угодно и назначить свой каждой "
