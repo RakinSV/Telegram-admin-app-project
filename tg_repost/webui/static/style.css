@@ -231,3 +231,19 @@ button.small { padding: 4px 10px; font-size: 12px; }
   max-width: 360px; margin: 80px auto; display: flex; flex-direction: column; gap: 12px;
 }
 .auth-page input { padding: 10px; border-radius: 6px; border: 1px solid var(--border); background: #11131a; color: var(--text); }
+
+/* --- Чеклист первых шагов (главная) --- */
+/* Нумерация скрыта: галочка и кружок несут статус, а цифра рядом с ними
+   спорит за внимание и ничего не добавляет. */
+.checklist { list-style: none; padding-left: 0; margin: 12px 0; }
+.checklist li { padding: 8px 0 8px 26px; position: relative; border-bottom: 1px solid var(--border); }
+.checklist li:last-child { border-bottom: none; }
+.checklist .tick { position: absolute; left: 0; top: 8px; color: var(--ok); font-weight: 600; }
+.checklist .tick.pending { color: var(--muted); font-weight: 400; }
+/* Сделанный шаг приглушается, но не вычёркивается: он остаётся ссылкой,
+   по которой возвращаются что-то поправить. */
+.checklist li.done > a { color: var(--muted); }
+.checklist li > a { color: var(--text); text-decoration: none; font-weight: 600; }
+.checklist li > a:hover { color: var(--accent); }
+.checklist .muted { font-size: 13px; margin-top: 2px; }
+.onboarding-progress { color: var(--muted); font-size: 13px; margin-bottom: 4px; }

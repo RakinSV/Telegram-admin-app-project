@@ -1713,6 +1713,112 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.crypto": {"ru": "Крипта", "en": "Crypto"},
     # Заголовки групп меню. Названы по ЗАДАЧЕ владельца, а не по устройству
     # кода: он ищет «где посмотреть выручку», а не «где F69».
+    # --- Первые шаги на главной ---
+    "onboarding.title": {"ru": "Первые шаги", "en": "Getting started"},
+    "onboarding.intro": {
+        "ru": "Пока не сделано обязательное, сбор и публикация не запускаются. "
+        "Шаги идут по зависимостям: каждый следующий имеет смысл только после "
+        "предыдущего.",
+        "en": "Until the required steps are done, collection and publishing do "
+        "not start. The steps follow dependencies: each one only makes sense "
+        "after the previous.",
+    },
+    "onboarding.progress": {
+        "ru": "Сделано {done} из {total}", "en": "{done} of {total} done",
+    },
+    "onboarding.go_next": {"ru": "Перейти к следующему шагу", "en": "Go to the next step"},
+    "onboarding.optional_note": {
+        "ru": "Необязательное. Ядро — сбор, рерайт, модерация, публикация — "
+        "работает и без этого. Guardian и Engage это ОТДЕЛЬНЫЕ боты со своими "
+        "токенами у @BotFather; без них система не хуже, просто уже.",
+        "en": "Optional. The core — collect, rewrite, moderate, publish — works "
+        "without these. Guardian and Engage are SEPARATE bots with their own "
+        "@BotFather tokens; without them the system is not worse, just "
+        "narrower.",
+    },
+    "onboarding.step.telegram_api": {
+        "ru": "Ключи Telegram API (api_id и api_hash)",
+        "en": "Telegram API keys (api_id and api_hash)",
+    },
+    "onboarding.why.telegram_api": {
+        "ru": "Берутся на my.telegram.org. Без них нечем читать каналы: "
+        "обычный бот чужие каналы не видит.",
+        "en": "Get them at my.telegram.org. Without them there is no way to "
+        "read channels: a plain bot cannot see other people's channels.",
+    },
+    "onboarding.step.telethon_session": {
+        "ru": "Вход в Telegram по номеру телефона",
+        "en": "Sign in to Telegram with your phone number",
+    },
+    "onboarding.why.telethon_session": {
+        "ru": "Разовый вход прямо в админке. Пароль и код никуда не уходят — "
+        "результатом становится строка сессии в шифрованной базе.",
+        "en": "A one-off sign-in right in the admin panel. The password and "
+        "code go nowhere — the result is a session string in the encrypted "
+        "database.",
+    },
+    "onboarding.step.bot_token": {
+        "ru": "Токен бота, который будет публиковать",
+        "en": "Token of the bot that will publish",
+    },
+    "onboarding.why.bot_token": {
+        "ru": "Заводится у @BotFather. Этот же бот присылает вам посты на "
+        "одобрение и сообщает о сбоях.",
+        "en": "Created via @BotFather. The same bot sends you posts for "
+        "approval and reports failures.",
+    },
+    "onboarding.step.owner_id": {
+        "ru": "Ваш Telegram ID", "en": "Your Telegram ID",
+    },
+    "onboarding.why.owner_id": {
+        "ru": "Чтобы бот знал, кому слать посты на одобрение. Узнать можно у "
+        "@userinfobot.",
+        "en": "So the bot knows whom to send posts to for approval. "
+        "@userinfobot will tell you.",
+    },
+    "onboarding.step.ai_key": {
+        "ru": "Ключ ИИ для рерайта", "en": "AI key for rewriting"
+    },
+    "onboarding.why.ai_key": {
+        "ru": "Любой OpenAI-совместимый: OpenAI, прокси к Claude, локальная "
+        "модель через Ollama. Провайдер меняется в настройках, а не в коде.",
+        "en": "Any OpenAI-compatible one: OpenAI, a Claude proxy, a local "
+        "model via Ollama. The provider is changed in settings, not in code.",
+    },
+    "onboarding.step.sources": {
+        "ru": "Хотя бы один источник", "en": "At least one source",
+    },
+    "onboarding.why.sources": {
+        "ru": "Каналы или RSS-ленты, откуда брать посты.",
+        "en": "Channels or RSS feeds to take posts from.",
+    },
+    "onboarding.step.targets": {
+        "ru": "Хотя бы одна целевая группа", "en": "At least one target group",
+    },
+    "onboarding.why.targets": {
+        "ru": "Куда публиковать. Бот должен быть в ней администратором.",
+        "en": "Where to publish. The bot has to be an administrator there.",
+    },
+    "onboarding.step.guardian": {
+        "ru": "Токен Guardian — защита группы", "en": "Guardian token — group defence",
+    },
+    "onboarding.why.guardian": {
+        "ru": "Капча, антиспам, антирейд. Без токена процесс не стартует — он "
+        "отказывается работать наполовину настроенным.",
+        "en": "CAPTCHA, anti-spam, anti-raid. Without a token the process does "
+        "not start — it refuses to run half-configured.",
+    },
+    "onboarding.step.engage": {
+        "ru": "Токен Engage — вовлечение участников",
+        "en": "Engage token — audience engagement",
+    },
+    "onboarding.why.engage": {
+        "ru": "Викторины, рефералы, конкурсы, подписки и магазин. Тоже "
+        "отдельный бот.",
+        "en": "Quizzes, referrals, contests, subscriptions and the shop. Also "
+        "a separate bot.",
+    },
+
     "nav.group.content": {"ru": "Контент", "en": "Content"},
     "nav.group.audience": {"ru": "Аудитория", "en": "Audience"},
     "nav.group.money": {"ru": "Деньги", "en": "Money"},

@@ -4,9 +4,42 @@
 <h1>{{ t('dashboard.title') }}</h1>
 <p class="muted">{{ t('dashboard.desc') }}</p>
 
-{% if not is_minimally_configured %}
+{# Чеклист первых шагов. Показывается, пока не сделано обязательное, и
+   исчезает сам — постоянная памятка о том, что уже сделано, только занимает
+   место. См. `webui/onboarding.py`. #}
+{% if not onboarding.is_ready %}
 <div class="card" style="border-color: var(--warn);">
-  {{ t('dashboard.not_configured_warning') | safe }}
+  <h2 style="margin-top: 0;">{{ t('onboarding.title') }}</h2>
+  <p class="muted">{{ t('onboarding.intro') }}</p>
+
+  <div class="onboarding-progress">
+    {{ t('onboarding.progress', done=onboarding.done_count, total=onboarding.total_count) }}
+  </div>
+
+  <ol class="checklist">
+    {% for step in onboarding.steps if step.required %}
+    <li class="{{ 'done' if step.done else '' }}">
+      {% if step.done %}<span class="tick">✓</span>{% else %}<span class="tick pending">○</span>{% endif %}
+      <a href="{{ step.href }}">{{ t('onboarding.step.' + step.key) }}</a>
+      <div class="muted">{{ t('onboarding.why.' + step.key) }}</div>
+    </li>
+    {% endfor %}
+  </ol>
+
+  {% if onboarding.next_step %}
+  <p><a href="{{ onboarding.next_step.href }}"><button type="button">{{ t('onboarding.go_next') }}</button></a></p>
+  {% endif %}
+
+  <p class="hint">{{ t('onboarding.optional_note') }}</p>
+  <ul class="checklist">
+    {% for step in onboarding.steps if not step.required %}
+    <li class="{{ 'done' if step.done else '' }}">
+      {% if step.done %}<span class="tick">✓</span>{% else %}<span class="tick pending">○</span>{% endif %}
+      <a href="{{ step.href }}">{{ t('onboarding.step.' + step.key) }}</a>
+      <div class="muted">{{ t('onboarding.why.' + step.key) }}</div>
+    </li>
+    {% endfor %}
+  </ul>
 </div>
 {% endif %}
 

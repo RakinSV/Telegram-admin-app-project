@@ -23,6 +23,7 @@ from tg_repost.webui import (
     audit,
     dashboard,
     i18n,
+    onboarding,
     runtime_state,
     settings_store,
     setup_token,
@@ -546,6 +547,10 @@ def _protected_router() -> APIRouter:
             "error_rate": dashboard.error_rate(),
             "components": runtime_state.get_component_status(),
             "is_minimally_configured": settings.is_minimally_configured,
+            # Чеклист первых шагов — вычисляется, а не перечисляется:
+            # список, написанный руками, разойдётся с системой на первой же
+            # фиче, а врущий чеклист хуже отсутствующего.
+            "onboarding": onboarding.summary(),
         }
         return _templates.TemplateResponse(request, "dashboard.html", context)
 

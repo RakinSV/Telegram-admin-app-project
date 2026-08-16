@@ -28,7 +28,7 @@ from tg_repost import (
 )
 from tg_repost.rss import presets
 from tg_repost import crypto_rails
-from tg_repost.webui import access
+from tg_repost.webui import access, onboarding
 from tg_repost.webui.i18n import STRINGS
 
 # (префикс ключа, значения, откуда взяты) — значения берутся из САМОГО кода,
@@ -79,6 +79,11 @@ FAMILIES = [
     # F70: способы приёма крипты. Список из самого пакета — заведут
     # четвёртый способ, и тест потребует перевод, а не промолчит.
     ("crypto.kind_", crypto_rails.KINDS),
+    # Чеклист первых шагов: название и объяснение для каждого шага.
+    # Ключи берутся из самого модуля — добавят шаг, и тест потребует оба
+    # перевода, а не оставит на главной сырое `[onboarding.step.новый]`.
+    ("onboarding.step.", onboarding.STEP_KEYS),
+    ("onboarding.why.", onboarding.STEP_KEYS),
 ]
 
 
