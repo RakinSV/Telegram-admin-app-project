@@ -1,4 +1,4 @@
-"""Приём криптовалюты: способы и привязка к группам (F70) — веб-роуты.
+﻿"""Приём криптовалюты: способы и привязка к группам (F70) — веб-роуты.
 
 ТОЛЬКО ВЛАДЕЛЕЦ: здесь лежат ключи от денег.
 
@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from tg_repost import crypto_rails_repo as rails
 from tg_repost import targets_repo
 from tg_repost.crypto_rails import KINDS
-from tg_repost.webui import audit
+from tg_repost.webui import audit, flash, i18n
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.templating import build_templates
 
@@ -104,8 +104,13 @@ def build_crypto_router() -> APIRouter:
         return RedirectResponse(url="/crypto", status_code=303)
 
     @router.post("/crypto/bind")
-    async def crypto_bind(chat_id: str = Form(""), rail_id: str = Form("")) -> Response:
+    async def crypto_bind(
+        request: Request, chat_id: str = Form(""), rail_id: str = Form(""),
+    ) -> Response:
         if not chat_id.lstrip("-").isdigit():
+            # Молча вернуть на ту же страницу — значит показать человеку, что
+            # ничего не произошло, и не сказать почему.
+            flash.set_flash(request, i18n.t("crypto.error_bad_chat_id"))
             return RedirectResponse(url="/crypto", status_code=303)
         chosen = int(rail_id) if rail_id.isdigit() else None
         if rails.bind_to_group(int(chat_id), chosen):

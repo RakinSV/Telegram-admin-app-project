@@ -1,4 +1,4 @@
-"""Рассылки по сегменту (F64) — веб-роуты.
+﻿"""Рассылки по сегменту (F64) — веб-роуты.
 
 ОТПРАВКА ДВУХШАГОВАЯ, И ЭТО НЕ ПРО УДОБСТВО. Разосланные сообщения нельзя
 отозвать: ошибка в выборе сегмента видна только по реакции живых людей.
@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from tg_repost import broadcasts_repo, segments_repo
-from tg_repost.webui import audit, i18n
+from tg_repost.webui import audit, flash, i18n
 from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 
@@ -80,10 +80,15 @@ def build_broadcasts_router() -> APIRouter:
     ) -> Response:
         """Шаг 2: отправить. Сверяет числа с показанными на предпросмотре."""
         if not segment_id.isdigit() or not text.strip():
+            flash.set_flash(request, i18n.t("broadcasts.error_need_segment_and_text"))
             return RedirectResponse(url="/broadcasts", status_code=303)
 
         plan = broadcasts_repo.plan(int(segment_id))
         if plan is None:
+            # Сегмент удалили, пока человек смотрел предпросмотр. Отправлять
+            # некуда, и молчать об этом нельзя: иначе он уверен, что рассылка
+            # ушла, и узнает обратное только по отсутствию ответов.
+            flash.set_flash(request, i18n.t("broadcasts.error_segment_gone"))
             return RedirectResponse(url="/broadcasts", status_code=303)
 
         if expected_reachable.isdigit() and int(expected_reachable) != plan.stats.reachable:

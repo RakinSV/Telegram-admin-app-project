@@ -54,6 +54,12 @@
       </form>
     </nav>
     <main>
+      {#- Сообщение о том, что произошло на прошлом шаге. Читается один раз
+          и исчезает: иначе висело бы на каждой следующей странице. -#}
+      {%- set flash = pop_flash() -%}
+      {% if flash %}
+      <p class="badge {{ 'ok' if flash.kind == 'ok' else 'warn' }}" style="display:block; margin-bottom:14px;">{{ flash.text }}</p>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>

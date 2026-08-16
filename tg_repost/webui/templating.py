@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
 from tg_repost import languages
-from tg_repost.webui import access, i18n, nav
+from tg_repost.webui import access, flash, i18n, nav
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -56,6 +56,8 @@ def build_templates() -> Jinja2Templates:
     # справочник языков по HTML.
     templates.env.globals["language_label"] = languages.label
     templates.env.globals["can_open"] = _can_open
+    # Одноразовое сообщение после переадресации — см. `webui/flash.py`.
+    templates.env.globals["pop_flash"] = flash.pop_flash
     # Состав меню — данными, а не разметкой; см. `webui/nav.py`.
     # ФУНКЦИЯ, А НЕ ГОТОВЫЙ КОРТЕЖ: иначе состав меню замораживается в момент
     # сборки шаблонов, и защиту «группа без доступных пунктов не рисует

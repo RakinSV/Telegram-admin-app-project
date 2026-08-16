@@ -1716,6 +1716,16 @@ STRINGS: dict[str, dict[str, str]] = {
     # Найдено аудитом страниц 2026-08-16: текст стоял прямо в разметке и в
     # английском интерфейсе показывался по-русски.
     "ads.inn": {"ru": "ИНН", "en": "Tax ID"},
+    "crypto.error_bad_chat_id": {
+        "ru": "Не понял, какой это чат: нужен числовой идентификатор.",
+        "en": "Could not tell which chat this is: a numeric id is required.",
+    },
+    "broadcasts.error_segment_gone": {
+        "ru": "Сегмент удалили, пока вы смотрели предпросмотр. Рассылка НЕ "
+        "отправлена — выберите другой сегмент.",
+        "en": "The segment was deleted while you were reviewing the preview. "
+        "The broadcast was NOT sent — pick another segment.",
+    },
     "contacts.level": {"ru": "ур.", "en": "lvl"},
     "calendar.awaiting_empty": {
         "ru": "Подтверждать нечего — все посты уже прошли согласование.",
