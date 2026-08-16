@@ -13,6 +13,12 @@
 ссылка означала бы, что один оплативший приводит весь чат, и платный доступ
 перестаёт быть платным после первого же покупателя.
 
+ОБРАБОТЧИКИ ФИЛЬТРУЮТ ПО ПРЕФИКСУ payload (`sub:`), потому что в боте есть
+второй вид счетов — товары магазина (`ord:`, F69). Без фильтра здешний
+`pre_checkout` отвечал бы и на них, отклоняя как «чужой канал», и покупка в
+магазине становилась бы невозможной. Обработчик оплаты у Telegram один на
+всё, различать счета обязаны мы.
+
 ПОРЯДОК «СНАЧАЛА ЗАПИСЬ, ПОТОМ ВЫДАЧА» ВАЖЕН. Если сначала выдать ссылку, а
 потом упасть на записи, повторная доставка апдейта выдаст вторую ссылку.
 Обратный порядок в худшем случае оставит оплату без ссылки — и это чинится
@@ -121,7 +127,7 @@ async def on_subscribe(message: Message, bot: Bot) -> None:
     )
 
 
-@router.pre_checkout_query()
+@router.pre_checkout_query(F.invoice_payload.startswith(PAYLOAD_PREFIX + ":"))
 async def on_pre_checkout(query: PreCheckoutQuery) -> None:
     """Подтверждение платежа. ОТВЕТИТЬ ОБЯЗАТЕЛЬНО И БЫСТРО.
 
@@ -144,7 +150,9 @@ async def on_pre_checkout(query: PreCheckoutQuery) -> None:
     await query.answer(ok=True)
 
 
-@router.message(F.successful_payment)
+@router.message(F.successful_payment.func(
+    lambda p: (p.invoice_payload or "").startswith(PAYLOAD_PREFIX + ":")
+))
 async def on_successful_payment(message: Message, bot: Bot) -> None:
     payment = message.successful_payment
     user = message.from_user

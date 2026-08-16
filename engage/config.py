@@ -43,9 +43,18 @@ class EngageSettings(BaseSettings):
     # сервере — см. `_secret_override` ниже.
     engage_bot_token: str = Field("", alias="ENGAGE_BOT_TOKEN")
 
+    # F70: токен платёжного провайдера из @BotFather (/mybots → Payments).
+    # Нужен ТОЛЬКО для физических товаров магазина: подписка идёт за Stars,
+    # где провайдер не участвует вовсе.
+    shop_provider_token: str = Field("", alias="SHOP_PROVIDER_TOKEN")
+
     @property
     def is_configured(self) -> bool:
         return bool(self.engage_bot_token)
+
+    @property
+    def can_accept_fiat(self) -> bool:
+        return bool(self.shop_provider_token)
 
 
 def _secret_override() -> dict[str, object]:
@@ -68,26 +77,29 @@ def _secret_override() -> dict[str, object]:
         from tg_repost.db.models import Secret
         from tg_repost.db.session import session_scope
 
+        wanted = ("engage_bot_token", "shop_provider_token")
         with session_scope() as session:
-            row = (
+            rows = (
                 session.query(Secret)
-                .filter(Secret.key == "engage_bot_token")
-                .one_or_none()
+                .filter(Secret.key.in_(wanted))
+                .all()
             )
+            encrypted = {row.key: row.encrypted_value for row in rows}
     except Exception:  # noqa: BLE001
         # БД может быть ещё не мигрирована (первый запуск) — это не повод
         # ронять процесс: без токена он всё равно корректно не стартует.
         return {}
-    if row is None:
-        return {}
-    try:
-        return {"engage_bot_token": decrypt(row.encrypted_value, master_key)}
-    except InvalidToken:
-        logger.warning(
-            "Токен Engage не расшифровывается текущим WEBUI_MASTER_KEY — "
-            "ключ сменили после сохранения секрета?",
-        )
-        return {}
+
+    result: dict[str, object] = {}
+    for key, value in encrypted.items():
+        try:
+            result[key] = decrypt(value, master_key)
+        except InvalidToken:
+            logger.warning(
+                "Секрет «%s» не расшифровывается текущим WEBUI_MASTER_KEY — "
+                "ключ сменили после сохранения?", key,
+            )
+    return result
 
 
 def get_engage_settings() -> EngageSettings:

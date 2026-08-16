@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ t('shop.title') }} — tg_repost admin{% endblock %}
+{% block content %}
+<h1>{{ t('shop.title') }}</h1>
+<p class="muted">{{ t('shop.intro') }}</p>
+
+{% if error %}<p class="badge warn">{{ error }}</p>{% endif %}
+{% if not enabled %}<p class="badge warn">{{ t('shop.disabled') }}</p>{% endif %}
+
+<div class="card grid">
+  <div class="stat">
+    <div class="num">{{ "%.2f"|format(revenue) }}</div>
+    <div class="label">{{ t('shop.revenue', currency=currency) }}</div>
+  </div>
+  <div class="stat">
+    <div class="num">{{ orders|length }}</div>
+    <div class="label">{{ t('shop.orders_count') }}</div>
+  </div>
+</div>
+
+<h2>{{ t('shop.catalog') }}</h2>
+<div class="card">
+  <form method="post" action="/shop/products" class="inline-form">
+    <input type="text" name="name" placeholder="{{ t('shop.name') }}" required>
+    <input type="text" name="price" placeholder="{{ t('shop.price_placeholder') }}" required>
+    <input type="text" name="stock" placeholder="{{ t('shop.stock_placeholder') }}">
+    <input type="text" name="description" placeholder="{{ t('shop.description') }}">
+    <button type="submit">{{ t('common.add') }}</button>
+  </form>
+  <p class="hint">{{ t('shop.physical_only') }}</p>
+</div>
+
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('shop.name') }}</th><th>{{ t('shop.price') }}</th>
+      <th>{{ t('shop.stock') }}</th><th>{{ t('shop.state') }}</th><th></th>
+    </tr>
+    {% for p in products %}
+    <tr>
+      <td>{{ p.name }}{% if p.description %}<div class="muted">{{ p.description[:60] }}</div>{% endif %}</td>
+      <td>{{ p.price_human }}</td>
+      <td>{% if p.stock is none %}{{ t('common.unlimited') }}{% else %}{{ p.stock }}{% endif %}</td>
+      <td>
+        {% if p.is_active %}<span class="badge ok">{{ t('shop.on_sale') }}</span>
+        {% else %}<span class="muted">{{ t('shop.hidden') }}</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/shop/products/{{ p.id }}/toggle">
+          <button type="submit" class="secondary">
+            {{ t('shop.hide') if p.is_active else t('shop.publish') }}
+          </button>
+        </form>
+        <form method="post" action="/shop/products/{{ p.id }}/delete"
+              onsubmit="return confirm('{{ t('shop.confirm_delete') }}');">
+          <button type="submit" class="secondary">{{ t('common.delete') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">{{ t('shop.no_products') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<h2>{{ t('shop.orders') }}</h2>
+<div class="card">
+  <table>
+    <tr>
+      <th>№</th><th>{{ t('shop.buyer') }}</th><th>{{ t('shop.product') }}</th>
+      <th>{{ t('shop.amount') }}</th><th>{{ t('shop.shipping') }}</th>
+      <th>{{ t('shop.state') }}</th><th></th>
+    </tr>
+    {% for o in orders %}
+    <tr>
+      <td>{{ o.id }}</td>
+      <td><a href="/contacts/{{ o.user_id }}">{{ o.user_id }}</a></td>
+      <td>
+        {{ o.product_name }}
+        {% if o.is_oversold %}<div class="badge warn">{{ t('shop.oversold') }}</div>{% endif %}
+      </td>
+      <td>{{ o.amount_human }}</td>
+      <td class="muted">{{ o.shipping or "—" }}</td>
+      <td>{{ t('shop.status_' + o.status) }}</td>
+      <td>
+        {% if o.status == 'paid' %}
+        <form method="post" action="/shop/orders/{{ o.id }}/status" class="inline-form">
+          <input type="hidden" name="status" value="shipped">
+          <button type="submit" class="secondary">{{ t('shop.mark_shipped') }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">{{ t('shop.no_orders') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

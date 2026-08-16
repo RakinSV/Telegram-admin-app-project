@@ -1,4 +1,4 @@
-"""Слой записи настроек/секретов из веб-админки (F23, Фаза 5).
+﻿"""Слой записи настроек/секретов из веб-админки (F23, Фаза 5).
 
 Чтение (с оверлеем поверх .env) — в `tg_repost.config.get_settings()`,
 прозрачно для всех существующих 30+ мест вызова. Этот модуль — путь ЗАПИСИ:
@@ -444,6 +444,20 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "идёт через Fragment на ваш кошелёк.",
     ),
     SettingsGroup(
+        "shop", "Магазин — F69/F70",
+        (
+            SettingField("shop_enabled", "Включён", "bool"),
+            SettingField("shop_currency", "Валюта каталога", "str"),
+        ),
+        "Продажа ФИЗИЧЕСКИХ товаров через Bot Payments API: провайдер "
+        "подключается в @BotFather, его токен вводится на этой же странице "
+        "как секрет. Цифровое, потребляемое внутри Telegram, сюда класть "
+        "нельзя — оно продаётся только за Stars, иначе бан бота. Остаток "
+        "списывается при оплате, а не при открытии счёта: иначе брошенные "
+        "корзины съедают склад.",
+        secret_keys=("shop_provider_token",),
+    ),
+    SettingsGroup(
         "ad_marking", "Маркировка рекламы — F62",
         (
             SettingField("ad_marking_enabled", "Включена", "bool"),
@@ -631,6 +645,7 @@ SECRET_LABELS: dict[str, str] = {
     "proxy_http_password": "HTTP(S): пароль",
     "guardian_bot_token": "Guardian Bot Token",
     "engage_bot_token": "Engage Bot Token",
+    "shop_provider_token": "Токен платёжного провайдера",
     "telegraph_access_token": "Telegraph Access Token",
 }
 
@@ -670,6 +685,15 @@ SECRET_HINTS: dict[str, str] = {
     "proxy_http_password": (
         "Пароль HTTP(S)-прокси. Адрес и логин — в полях выше. Оставь пустым, "
         "если прокси без авторизации."
+    ),
+    "shop_provider_token": (
+        "Токен платёжного провайдера для ФИЗИЧЕСКИХ товаров магазина (F69). "
+        "Получить: @BotFather → /mybots → бот Engage → Payments → выбрать "
+        "провайдера. Для подписки (Stars) НЕ нужен — там провайдер не "
+        "участвует вовсе. Список провайдеров менялся, часть российских "
+        "отключалась из-за санкций: актуальность проверяйте при подключении. "
+        "Читает его Engage — после сохранения нужен `docker compose restart "
+        "engage`."
     ),
     "engage_bot_token": (
         "Токен ОТДЕЛЬНОГО бота вовлечения (викторины по постам, конкурсы, "

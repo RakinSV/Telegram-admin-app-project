@@ -1557,6 +1557,78 @@ class PaymentEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
+class Product(Base):
+    """Товар магазина в боте (F69).
+
+    ЦЕНА В МИНИМАЛЬНЫХ ЕДИНИЦАХ (копейках), целым числом. Bot Payments API
+    принимает именно так, и это же спасает от классической ошибки денег:
+    дробное число рублей рано или поздно даёт 0.1 + 0.2 = 0.30000000000000004,
+    и расхождение с эквайрингом ищут неделями.
+
+    ТОЛЬКО ФИЗИЧЕСКИЕ ТОВАРЫ И РЕАЛЬНЫЕ УСЛУГИ. Цифровое, потребляемое внутри
+    Telegram, продаётся ТОЛЬКО за Stars (F49) — обход ведёт к бану бота.
+    Флаг `is_physical` обязателен к подтверждению владельцем и существует
+    именно как напоминание об этой границе, а не как настройка вкуса.
+    """
+
+    __tablename__ = "products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # В копейках/центах. См. docstring.
+    price: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
+    # NULL — остаток не ограничен. Ноль — закончился.
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_physical: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Order(Base):
+    """Заказ из магазина (F69).
+
+    ОТДЕЛЬНАЯ СУЩНОСТЬ ОТ ПЛАТЕЖА, и это не дублирование. Платёж — факт
+    получения денег (журнал F49), заказ — обязательство перед человеком:
+    его ещё собрать, отправить и закрыть. Один умирает в момент оплаты,
+    второй с неё только начинается.
+
+    ЦЕНА КОПИРУЕТСЯ В ЗАКАЗ. Товар подорожает, а в заказе должна остаться
+    сумма, по которой человек платил, — иначе история заказов начнёт врать
+    задним числом.
+    """
+
+    __tablename__ = "orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    product_name: Mapped[str] = mapped_column(String(128))
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
+    # new | paid | shipped | canceled
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)
+    charge_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    shipping: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Продано больше, чем было на складе: двое оплатили последний товар
+    # одновременно. Отказать ПОСЛЕ оплаты нельзя, поэтому заказ принимается,
+    # но помечается — владелец решает, вернуть деньги или довезти.
+    is_oversold: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class AffiliateReward(Base):
     """Начисление партнёру за оплату приведённого им человека (F67).
 

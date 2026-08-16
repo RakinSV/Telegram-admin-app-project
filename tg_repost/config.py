@@ -694,6 +694,13 @@ class Settings(BaseSettings):
     paid_access_price_stars: int = Field(0, alias="PAID_ACCESS_PRICE_STARS")
     paid_access_title: str = Field("Закрытый канал", alias="PAID_ACCESS_TITLE")
 
+    # --- F69/F70: магазин и эквайринг ---
+    # ВЫКЛЮЧЕН по умолчанию: включённый магазин начинает принимать деньги
+    # живых людей, а с ними появляются обязательства доставки.
+    shop_enabled: bool = Field(False, alias="SHOP_ENABLED")
+    # Валюта каталога. Меняется вместе с провайдером, а не отдельно.
+    shop_currency: str = Field("RUB", alias="SHOP_CURRENCY")
+
     # --- F67: партнёрская комиссия ---
     # Процент от каждой оплаты тому, кто привёл человека. НОЛЬ = программа
     # выключена: комиссия по умолчанию означала бы, что владелец раздаёт
@@ -855,6 +862,9 @@ SECRET_FIELD_NAMES: tuple[str, ...] = (
     # Токен ОТДЕЛЬНОГО бота вовлечения (F42-F47, см. engage/config.py) —
     # как и guardian_bot_token, не атрибут Settings: читает его свой процесс.
     "engage_bot_token",
+    # F70: токен платёжного провайдера из @BotFather. Читает Engage — счета
+    # за физические товары выставляет он. Для подписки (Stars) не нужен.
+    "shop_provider_token",
     # Не вводится руками: выдаётся автоматически при первой публикации
     # статьи (`telegraph/client.py::get_or_create_token`) и сохраняется сюда.
     # Секрет, потому что даёт право править все опубликованные статьи.

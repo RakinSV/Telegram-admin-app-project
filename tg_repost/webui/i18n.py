@@ -1709,6 +1709,79 @@ STRINGS: dict[str, dict[str, str]] = {
         "Telegram's rules for digital goods.",
     },
 
+    # --- F69/F70: магазин ---
+    "nav.shop": {"ru": "Магазин", "en": "Shop"},
+    "shop.title": {"ru": "Магазин", "en": "Shop"},
+    "shop.intro": {
+        "ru": "Только физические товары и реальные услуги. Цифровое, что "
+        "потребляется внутри Telegram, продаётся ТОЛЬКО за Stars (подписка) — "
+        "обход этого правила ведёт к бану бота.",
+        "en": "Physical goods and real-world services only. Anything digital "
+        "consumed inside Telegram is sold ONLY for Stars (subscription) — "
+        "working around that rule gets the bot banned.",
+    },
+    "shop.disabled": {
+        "ru": "Магазин выключен: витрина не показывается, счета не "
+              "выставляются. Включается в настройках.",
+        "en": "The shop is off: the catalogue is hidden and no invoices are "
+              "issued. Enable it in settings.",
+    },
+    "shop.revenue": {"ru": "Выручка, {currency}", "en": "Revenue, {currency}"},
+    "shop.orders_count": {"ru": "Заказов", "en": "Orders"},
+    "shop.catalog": {"ru": "Каталог", "en": "Catalogue"},
+    "shop.name": {"ru": "Название", "en": "Name"},
+    "shop.price": {"ru": "Цена", "en": "Price"},
+    "shop.price_placeholder": {"ru": "цена, напр. 1499", "en": "price, e.g. 1499"},
+    "shop.stock": {"ru": "Остаток", "en": "Stock"},
+    "shop.stock_placeholder": {
+        "ru": "остаток (пусто — без ограничения)",
+        "en": "stock (empty — unlimited)",
+    },
+    "shop.description": {"ru": "Описание", "en": "Description"},
+    "shop.physical_only": {
+        "ru": "Цена вводится в рублях, хранится в копейках. Товар создаётся "
+        "СКРЫТЫМ: попасть в продажу в момент создания он не должен.",
+        "en": "The price is entered in whole units and stored in minor ones. "
+        "A product is created HIDDEN: it must not go on sale the moment it "
+        "is created.",
+    },
+    "shop.state": {"ru": "Состояние", "en": "State"},
+    "shop.on_sale": {"ru": "в продаже", "en": "on sale"},
+    "shop.hidden": {"ru": "скрыт", "en": "hidden"},
+    "shop.publish": {"ru": "В продажу", "en": "Put on sale"},
+    "shop.hide": {"ru": "Скрыть", "en": "Hide"},
+    "shop.confirm_delete": {
+        "ru": "Удалить товар? Заказы на него останутся — в них своя копия "
+              "названия и суммы.",
+        "en": "Delete the product? Orders for it remain — they keep their own "
+              "copy of the name and amount.",
+    },
+    "shop.no_products": {"ru": "Товаров пока нет.", "en": "No products yet."},
+    "shop.orders": {"ru": "Заказы", "en": "Orders"},
+    "shop.buyer": {"ru": "Покупатель", "en": "Buyer"},
+    "shop.product": {"ru": "Товар", "en": "Product"},
+    "shop.amount": {"ru": "Сумма", "en": "Amount"},
+    "shop.shipping": {"ru": "Доставка", "en": "Shipping"},
+    "shop.status_new": {"ru": "новый", "en": "new"},
+    "shop.status_paid": {"ru": "оплачен", "en": "paid"},
+    "shop.status_shipped": {"ru": "отправлен", "en": "shipped"},
+    "shop.status_canceled": {"ru": "отменён", "en": "canceled"},
+    "shop.mark_shipped": {"ru": "Отправлен", "en": "Mark shipped"},
+    "shop.oversold": {
+        "ru": "продано сверх остатка", "en": "sold beyond stock",
+    },
+    "shop.no_orders": {"ru": "Заказов пока нет.", "en": "No orders yet."},
+    "shop.error_price": {
+        "ru": "Цена должна быть числом больше нуля.",
+        "en": "The price must be a number greater than zero.",
+    },
+    "shop.error_no_stock": {
+        "ru": "Товар закончился — в продажу его вернуть нельзя, сначала "
+              "пополните остаток.",
+        "en": "The product is out of stock — restock it before putting it "
+              "back on sale.",
+    },
+
     # --- F67: партнёрская программа ---
     "nav.affiliate": {"ru": "Партнёры", "en": "Partners"},
     "affiliate.title": {"ru": "Партнёрская программа", "en": "Affiliate programme"},
@@ -2388,6 +2461,41 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.field.paid_access_title.label": {
         "ru": "Название для счёта", "en": "Title shown on the invoice",
+    },
+    "settings.group.shop.title": {"ru": "Магазин", "en": "Shop"},
+    "settings.group.shop.desc": {
+        "ru": "Продажа ФИЗИЧЕСКИХ товаров через Bot Payments API: провайдер "
+        "подключается в @BotFather, его токен вводится на этой же странице "
+        "как секрет. Цифровое, потребляемое внутри Telegram, сюда класть "
+        "нельзя — оно продаётся только за Stars, иначе бан бота. Остаток "
+        "списывается при оплате, а не при открытии счёта: иначе брошенные "
+        "корзины съедают склад.",
+        "en": "Selling PHYSICAL goods through the Bot Payments API: the "
+        "provider is connected in @BotFather and its token is entered on this "
+        "page as a secret. Anything digital consumed inside Telegram must not "
+        "go here — it is sold for Stars only, otherwise the bot is banned. "
+        "Stock is decremented on payment, not when the invoice is opened: "
+        "otherwise abandoned carts eat the warehouse.",
+    },
+    "settings.field.shop_enabled.label": {"ru": "Включён", "en": "Enabled"},
+    "settings.field.shop_currency.label": {
+        "ru": "Валюта каталога", "en": "Catalogue currency",
+    },
+    "secrets.field.shop_provider_token.label": {
+        "ru": "Токен платёжного провайдера", "en": "Payment provider token",
+    },
+    "secrets.field.shop_provider_token.hint": {
+        "ru": "Только для ФИЗИЧЕСКИХ товаров магазина. Получить: @BotFather → "
+        "/mybots → бот Engage → Payments → выбрать провайдера. Для подписки "
+        "(Stars) не нужен — там провайдер не участвует вовсе. Список "
+        "провайдеров менялся, часть российских отключалась из-за санкций: "
+        "актуальность проверяйте при подключении. Читает его Engage — после "
+        "сохранения нужен `docker compose restart engage`.",
+        "en": "For PHYSICAL shop goods only. Get it via @BotFather → /mybots "
+        "→ the Engage bot → Payments → pick a provider. Not needed for the "
+        "Stars subscription — no provider is involved there. The provider "
+        "list has changed over time: verify availability when connecting. "
+        "Engage reads it — restart it after saving.",
     },
     "settings.group.affiliate.title": {
         "ru": "Партнёрская программа", "en": "Affiliate programme",
