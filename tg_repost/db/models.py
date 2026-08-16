@@ -1603,6 +1603,15 @@ class Order(Base):
     """
 
     __tablename__ = "orders"
+    __table_args__ = (
+        # Один платёж — один заказ, и это ограничение стоит В БАЗЕ, а не
+        # только в коде. Ровно то же правило, что у платёжного журнала F49:
+        # между проверкой «такого заказа ещё нет» и вставкой помещается
+        # вторая доставка того же апдейта, и тогда покупатель получает две
+        # посылки за одни деньги. Аудит нашёл эту нехватку сравнением с
+        # `payment_events`, где ограничение было с самого начала.
+        UniqueConstraint("charge_id", name="uq_order_charge"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     tenant_id: Mapped[int] = mapped_column(

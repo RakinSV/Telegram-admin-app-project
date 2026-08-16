@@ -28,6 +28,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
+
 from tg_repost.db.models import Order, Product
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
@@ -180,14 +182,29 @@ def set_active(product_id: int, active: bool) -> bool:
 
 
 def delete_product(product_id: int) -> bool:
-    """Удалить товар. Заказы на него остаются — в них своя копия названия.
+    """Удалить товар. `False` — нельзя, потому что на него есть заказы.
 
-    Именно поэтому название и сумма копируются в заказ: удаление товара не
-    должно стирать историю покупок человека.
+    ТОВАР С ЗАКАЗАМИ НЕ УДАЛЯЕТСЯ, А СКРЫВАЕТСЯ. Раньше удалялся: на SQLite
+    это проходило молча, потому что `PRAGMA foreign_keys` по умолчанию 0, и
+    в заказах оставалась ссылка в никуда. На Postgres, куда проект собирается
+    переезжать, тот же вызов упал бы нарушением внешнего ключа — то есть
+    ошибка ждала переезда, а не проявлялась сейчас. Найдено аудитом.
+
+    Убрать товар из продажи можно всегда: `set_active(product_id, False)`.
     """
     with session_scope() as session:
         row = session.get(Product, product_id)
         if row is None:
+            return False
+        has_orders = (
+            session.query(Order.id).filter(Order.product_id == product_id).first()
+        )
+        if has_orders is not None:
+            row.is_active = False
+            logger.info(
+                "F69: товар #%d не удалён (есть заказы) — снят с продажи",
+                product_id,
+            )
             return False
         session.delete(row)
         return True
@@ -240,6 +257,30 @@ def record_paid_order(
     `None` — заказ с таким `charge_id` уже есть: повторная доставка апдейта
     не должна порождать вторую посылку.
     """
+    try:
+        return _create_paid_order(
+            user_id=user_id, product_id=product_id, amount=amount,
+            currency=currency, charge_id=charge_id, shipping=shipping,
+            quantity=quantity,
+        )
+    except IntegrityError:
+        # Вторая линия защиты. Проверки в коде мало: между ней и вставкой
+        # помещается вторая доставка того же апдейта, и тогда покупатель
+        # получает две посылки за одни деньги.
+        logger.info("F69: повторный апдейт об оплате заказа %s", charge_id)
+        return None
+
+
+def _create_paid_order(
+    *,
+    user_id: int,
+    product_id: int,
+    amount: int,
+    currency: str,
+    charge_id: str,
+    shipping: str | None,
+    quantity: int,
+) -> OrderView | None:
     with session_scope() as session:
         existing = (
             session.query(Order).filter(Order.charge_id == charge_id).first()
@@ -297,8 +338,15 @@ def list_orders(status: str | None = None, user_id: int | None = None) -> list[O
         return [_order_view(row) for row in rows]
 
 
+# Состояния, из которых заказ уже не возвращается. Отправленный нельзя
+# «разотправить», отменённый — оживить: за отменой обычно стоит возврат
+# денег, и воскресший заказ означал бы, что мы обещаем товар за деньги,
+# которые вернули. Нужен новый заказ — он и заводится заново.
+_TERMINAL = (STATUS_SHIPPED, STATUS_CANCELED)
+
+
 def set_order_status(order_id: int, status: str) -> bool:
-    """Перевести заказ в новый статус.
+    """Перевести заказ в новый статус. `False` — переход недопустим.
 
     Оплаченный заказ нельзя вернуть в «новый»: деньги получены, и статус,
     который это отрицает, врёт и человеку, и отчётности.
@@ -309,7 +357,13 @@ def set_order_status(order_id: int, status: str) -> bool:
         row = session.get(Order, order_id)
         if row is None:
             return False
-        if row.status == STATUS_SHIPPED and status == STATUS_PAID:
+        if row.status in _TERMINAL and row.status != status:
+            # Единственное исключение — отправить уже оплаченный заказ; оно
+            # разрешено выше, потому что `paid` не терминальный.
+            logger.info(
+                "F69: заказ #%d в состоянии «%s» — переход в «%s» отклонён",
+                order_id, row.status, status,
+            )
             return False
         row.status = status
         return True

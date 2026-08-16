@@ -168,6 +168,50 @@ def test_repeated_payment_update_creates_one_order():
     assert shop.get_product(product_id).stock == 2
 
 
+def test_duplicate_order_is_stopped_by_the_database():
+    """ВТОРАЯ ЛИНИЯ ЗАЩИТЫ, найдена аудитом 2026-08-16.
+
+    Проверки в коде мало: между ней и вставкой помещается вторая доставка
+    того же апдейта. В платёжном журнале F49 ограничение стояло с самого
+    начала, а в заказах его не было — покупатель мог получить две посылки
+    за одни деньги. Здесь проверяется именно ограничение БАЗЫ: строка
+    добавляется в обход репозитория.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from tg_repost.db.models import Order
+
+    product_id = _product()
+    shop.record_paid_order(
+        user_id=ALICE, product_id=product_id, amount=100000,
+        currency="RUB", charge_id="dup",
+    )
+
+    with pytest.raises(IntegrityError):
+        with session_scope() as session:
+            session.add(Order(
+                user_id=BOB, product_id=product_id, product_name="Кружка",
+                amount=100000, currency="RUB", status=shop.STATUS_PAID,
+                charge_id="dup",
+            ))
+
+
+def test_orders_without_payment_do_not_collide():
+    """Заказов без платежа может быть много: уникальность на NULL в SQL не
+    срабатывает, и здесь это ровно то, что нужно."""
+    from tg_repost.db.models import Order
+
+    product_id = _product()
+    with session_scope() as session:
+        for user in (ALICE, BOB):
+            session.add(Order(
+                user_id=user, product_id=product_id, product_name="Кружка",
+                amount=100000, currency="RUB", status=shop.STATUS_NEW,
+            ))
+
+    assert len(shop.list_orders()) == 2
+
+
 def test_last_item_paid_twice_is_accepted_and_flagged():
     """ГЛАВНАЯ ГРАНИЦА СКЛАДА.
 
@@ -205,19 +249,34 @@ def test_order_keeps_price_when_product_changes():
     assert shop.list_orders()[0].amount == 100000
 
 
-def test_order_survives_product_deletion():
-    """История покупок человека не должна исчезать вместе с товаром."""
+def test_product_with_orders_is_hidden_instead_of_deleted():
+    """НАЙДЕНО АУДИТОМ 2026-08-16.
+
+    Раньше товар удалялся, и в заказах оставалась ссылка в никуда. На SQLite
+    это проходило молча (`PRAGMA foreign_keys` = 0), а на Postgres, куда
+    проект собирается переезжать, тот же вызов упал бы нарушением внешнего
+    ключа — ошибка ждала переезда.
+    """
     product_id = _product()
     shop.record_paid_order(
         user_id=ALICE, product_id=product_id, amount=100000,
         currency="RUB", charge_id="c1",
     )
 
-    shop.delete_product(product_id)
+    assert shop.delete_product(product_id) is False
 
-    orders = shop.list_orders()
-    assert len(orders) == 1
-    assert orders[0].product_name == "Кружка"
+    view = shop.get_product(product_id)
+    assert view is not None, "товар с заказами не должен исчезать"
+    assert view.is_active is False, "но из продажи он снимается"
+    assert shop.list_orders()[0].product_name == "Кружка"
+
+
+def test_product_without_orders_is_deleted():
+    """Ошибочно заведённый товар удалить всё же можно."""
+    product_id = _product()
+
+    assert shop.delete_product(product_id) is True
+    assert shop.get_product(product_id) is None
 
 
 # --- статусы и выручка ---
@@ -233,6 +292,36 @@ def test_shipped_order_cannot_go_back_to_paid():
     shop.set_order_status(order.id, shop.STATUS_SHIPPED)
 
     assert shop.set_order_status(order.id, shop.STATUS_PAID) is False
+
+
+def test_canceled_order_cannot_be_revived():
+    """НАЙДЕНО АУДИТОМ 2026-08-16.
+
+    За отменой обычно стоит возврат денег. Воскресший заказ означал бы, что
+    мы обещаем товар за деньги, которые вернули; нужен новый заказ.
+    """
+    product_id = _product()
+    order = shop.record_paid_order(
+        user_id=ALICE, product_id=product_id, amount=100000,
+        currency="RUB", charge_id="c1",
+    )
+    shop.set_order_status(order.id, shop.STATUS_CANCELED)
+
+    assert shop.set_order_status(order.id, shop.STATUS_PAID) is False
+    assert shop.set_order_status(order.id, shop.STATUS_SHIPPED) is False
+    assert shop.list_orders()[0].status == shop.STATUS_CANCELED
+
+
+def test_repeating_the_same_status_is_harmless():
+    """Двойной клик по «Отправлен» не должен выглядеть ошибкой."""
+    product_id = _product()
+    order = shop.record_paid_order(
+        user_id=ALICE, product_id=product_id, amount=100000,
+        currency="RUB", charge_id="c1",
+    )
+    shop.set_order_status(order.id, shop.STATUS_SHIPPED)
+
+    assert shop.set_order_status(order.id, shop.STATUS_SHIPPED) is True
 
 
 def test_unknown_status_is_refused():

@@ -17,7 +17,14 @@ import pytest
 
 # Воронок здесь нет намеренно: их статусы показываются отдельными подписями
 # («идут», «дошли», «сорвались»), а не ключом, собранным из значения.
-from tg_repost import ad_requests_repo, broadcasts_repo, support_repo
+from tg_repost import (
+    ad_requests_repo,
+    affiliate_repo,
+    broadcasts_repo,
+    shop_repo,
+    subscriptions_repo,
+    support_repo,
+)
 from tg_repost.rss import presets
 from tg_repost.webui import access
 from tg_repost.webui.i18n import STRINGS
@@ -43,6 +50,27 @@ FAMILIES = [
     ("support.status_", (support_repo.STATUS_OPEN, support_repo.STATUS_CLOSED)),
     ("fraud.code_", ("sawtooth", "growth_without_reach")),
     ("common.source.", ("db", "env", "unset")),
+    # Добавлены аудитом 2026-08-16: три семейства появились вместе с блоком
+    # денег и в сторож не попали — то есть сторож, написанный ровно против
+    # этого класса пропусков, сам от него не был защищён. Проверка полноты
+    # списка теперь ниже, в `test_every_dynamic_family_is_guarded`.
+    ("subscriptions.status_", (
+        subscriptions_repo.STATUS_ACTIVE,
+        subscriptions_repo.STATUS_EXPIRED,
+        subscriptions_repo.STATUS_CANCELED,
+        subscriptions_repo.STATUS_REFUNDED,
+    )),
+    ("affiliate.kind_", (
+        affiliate_repo.KIND_ACCRUAL,
+        affiliate_repo.KIND_REVERSAL,
+        affiliate_repo.KIND_PAYOUT,
+    )),
+    ("shop.status_", (
+        shop_repo.STATUS_NEW,
+        shop_repo.STATUS_PAID,
+        shop_repo.STATUS_SHIPPED,
+        shop_repo.STATUS_CANCELED,
+    )),
 ]
 
 
@@ -66,6 +94,31 @@ def test_translations_exist_in_every_language(prefix, values):
     ]
 
     assert not incomplete, f"неполные переводы: {incomplete}"
+
+
+def test_every_dynamic_family_is_guarded():
+    """СТОРОЖ НАД СТОРОЖЕМ.
+
+    Список семейств выше заполняется руками, а значит однажды отстанет от
+    шаблонов — ровно это и случилось: `shop.status_`, `subscriptions.status_`
+    и `affiliate.kind_` появились вместе с блоком денег и в список не попали.
+    Здесь шаблоны сканируются на конструкцию `t('префикс' ~ значение)`, и
+    каждый найденный префикс обязан быть в `FAMILIES`.
+    """
+    import pathlib
+    import re
+
+    pattern = re.compile(r"""t\(\s*['"]([a-zA-Z0-9_.]+)['"]\s*(?:\+|~)""")
+    found: set[str] = set()
+    for path in pathlib.Path("tg_repost/webui/templates").rglob("*.html"):
+        found.update(pattern.findall(path.read_text(encoding="utf-8")))
+
+    guarded = {prefix for prefix, _ in FAMILIES}
+
+    assert found <= guarded, (
+        "семейства ключей есть в шаблонах, но не под сторожем: "
+        f"{sorted(found - guarded)}"
+    )
 
 
 def test_no_stale_keys_in_status_families():
