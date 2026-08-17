@@ -106,6 +106,38 @@ def _product_view(row: Product) -> ProductView:
     )
 
 
+def _take_from_stock(session, product: Product | None, quantity: int) -> bool:
+    """Списать со склада ОДНИМ запросом. `False` — не хватило.
+
+    ПОЧЕМУ НЕ `product.stock -= quantity`. Так было, и это теряло товар.
+    Проверено опытом: две перекрывающиеся сессии читают остаток 5, каждая
+    пишет «прочитанное минус один», и после двух покупок на складе 4 вместо
+    3 — один товар продан бесплатно. Хуже того, флаг «продано сверх остатка»
+    при этом не срабатывает: он сравнивает с тем же устаревшим значением.
+
+    Здесь чтения нет вовсе: условие `stock >= quantity` проверяет сама база в
+    момент записи, и вторая покупка последнего товара получает `False`
+    вместо молчаливого успеха.
+
+    `stock is None` — остаток не ограничен, списывать нечего.
+    """
+    if product is None or product.stock is None:
+        return True
+
+    from sqlalchemy import update
+
+    result = session.execute(
+        update(Product)
+        .where(Product.id == product.id, Product.stock >= quantity)
+        .values(stock=Product.stock - quantity)
+    )
+    # Значение в памяти после прямого UPDATE устаревает — та же ловушка, что
+    # уже ловили в очереди задач: без обновления вызывающий увидит старый
+    # остаток и решит по нему.
+    session.refresh(product)
+    return result.rowcount > 0
+
+
 def _order_view(row: Order) -> OrderView:
     return OrderView(
         id=row.id, user_id=row.user_id, product_id=row.product_id,
@@ -301,18 +333,15 @@ def _create_paid_order(
         product = session.get(Product, product_id)
         name = product.name if product is not None else "Товар удалён"
 
-        oversold = False
-        if product is not None and product.stock is not None:
-            if product.stock >= quantity:
-                product.stock -= quantity
-            else:
-                # Отказать после оплаты нельзя — принимаем и помечаем.
+        oversold = not _take_from_stock(session, product, quantity)
+        if oversold:
+            # Отказать после оплаты нельзя — принимаем и помечаем.
+            if product is not None:
                 product.stock = 0
-                oversold = True
-                logger.warning(
-                    "F69: заказ %s принят сверх остатка товара #%s",
-                    charge_id, product_id,
-                )
+            logger.warning(
+                "F69: заказ %s принят сверх остатка товара #%s",
+                charge_id, product_id,
+            )
 
         row = Order(
             user_id=user_id,
@@ -398,16 +427,14 @@ def mark_crypto_order_paid(order_id: int) -> OrderView | None:
             return None
 
         product = session.get(Product, row.product_id)
-        if product is not None and product.stock is not None:
-            if product.stock >= row.quantity:
-                product.stock -= row.quantity
-            else:
+        if not _take_from_stock(session, product, row.quantity):
+            if product is not None:
                 product.stock = 0
-                row.is_oversold = True
-                logger.warning(
-                    "F70: заказ #%d оплачен сверх остатка товара #%s",
-                    order_id, row.product_id,
-                )
+            row.is_oversold = True
+            logger.warning(
+                "F70: заказ #%d оплачен сверх остатка товара #%s",
+                order_id, row.product_id,
+            )
 
         row.status = STATUS_PAID
         row.paid_at = _utcnow()

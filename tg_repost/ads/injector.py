@@ -89,9 +89,21 @@ async def inject_native_ad(rewriter: RewriterClient) -> None:
                 status=PostStatus.REWRITTEN,
             )
         )
+        # Счётчик наращивается ОДНИМ запросом, а не чтением с прибавлением.
+        # Разница не теоретическая: бриф заявки (F66) живёт с `max_uses=1`, и
+        # потерянное обновление означает второе размещение той же рекламы —
+        # то есть бесплатную рекламу за наш счёт. Ту же ошибку на остатках
+        # товара удалось воспроизвести двумя перекрывающимися сессиями.
+        from sqlalchemy import update
+
+        session.execute(
+            update(AdBrief)
+            .where(AdBrief.id == brief_id)
+            .values(times_used=AdBrief.times_used + 1)
+        )
         brief_row = session.get(AdBrief, brief_id)
         if brief_row is not None:
-            brief_row.times_used += 1
+            session.refresh(brief_row)
             if brief_row.max_uses is not None and brief_row.times_used >= brief_row.max_uses:
                 brief_row.is_active = False
 
