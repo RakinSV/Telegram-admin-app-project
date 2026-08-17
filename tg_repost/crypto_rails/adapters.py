@@ -1,4 +1,4 @@
-"""Три способа приёма крипты за одним интерфейсом (F70).
+﻿"""Три способа приёма крипты за одним интерфейсом (F70).
 
 ⚠️ НЕ ПРОВЕРЕНО НА ЖИВЫХ ДЕНЬГАХ. Ни один из трёх адаптеров не вызывался
 против настоящего сервиса: для этого нужны аккаунт у провайдера, его токен и
@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Protocol
 
 import httpx
@@ -53,7 +54,9 @@ class Rail(Protocol):
         self, *, amount: str, asset: str, order_id: int, description: str,
     ) -> CryptoInvoice: ...
 
-    async def check_status(self, external_id: str) -> str: ...
+    async def check_status(
+        self, external_id: str, *, expected_amount: str | None = None,
+    ) -> str: ...
 
 
 class CryptoBotRail:
@@ -103,7 +106,12 @@ class CryptoBotRail:
             external_id=str(invoice_id), pay_url=pay_url, amount=amount, asset=asset,
         )
 
-    async def check_status(self, external_id: str) -> str:
+    async def check_status(
+        self, external_id: str, *, expected_amount: str | None = None,
+    ) -> str:
+        # Сумму сверять не надо: счёт выставлен посредником на конкретную
+        # сумму, и «оплачен» у него означает «оплачен полностью».
+        del expected_amount
         result = await self._call("getInvoices", {"invoice_ids": external_id})
         items = result.get("items") or []
         if not items:
@@ -154,7 +162,11 @@ class WalletPayRail:
             external_id=str(external_id), pay_url=pay_url, amount=amount, asset=asset,
         )
 
-    async def check_status(self, external_id: str) -> str:
+    async def check_status(
+        self, external_id: str, *, expected_amount: str | None = None,
+    ) -> str:
+        # Как и у CryptoBot: сумму держит посредник.
+        del expected_amount
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.get(
                 f"{WALLETPAY_API}/order/preview",
@@ -209,7 +221,7 @@ class TonDirectRail:
                 "Прямой перевод принимает только TON: пересчитывать некому, "
                 "а курс со стороннего сервиса означал бы тихую недоплату"
             )
-        nano = int(round(float(amount) * self.NANO))
+        nano = self._to_nano(amount)
         memo = self.memo_for(order_id)
         return CryptoInvoice(
             external_id=memo,
@@ -218,11 +230,24 @@ class TonDirectRail:
             asset="TON",
         )
 
-    async def check_status(self, external_id: str) -> str:
-        """Ищем среди входящих перевод с нашим комментарием.
+    async def check_status(
+        self, external_id: str, *, expected_amount: str | None = None,
+    ) -> str:
+        """Ищем среди входящих перевод с нашим комментарием И НУЖНОЙ СУММОЙ.
 
-        Возвращает `pending`, пока перевода нет: истечь такой «счёт» не
-        может — деньги могут прийти и через сутки, а объявить его
+        СВЕРКА СУММЫ ОБЯЗАТЕЛЬНА, и её отсутствие было настоящей дырой:
+        комментарий известен покупателю, и без проверки суммы он получал
+        товар, отправив один нанотон вместо пятнадцати TON. Найдено сквозным
+        аудитом — причём и этот docstring, и план обещали сверку, которой в
+        коде не было.
+
+        Недоплата НЕ считается оплатой: человек может отправить меньше
+        случайно или намеренно, и засчитать такой перевод значит отдать товар
+        дешевле, чем он стоит. Переплата принимается — возвращать сдачу
+        система не умеет и делать вид, что платежа не было, нельзя.
+
+        Возвращает `pending`, пока подходящего перевода нет: истечь такой
+        «счёт» не может — деньги могут прийти и через сутки, а объявить его
         просроченным значило бы потерять уже отправленный платёж.
         """
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -236,12 +261,45 @@ class TonDirectRail:
         if not body.get("ok"):
             raise RailError("TON-индексатор ответил ошибкой")
 
+        need_nano = self._to_nano(expected_amount) if expected_amount else 0
+
         for tx in body.get("result") or []:
             incoming = tx.get("in_msg") or {}
             if (incoming.get("message") or "").strip() != external_id:
                 continue
+            try:
+                got_nano = int(incoming.get("value") or 0)
+            except (TypeError, ValueError):
+                # Индексатор отдал сумму, которую нельзя прочитать. Это не
+                # «оплачено» — лучше подождать следующего опроса, чем отдать
+                # товар по невнятным данным.
+                logger.warning(
+                    "F70: непонятная сумма в переводе по %s: %r",
+                    external_id, incoming.get("value"),
+                )
+                continue
+            if got_nano < need_nano:
+                logger.info(
+                    "F70: по %s пришло %d нанотон вместо %d — недоплата",
+                    external_id, got_nano, need_nano,
+                )
+                continue
             return STATUS_PAID
         return STATUS_PENDING
+
+    @classmethod
+    def _to_nano(cls, amount: str) -> int:
+        """Строку суммы в нанотоны — через `Decimal`, а не `float`.
+
+        Float на девяти знаках после запятой начинает врать: проверено,
+        `123456789.123456789` превращается в `...784` вместо `...789`. Разница
+        ничтожна по деньгам, но сравнение сумм не должно зависеть от того,
+        повезло ли с порядком величины.
+        """
+        try:
+            return int((Decimal(amount) * cls.NANO).to_integral_value())
+        except (ArithmeticError, ValueError) as exc:
+            raise RailError(f"Не понял сумму перевода: {amount!r}") from exc
 
     def received_enough(self, transaction: dict, expected_ton: str) -> bool:
         """Хватает ли суммы в найденной транзакции.

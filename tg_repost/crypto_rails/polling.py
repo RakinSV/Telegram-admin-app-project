@@ -72,7 +72,13 @@ async def handle_check(view) -> str | None:  # noqa: ANN001 — task_queue.TaskV
         return None
 
     rail = crypto_rails_repo.build(order.crypto_rail_id)
-    status = await rail.check_status(order.crypto_invoice_id)
+    # ОЖИДАЕМАЯ СУММА ПЕРЕДАЁТСЯ ОБЯЗАТЕЛЬНО. Прямому переводу без неё
+    # сверять нечего: комментарий известен покупателю, и один нанотон с
+    # верным комментарием засчитывался бы как полная оплата. Посредники
+    # параметр игнорируют — сумму держат они сами.
+    status = await rail.check_status(
+        order.crypto_invoice_id, expected_amount=order.crypto_amount,
+    )
 
     if status == STATUS_PAID:
         paid = shop_repo.mark_crypto_order_paid(order_id)
