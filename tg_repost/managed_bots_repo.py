@@ -175,13 +175,24 @@ async def save(
                     "означают двойные ответы человеку"
                 )
 
+        # Шифруем ОДИН раз и до создания строки: у нового бота токен обязателен
+        # (проверено выше), поэтому строка сразу заводится с настоящим
+        # значением. Промежуточная пустая заглушка была бы лишним состоянием в
+        # базе — и поводом для сканера секретов считать её паролем в коде.
+        encrypted = _encrypt(clean_token) if clean_token else None
+
         if row is None:
-            row = ManagedBot(name=clean_name, token_encrypted="", token_hint="")
+            if encrypted is None:  # недостижимо: см. проверку выше
+                raise InvalidBot("Для нового бота нужен токен")
+            row = ManagedBot(
+                name=clean_name,
+                token_encrypted=encrypted[0], token_hint=encrypted[1],
+            )
             session.add(row)
 
         row.name = clean_name
-        if clean_token:
-            row.token_encrypted, row.token_hint = _encrypt(clean_token)
+        if encrypted is not None:
+            row.token_encrypted, row.token_hint = encrypted
             row.username = username
             # Новый токен — прежняя ошибка больше не про него.
             row.last_error = None
