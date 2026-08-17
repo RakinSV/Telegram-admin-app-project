@@ -359,3 +359,122 @@ button.small { padding: 4px 10px; font-size: 12px; }
   .auth-page input { width: 100%; font-size: 16px; min-height: 40px; }
   .auth-page button { width: 100%; min-height: 44px; }
 }
+
+/* --- F75: конструктор сценариев --------------------------------------- */
+
+.flow-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.flow-head h1 { margin-bottom: 2px; }
+.flow-actions { display: flex; gap: 8px; align-items: center; }
+.flow-actions form { display: inline; }
+
+.flow-status { min-height: 18px; margin: 6px 0; font-size: 12px; }
+.flow-status.warn { color: var(--warn); }
+.flow-problems { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
+
+/* Три колонки: откуда брать узлы, где их складывать, чем настраивать. Тот же
+   порядок, что у чужих конструкторов, — не из подражания, а потому что он
+   совпадает с порядком действий владельца. */
+.flow-editor {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 280px;
+  gap: 12px;
+  align-items: start;
+}
+
+.flow-palette-box, .flow-inspector {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  position: sticky;
+  top: 10px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.flow-palette-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 12px 0 4px;
+}
+.flow-palette-title:first-child { margin-top: 0; }
+.flow-palette-item {
+  display: block; width: 100%; text-align: left; margin-bottom: 4px;
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 6px 8px; font-size: 12px; cursor: pointer;
+  transition: border-color 140ms var(--ease-out), background-color 140ms var(--ease-out);
+}
+.flow-palette-item:hover { border-color: var(--accent); }
+.flow-palette-item:active { transform: scale(0.98); }
+
+.flow-canvas-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.flow-canvas { position: relative; min-height: 420px; min-width: 520px; }
+.flow-edges { position: absolute; inset: 0; width: 100%; pointer-events: none; }
+.flow-edge { fill: none; stroke: var(--border); stroke-width: 2; }
+/* Ветки на верный и неверный ответ различаются цветом: в графе из десяти
+   узлов подписи читать некогда, а ошибка в ветвлении дороже всех. */
+.flow-edge-correct, .flow-edge-true { stroke: var(--ok); }
+.flow-edge-wrong, .flow-edge-false { stroke: var(--err); }
+.flow-edge-timeout { stroke: var(--warn); stroke-dasharray: 4 4; }
+.flow-edge-label { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+
+.flow-node {
+  position: absolute; width: 190px; min-height: 62px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px; padding: 8px 26px 8px 10px;
+  cursor: grab; touch-action: none; user-select: none;
+  transition: border-color 140ms var(--ease-out);
+}
+.flow-node.is-selected { border-color: var(--accent); }
+.flow-node.is-connecting { border-color: var(--warn); }
+.flow-node-show { border-left-color: var(--accent); }
+.flow-node-ask { border-left-color: var(--ok); }
+.flow-node-wait { border-left-color: var(--warn); }
+.flow-node-decide { border-left-color: #a97ce0; }
+.flow-node-do { border-left-color: var(--muted); }
+.flow-node-kind { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.flow-node-text { font-size: 12px; margin-top: 4px; word-break: break-word; }
+.flow-node-link {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  background: transparent; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 50%; cursor: pointer;
+}
+.flow-node-link:hover { border-color: var(--accent); color: var(--accent); }
+
+.flow-field { display: block; margin-bottom: 8px; font-size: 12px; }
+.flow-field span { display: block; color: var(--muted); margin-bottom: 2px; }
+.flow-field input, .flow-field textarea, .flow-field select { width: 100%; }
+.flow-edge-row { display: flex; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+.flow-edge-value { width: 80px; }
+.flow-delete-node { margin-top: 12px; width: 100%; }
+
+@media (max-width: 900px) {
+  /* На телефоне три колонки не помещаются: палитра ложится полосой сверху,
+     настройки — снизу, холст между ними прокручивается пальцем. */
+  .flow-editor { grid-template-columns: 1fr; }
+  .flow-palette-box, .flow-inspector { position: static; max-height: none; }
+  .flow-palette { display: flex; flex-wrap: wrap; gap: 4px; }
+  .flow-palette-title { width: 100%; margin: 6px 0 2px; }
+  .flow-palette-item { width: auto; margin: 0; }
+  .flow-actions button { min-height: 40px; }
+}
+
+/* Выбор условия для новой связи. Занимает место настроек узла: одновременно
+   они не нужны, а внимание должно быть на одном решении. */
+.flow-chooser p { margin: 0 0 8px; font-size: 12px; }
+.flow-chooser-item {
+  display: block; width: 100%; text-align: left; margin-bottom: 4px;
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 8px; font-size: 12px; cursor: pointer;
+  transition: border-color 140ms var(--ease-out);
+}
+.flow-chooser-item:hover { border-color: var(--accent); }
+.flow-chooser-item:active { transform: scale(0.98); }
+
+.flow-palette-box summary {
+  cursor: pointer; font-size: 12px; color: var(--muted);
+  /* На широком экране палитра всегда открыта, и подпись «Добавить узел»
+     превращается в шум над списком, который и так виден. */
+}
+@media (min-width: 901px) { .flow-palette-box summary { display: none; } }

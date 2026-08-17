@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('flows.title', bot=bot.name) }}</h1>
+<p class="muted">{{ t('flows.intro') }}</p>
+<p><a href="/bots">← {{ t('flows.back_to_bots') }}</a></p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+{% if not bot.is_active %}
+<p class="badge warn">{{ t('flows.bot_is_off') }}</p>
+{% endif %}
+
+<table>
+  <tr>
+    <th>{{ t('flows.name') }}</th>
+    <th>{{ t('flows.trigger') }}</th>
+    <th>{{ t('flows.published') }}</th>
+    <th>{{ t('flows.people') }}</th>
+    <th></th>
+  </tr>
+  {% for row in flows %}
+  <tr>
+    <td><a href="/flows/{{ row.view.id }}">{{ row.view.name }}</a></td>
+    <td>
+      {{ t('flows.trigger_' ~ row.view.trigger) }}
+      {% if row.view.trigger_value %}
+      <div class="muted">{{ row.view.trigger_value }}</div>
+      {% endif %}
+    </td>
+    <td>
+      {% if row.view.is_published %}
+      <span class="badge">{{ t('flows.version_n', n=row.view.published_version) }}</span>
+      {% else %}
+      <span class="muted">{{ t('flows.draft_only') }}</span>
+      {% endif %}
+    </td>
+    <td>
+      {{ t('flows.running_n', n=row.runs.running) }}
+      <div class="muted">
+        {{ t('flows.done_n', n=row.runs.done) }} ·
+        {{ t('flows.stopped_n', n=row.runs.stopped) }}
+      </div>
+    </td>
+    <td>
+      <form method="post" action="/flows/{{ row.view.id }}/delete"
+            onsubmit="return confirm('{{ t('flows.confirm_delete') }}');">
+        <button type="submit" class="secondary">{{ t('flows.delete') }}</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">{{ t('flows.empty') }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>{{ t('flows.create') }}</h2>
+<form method="post" action="/bots/{{ bot.id }}/flows/create">
+  <label>{{ t('flows.name') }}
+    <input type="text" name="name" required maxlength="128">
+  </label>
+  <label>{{ t('flows.trigger') }}
+    <select name="trigger">
+      {% for trigger in triggers %}
+      <option value="{{ trigger }}">{{ t('flows.trigger_' ~ trigger) }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>{{ t('flows.launch_value') }}
+    <input type="text" name="trigger_value" maxlength="64">
+    <span class="hint">{{ t('flows.launch_value_hint') }}</span>
+  </label>
+  <button type="submit">{{ t('flows.create_button') }}</button>
+</form>
+{% endblock %}

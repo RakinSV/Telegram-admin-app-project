@@ -57,6 +57,9 @@ NAV: tuple[NavGroup, ...] = (
         NavItem("/segments", "nav.segments"),
         NavItem("/broadcasts", "nav.broadcasts", prefix=True),
         NavItem("/funnels", "nav.funnels", prefix=True),
+        # Конструктор рядом с воронками намеренно: он их заменяет, и владелец
+        # должен видеть оба пункта, пока старые воронки ещё работают.
+        NavItem("/bots", "nav.bots", prefix=True),
         NavItem("/invites", "nav.invites"),
         NavItem("/contests", "nav.contests"),
         NavItem("/support", "nav.support", prefix=True),

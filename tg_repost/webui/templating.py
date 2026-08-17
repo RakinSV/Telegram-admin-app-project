@@ -23,6 +23,7 @@ from tg_repost import languages
 from tg_repost.webui import access, flash, i18n, nav
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 @pass_context
@@ -44,6 +45,23 @@ def _can_open(context: dict, href: str) -> bool:
     return access.can(role, access.required_role(href))
 
 
+def _asset_version() -> str:
+    """Версия статики: номер выпуска плюс время правки самих файлов.
+
+    Номера выпуска мало: между выпусками статика правится, а во время работы
+    над системой — по нескольку раз в день. Время последней правки файлов
+    меняется тогда же, когда меняется содержимое, и не требует помнить о
+    ручном увеличении номера.
+    """
+    from tg_repost import __version__
+
+    newest = 0.0
+    for path in _STATIC_DIR.glob("*"):
+        if path.is_file():
+            newest = max(newest, path.stat().st_mtime)
+    return f"{__version__}-{int(newest)}"
+
+
 def build_templates() -> Jinja2Templates:
     """Шаблоны с полным набором глобальных значений."""
     templates = Jinja2Templates(directory=str(_TEMPLATE_DIR))
@@ -58,6 +76,12 @@ def build_templates() -> Jinja2Templates:
     templates.env.globals["can_open"] = _can_open
     # Одноразовое сообщение после переадресации — см. `webui/flash.py`.
     templates.env.globals["pop_flash"] = flash.pop_flash
+    # Метка версии для ссылок на статику. Браузер держит стиль и скрипты в
+    # кэше и после обновления системы может крутить ПРОШЛЫЙ файл: стиль
+    # разъезжается, а скрипт холста начинает спорить с новыми данными от
+    # сервера. Поймано на живой странице — палитра узлов не открывалась,
+    # потому что браузер отдал предыдущую версию скрипта.
+    templates.env.globals["asset_version"] = _asset_version()
     # Состав меню — данными, а не разметкой; см. `webui/nav.py`.
     # ФУНКЦИЯ, А НЕ ГОТОВЫЙ КОРТЕЖ: иначе состав меню замораживается в момент
     # сборки шаблонов, и защиту «группа без доступных пунктов не рисует

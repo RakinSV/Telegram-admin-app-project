@@ -929,7 +929,7 @@ def _apply_secret_overrides(settings: Settings) -> None:
     if not settings.webui_master_key:
         return
     try:
-        from tg_repost.crypto import InvalidToken, decrypt
+        from tg_repost.crypto import decrypt
         from tg_repost.db.models import Secret
         from tg_repost.db.session import session_scope
 
@@ -944,9 +944,16 @@ def _apply_secret_overrides(settings: Settings) -> None:
             continue
         try:
             setattr(settings, key, decrypt(encrypted_value, settings.webui_master_key))
-        except InvalidToken:
+        except Exception as exc:  # noqa: BLE001
+            # ШИРОКО намеренно. Оверлей выполняется внутри `get_settings()`, а
+            # его читает практически каждый модуль на импорте: исключение
+            # отсюда не «портит один секрет», а не даёт подняться всей системе.
+            # Повреждённая на уровне байт запись (обрезанная строка, чужие
+            # символы) даёт не `InvalidToken`, а `binascii.Error` или
+            # `UnicodeEncodeError` — их и ловим.
             logger.error(
-                "Секрет '%s' не расшифрован — неверный WEBUI_MASTER_KEY?", key
+                "Секрет '%s' не расшифрован (%s) — неверный WEBUI_MASTER_KEY "
+                "или повреждённая запись; беру значение из .env", key, exc,
             )
 
 

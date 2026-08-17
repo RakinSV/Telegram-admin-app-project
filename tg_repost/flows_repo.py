@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
+from sqlalchemy import func
+
 from tg_repost.db.models import Flow, FlowEdge, FlowNode
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
@@ -203,6 +205,67 @@ def list_for_bot(bot_id: int) -> list[FlowView]:
         return [_flow_view(row) for row in rows]
 
 
+def allowed_conditions(kind: str) -> tuple[str, ...]:
+    """Какие переходы осмысленны из узла такого типа.
+
+    Нужно холсту: предложить «переход по верному ответу» из узла с картинкой
+    значило бы дать владельцу нарисовать ветку, которая никогда не сработает.
+    """
+    return _ALLOWED.get(kind, (ALWAYS,))
+
+
+def runs_of(flow_id: int) -> dict[str, int]:
+    """Сколько людей в сценарии: идут, дошли, сорвались.
+
+    Владельцу это нужно раньше, чем что-либо ещё: правка сценария, по которому
+    идут люди, касается их немедленно.
+    """
+    from tg_repost.db.models import FlowRun
+
+    counts = {"running": 0, "done": 0, "stopped": 0}
+    with session_scope() as session:
+        rows = (
+            session.query(FlowRun.status, func.count(FlowRun.id))
+            .filter(FlowRun.flow_id == flow_id)
+            .group_by(FlowRun.status)
+            .all()
+        )
+    for status, count in rows:
+        if status in counts:
+            counts[status] = count
+    return counts
+
+
+def find_by_trigger(
+    bot_id: int, trigger: str, value: str | None = None,
+) -> FlowView | None:
+    """Какой сценарий этого бота начинается по такому поводу.
+
+    Только ОПУБЛИКОВАННЫЕ: черновик — не сценарий, запускать по нему нечего, а
+    человек, написавший боту, не должен получить в ответ тишину из-за того, что
+    владелец не нажал «Опубликовать».
+
+    Слово ищется без учёта регистра: человек пишет «Старт», а владелец
+    записал «старт», и упереться в это было бы обидно с обеих сторон.
+    """
+    clean = (value or "").strip().lower()
+    with session_scope() as session:
+        query = (
+            session.query(Flow)
+            .filter(
+                Flow.bot_id == bot_id,
+                Flow.trigger == trigger,
+                Flow.published_version.isnot(None),
+            )
+        )
+        for row in query.order_by(Flow.id.asc()).all():
+            if trigger == "start":
+                return _flow_view(row)
+            if (row.trigger_value or "").strip().lower() == clean:
+                return _flow_view(row)
+        return None
+
+
 def delete(flow_id: int) -> bool:
     with session_scope() as session:
         row = session.get(Flow, flow_id)
@@ -351,9 +414,20 @@ def validate(graph: Graph) -> list[str]:
         if orphans:
             problems.append("До этих узлов не добраться: " + ", ".join(orphans))
 
+    # Импорт локальный: схема полей знает про типы узлов, объявленные здесь.
+    from tg_repost import flow_schema
+
     for key, node in sorted(graph.nodes.items()):
         outgoing = graph.outgoing(key)
         allowed = _ALLOWED.get(node.kind, (ALWAYS,))
+
+        # Незаполненное обязательное поле видно только в бою: узел «показать
+        # видео» без файла ничего не покажет, а человек будет ждать.
+        unfilled = flow_schema.problems_in_config(node.kind, node.config)
+        if unfilled:
+            problems.append(
+                f"Узел {key} ({node.kind}): не заполнено — " + ", ".join(unfilled)
+            )
 
         for edge in outgoing:
             if edge.condition not in allowed:
@@ -361,6 +435,22 @@ def validate(graph: Graph) -> list[str]:
                     f"Узел {key} ({node.kind}): переход «{edge.condition}» здесь "
                     "никогда не сработает"
                 )
+
+        # Два одинаковых выхода из одного узла: сработает первый, второй мёртв,
+        # и владелец об этом не узнает — он видит на холсте две линии и считает,
+        # что нарисовал выбор. Обход берёт первый подходящий переход, поэтому
+        # неоднозначность надо ловить здесь, а не «как-нибудь решать» в бою.
+        seen_outs: set[tuple[str, str | None]] = set()
+        for edge in outgoing:
+            signature = (edge.condition, edge.condition_value)
+            if signature in seen_outs:
+                problems.append(
+                    f"Узел {key}: два перехода «{edge.condition}»"
+                    + (f" со значением «{edge.condition_value}»"
+                       if edge.condition_value else "")
+                    + " — сработает только первый"
+                )
+            seen_outs.add(signature)
 
         if node.kind == DECIDE_CONDITION:
             have = {e.condition for e in outgoing}

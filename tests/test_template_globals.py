@@ -64,3 +64,25 @@ def test_navigation_is_on_every_page(_client_logged, path):
     response = _client_logged.get(path)
 
     assert 'href="/moderation"' in response.text, f"нет меню: {path}"
+
+
+@pytest.mark.parametrize("path", PAGES)
+def test_stylesheet_link_carries_a_version(_client_logged, path):
+    """Стиль и скрипты браузер держит в кэше.
+
+    После обновления системы он может отдать ПРОШЛЫЙ файл: вид разъезжается, а
+    скрипт холста начинает спорить с новыми данными от сервера. Поймано на
+    живой странице — палитра узлов конструктора не открывалась именно поэтому.
+    Метка версии в ссылке заставляет браузер взять новый файл.
+    """
+    response = _client_logged.get(path)
+
+    assert "/static/style.css?v=" in response.text, f"стиль без версии: {path}"
+
+
+def test_login_page_stylesheet_carries_a_version():
+    """Вход рисуется другим каркасом (`auth_base.html`), и правила для админки
+    его не касаются — забыть про него легко."""
+    client = _client()
+
+    assert "/static/style.css?v=" in client.get("/login").text

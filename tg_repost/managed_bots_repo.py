@@ -86,7 +86,7 @@ def decrypt_token(bot_id: int) -> str | None:
     Отдельная функция с говорящим именем, а не поле в `BotView`: так место,
     где токен покидает базу, видно поиском по одному слову.
     """
-    from tg_repost.crypto import InvalidToken, decrypt
+    from tg_repost.crypto import decrypt
 
     with session_scope() as session:
         row = session.get(ManagedBot, bot_id)
@@ -94,10 +94,15 @@ def decrypt_token(bot_id: int) -> str | None:
             return None
         try:
             return decrypt(row.token_encrypted, _master_key())
-        except InvalidToken:
+        except Exception as exc:  # noqa: BLE001
+            # Ловим ШИРОКО, а не только `InvalidToken` (неверный ключ). Запись
+            # может быть повреждена на уровне байт — обрезанная строка, чужие
+            # символы, — и Fernet тогда бросает `binascii.Error` или
+            # `UnicodeEncodeError`. Эта функция вызывается при подъёме ботов на
+            # старте процесса: одна испорченная строка не должна уносить с
+            # собой всех остальных ботов владельца.
             logger.error(
-                "F75: токен бота «%s» не расшифровывается текущим мастер-ключом",
-                row.name,
+                "F75: токен бота «%s» не расшифровывается (%s)", row.name, exc,
             )
             return None
 

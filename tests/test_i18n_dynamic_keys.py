@@ -22,6 +22,8 @@ from tg_repost import (
     affiliate_repo,
     api_keys_repo,
     broadcasts_repo,
+    flow_schema,
+    flows_repo,
     shop_repo,
     subscriptions_repo,
     support_repo,
@@ -84,6 +86,16 @@ FAMILIES = [
     # перевода, а не оставит на главной сырое `[onboarding.step.новый]`.
     ("onboarding.step.", onboarding.STEP_KEYS),
     ("onboarding.why.", onboarding.STEP_KEYS),
+    # F75: конструктор. Типы узлов, условия переходов, поводы для запуска и
+    # поля узлов — всё это подписи, собираемые из значения. Списки берутся из
+    # самого кода: добавят тип узла, и тест потребует перевод, а не оставит
+    # владельцу сырое `[flows.kind_новый]` в палитре.
+    ("flows.kind_", flows_repo.ALL_KINDS),
+    ("flows.condition_", flows_repo.ALL_CONDITIONS),
+    ("flows.category_", flow_schema.CATEGORIES),
+    ("flows.operator_", flow_schema.OPERATORS),
+    ("flows.field_", flow_schema.FIELD_NAMES),
+    ("flows.trigger_", ("start", "command", "keyword")),
 ]
 
 

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('bots.title') }}</h1>
+<p class="muted">{{ t('bots.intro') }}</p>
+
+{% if error %}
+<p class="badge warn">{{ error }}</p>
+{% endif %}
+
+<table>
+  <tr>
+    <th>{{ t('bots.name') }}</th>
+    <th>{{ t('bots.username') }}</th>
+    <th>{{ t('bots.token') }}</th>
+    <th>{{ t('bots.flows') }}</th>
+    <th>{{ t('bots.state') }}</th>
+    <th></th>
+  </tr>
+  {% for bot in bots %}
+  <tr>
+    <td><a href="/bots/{{ bot.id }}/flows">{{ bot.name }}</a></td>
+    <td>{% if bot.username %}@{{ bot.username }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="muted">{{ bot.token_hint }}</td>
+    <td>{{ t('bots.flows_n', n=bot.flows_count) }}</td>
+    <td>
+      {% if bot.is_active %}
+      <span class="badge">{{ t('bots.active') }}</span>
+      {% else %}
+      <span class="muted">{{ t('bots.paused') }}</span>
+      {% endif %}
+      {% if bot.last_error %}
+      <div class="badge warn">{{ bot.last_error }}</div>
+      {% endif %}
+    </td>
+    <td>
+      <form method="post" action="/bots/{{ bot.id }}/toggle"
+            {% if not bot.is_active %}onsubmit="return confirm('{{ t('bots.confirm_activate') }}');"{% endif %}>
+        <button type="submit" class="secondary">
+          {{ t('bots.stop') if bot.is_active else t('bots.start') }}
+        </button>
+      </form>
+      <form method="post" action="/bots/{{ bot.id }}/delete"
+            onsubmit="return confirm('{{ t('bots.confirm_delete') }}');">
+        <button type="submit" class="secondary">{{ t('bots.delete') }}</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">{{ t('bots.empty') }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>{{ t('bots.add') }}</h2>
+<form method="post" action="/bots/save">
+  <label>{{ t('bots.name') }}
+    <input type="text" name="name" value="{{ name or '' }}" required maxlength="128">
+  </label>
+  <label>{{ t('bots.token') }}
+    <input type="text" name="token" autocomplete="off" placeholder="123456789:AA...">
+    <span class="hint">{{ t('bots.token_hint') }}</span>
+  </label>
+  <label class="inline">
+    <input type="checkbox" name="is_active" value="1">
+    {{ t('bots.activate_now') }}
+  </label>
+  <button type="submit">{{ t('bots.save') }}</button>
+</form>
+
+<p class="hint">{{ t('bots.where_to_get') }}</p>
+{% endblock %}

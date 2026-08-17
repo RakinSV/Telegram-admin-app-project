@@ -43,6 +43,7 @@ from tg_repost.webui.auth import (
     verify_login,
 )
 from tg_repost.webui.ad_requests_routes import build_ad_requests_router
+from tg_repost.webui.bots_routes import build_bots_router
 from tg_repost.webui.broadcasts_routes import build_broadcasts_router
 from tg_repost.webui.calendar_routes import build_calendar_router
 from tg_repost.webui.contacts_routes import build_contacts_router
@@ -829,6 +830,7 @@ def create_app() -> FastAPI:
     app.include_router(build_contacts_router())
     app.include_router(build_broadcasts_router())
     app.include_router(build_funnels_router())
+    app.include_router(build_bots_router())
     app.include_router(build_subscriptions_router())
     app.include_router(build_affiliate_router())
     app.include_router(build_shop_router())

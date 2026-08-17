@@ -280,7 +280,7 @@ def _secret_override() -> dict[str, object]:
     if not master_key:
         return {}
     try:
-        from tg_repost.crypto import InvalidToken, decrypt
+        from tg_repost.crypto import decrypt
         from tg_repost.db.models import Secret
         from tg_repost.db.session import session_scope as tg_repost_session_scope
 
@@ -296,7 +296,10 @@ def _secret_override() -> dict[str, object]:
         return {}
     try:
         return {"guardian_bot_token": decrypt(row.encrypted_value, master_key)}
-    except InvalidToken:
+    except Exception:  # noqa: BLE001
+        # Не только `InvalidToken` (чужой ключ): повреждённая на уровне байт
+        # запись даёт `binascii.Error`/`UnicodeEncodeError`, а исключение отсюда
+        # уронило бы весь Guardian на чтении настроек. Откат на .env-значение.
         return {}
 
 

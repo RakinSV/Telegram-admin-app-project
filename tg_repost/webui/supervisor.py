@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -29,7 +31,14 @@ from telethon import TelegramClient
 from tg_repost.config import Settings, get_settings
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, invalidate_rewriter_cache
-from tg_repost import broadcasts_repo, funnels_repo, webhooks_repo, task_queue
+from tg_repost import (
+    broadcasts_repo,
+    flow_bots,
+    flow_engine,
+    funnels_repo,
+    task_queue,
+    webhooks_repo,
+)
 from tg_repost.crypto_rails import polling as crypto_polling
 from tg_repost.scheduler.channel_stats import collect_channel_stats
 from tg_repost.scheduler.digest import run_digest_job
@@ -54,6 +63,7 @@ broadcasts_repo.register_handler()
 funnels_repo.register_handler()
 webhooks_repo.register_handler()
 crypto_polling.register_handler()
+flow_engine.register_handler()
 
 
 async def _run_task_queue() -> None:
@@ -77,6 +87,12 @@ class RunningComponents:
     application: Application | None = None
     scheduler: AsyncIOScheduler | None = None
     rewriter: RewriterClient | None = None
+    # F75: диспетчер aiogram, ведущий ВСЕ боты реестра, и задача его опроса.
+    # Живёт в этом же процессе намеренно: список ботов задаётся в админке, и
+    # владелец, добавив бота, ждёт, что тот заработает, а не что кто-то зайдёт
+    # по SSH перезапускать контейнер.
+    flow_dispatcher: object | None = None
+    flow_polling: object | None = None
 
     @property
     def is_running(self) -> bool:
@@ -212,6 +228,17 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         _run_task_queue, [],
         IntervalTrigger(seconds=settings.task_queue_interval_seconds),
     )
+    # F75: просроченные сроки ответа в сценариях. Всегда включена и почти
+    # ничего не стоит на холостом ходу (один SELECT по индексу
+    # `ix_flow_runs_waiting`). Прятать за настройку нельзя: выключенная, она
+    # оставляет людей висеть посреди сценария навсегда, а владелец видит
+    # вечное «идёт». Раз в 5 минут: сроки измеряются часами, точность до
+    # минуты тут не нужна.
+    _resync_optional_job(
+        scheduler, "flow_sweep_timeouts", True,
+        flow_engine.sweep_timeouts, [flow_bots.bot_for],
+        IntervalTrigger(minutes=5),
+    )
     _resync_optional_job(
         scheduler, "channel_stats_job", settings.channel_stats_enabled,
         collect_channel_stats, [tele_client],
@@ -274,6 +301,11 @@ async def start_components(settings: Settings | None = None) -> None:
     runtime_state.set_component_status("bot", True)
     logger.info("Бот модерации запущен")
 
+    # F75: боты-конструкторы. Поднимаются ПОСЛЕ бота модерации и до
+    # планировщика: подметание просроченных сроков (джоба ниже) отправляет
+    # сообщения этими же ботами, и к первому её проходу они должны быть живы.
+    await start_flow_bots()
+
     _components.scheduler = AsyncIOScheduler()
     _sync_jobs(_components.scheduler, settings)  # тоже строит _components.rewriter
     _components.scheduler.start()
@@ -293,6 +325,7 @@ async def stop_components() -> None:
         _components.scheduler.shutdown(wait=False)
         runtime_state.set_component_status("scheduler", False)
         _components.scheduler = None
+    await stop_flow_bots()
     if _components.application is not None:
         assert _components.application.updater is not None  # build_application() не отключает updater
         await _components.application.updater.stop()
@@ -364,6 +397,83 @@ async def restart_moderation_bot() -> None:
     if _components.scheduler is not None:
         _sync_jobs(_components.scheduler, get_settings())
     logger.info("Бот модерации перезапущен")
+
+
+def _flow_dispatcher() -> object:
+    """Диспетчер ботов-конструкторов — ОДИН на процесс, создаётся один раз.
+
+    Router в aiogram — модульный синглтон: включить его во ВТОРОЙ диспетчер
+    (например, собранный при перезапуске) нельзя, aiogram отказывает «router is
+    already attached». Поэтому диспетчер переживает перезапуски опроса, а
+    меняется только состав ботов.
+    """
+    if _components.flow_dispatcher is None:
+        from aiogram import Dispatcher
+        from aiogram.fsm.storage.memory import MemoryStorage
+
+        from tg_repost import flow_handlers
+
+        dispatcher = Dispatcher(storage=MemoryStorage())
+        dispatcher.include_router(flow_handlers.router)
+        _components.flow_dispatcher = dispatcher
+    return _components.flow_dispatcher
+
+
+async def start_flow_bots() -> None:
+    """Начать опрос всех включённых ботов реестра (F75).
+
+    ОДИН ДИСПЕТЧЕР НА ВСЕ БОТЫ: aiogram ведёт «one or more» ботов, и
+    обработчик получает тот, которому пришёл апдейт.
+    """
+    if _components.flow_polling is not None:
+        logger.warning("start_flow_bots: опрос уже идёт")
+        return
+    bots = flow_bots.active_bots()
+    if not bots:
+        # Ботов нет или все выключены — это норма, а не сбой: пока владелец не
+        # добавил ни одного, опрашивать некого.
+        logger.info("F75: включённых ботов-конструкторов нет — опрос не запущен")
+        runtime_state.set_component_status("flow_bots", False)
+        return
+
+    dispatcher = _flow_dispatcher()
+    _components.flow_polling = asyncio.create_task(
+        # handle_signals=False обязательно: обработчики сигналов ставит
+        # веб-сервер, и второй претендент на них ломает штатную остановку.
+        dispatcher.start_polling(*bots.values(), handle_signals=False),  # type: ignore[attr-defined]
+    )
+    runtime_state.set_component_status("flow_bots", True)
+    logger.info("F75: опрос ботов-конструкторов начат (%d шт.)", len(bots))
+
+
+async def stop_flow_bots() -> None:
+    """Остановить опрос ботов реестра и закрыть их соединения."""
+    dispatcher = _components.flow_dispatcher
+    task = _components.flow_polling
+    _components.flow_polling = None
+    if task is None:
+        return
+    if dispatcher is not None:
+        with contextlib.suppress(Exception):
+            await dispatcher.stop_polling()  # type: ignore[attr-defined]
+    if isinstance(task, asyncio.Task):
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+    await flow_bots.forget_all()
+    runtime_state.set_component_status("flow_bots", False)
+    logger.info("F75: опрос ботов-конструкторов остановлен")
+
+
+async def restart_flow_bots() -> None:
+    """Перечитать реестр и поднять опрос заново — после правок в админке.
+
+    Вызывается со страницы ботов: добавили бота, сменили токен, выключили —
+    всё это должно действовать сразу. Иначе «все настройки в админке»
+    заканчивается там, где начинается SSH.
+    """
+    await stop_flow_bots()
+    await start_flow_bots()
 
 
 async def resync_scheduler_jobs(settings: Settings | None = None) -> None:

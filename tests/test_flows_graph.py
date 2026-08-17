@@ -64,7 +64,9 @@ def _good_track() -> tuple[list[dict], list[dict]]:
         _node("q1", flows.ASK_QUIZ, question="Сколько?", options=["1", "2"],
               correct_index=1, timeout_hours=24),
         _node("v2", flows.SHOW_VIDEO, file_id="BAACagIAAy", caption="Урок 2"),
-        _node("end", flows.DO_POINTS, points=10),
+        # chat_id обязателен: очки геймификации живут по чату, и без него
+        # узел «дать очки» не начислит ничего (проверяется при публикации).
+        _node("end", flows.DO_POINTS, points=10, chat_id=-1001),
     ]
     edges = [
         _edge("v1", "q1"),
@@ -174,6 +176,88 @@ def test_empty_flow_is_not_published(_flow):
         flows.publish(_flow)
 
     assert "нет ни одного узла" in str(exc.value)
+
+
+def test_node_without_a_required_field_is_refused(_flow):
+    """Пустое обязательное поле видно только в бою.
+
+    Узел «показать видео» без файла ничего не покажет, а человек будет ждать
+    продолжения, которого нет. Ловить это должна публикация.
+    """
+    flows.save_draft(
+        _flow,
+        [
+            _node("v", flows.SHOW_VIDEO, caption="Урок без файла"),
+            _node("end", flows.SHOW_TEXT, text="Конец"),
+        ],
+        [_edge("v", "end")],
+    )
+
+    with pytest.raises(flows.InvalidFlow) as exc:
+        flows.publish(_flow)
+
+    assert "file_id" in str(exc.value)
+
+
+def test_two_identical_exits_are_refused(_flow):
+    """Владелец видит на холсте две линии и думает, что нарисовал выбор.
+
+    Обход берёт первый подходящий переход — вторая ветка мертва, и узнать об
+    этом можно только по тому, что половина людей не туда попала.
+    """
+    flows.save_draft(
+        _flow,
+        [
+            _node("hi", flows.SHOW_TEXT, text="Привет"),
+            _node("a", flows.SHOW_TEXT, text="Сюда"),
+            _node("b", flows.SHOW_TEXT, text="Или сюда"),
+        ],
+        [_edge("hi", "a"), _edge("hi", "b")],
+    )
+
+    with pytest.raises(flows.InvalidFlow) as exc:
+        flows.publish(_flow)
+
+    assert "сработает только первый" in str(exc.value)
+
+
+def test_two_buttons_to_different_places_are_fine(_flow):
+    """Обратная проверка: разные ЗНАЧЕНИЯ кнопок — это и есть выбор, и
+    запрещать его было бы запретом на ветвление."""
+    flows.save_draft(
+        _flow,
+        [
+            _node("ask", flows.ASK_BUTTONS, text="Куда?",
+                  buttons=[{"label": "Влево", "value": "l"},
+                           {"label": "Вправо", "value": "r"}]),
+            _node("left", flows.SHOW_TEXT, text="Влево"),
+            _node("right", flows.SHOW_TEXT, text="Вправо"),
+        ],
+        [
+            _edge("ask", "left", flows.ON_BUTTON, "l"),
+            _edge("ask", "right", flows.ON_BUTTON, "r"),
+        ],
+    )
+
+    assert flows.publish(_flow) == 1
+
+
+def test_points_node_without_a_chat_is_refused(_flow):
+    """Очки геймификации живут ПО ЧАТУ: без чата непонятно, в чьём зачёте
+    человек поднялся, и начисление уходит в пустоту."""
+    flows.save_draft(
+        _flow,
+        [
+            _node("hi", flows.SHOW_TEXT, text="Привет"),
+            _node("reward", flows.DO_POINTS, points=10),
+        ],
+        [_edge("hi", "reward")],
+    )
+
+    with pytest.raises(flows.InvalidFlow) as exc:
+        flows.publish(_flow)
+
+    assert "chat_id" in str(exc.value)
 
 
 def test_self_loop_is_refused(_flow):

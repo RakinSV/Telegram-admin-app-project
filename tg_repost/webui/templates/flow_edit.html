@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flow-head">
+  <div>
+    <h1>{{ flow.name }}</h1>
+    <p class="muted">
+      {{ t('flows.trigger') }}: {{ t('flows.trigger_' ~ flow.trigger) }}
+      {% if flow.trigger_value %}· {{ flow.trigger_value }}{% endif %}
+      · <a href="/bots/{{ flow.bot_id }}/flows">{{ bot.name if bot else '' }}</a>
+    </p>
+  </div>
+  <div class="flow-actions">
+    <button type="button" id="flow-save">{{ t('flows.save_draft') }}</button>
+    <form method="post" action="/flows/{{ flow.id }}/publish"
+          onsubmit="return confirm('{{ t('flows.confirm_publish') }}');">
+      <button type="submit">{{ t('flows.publish') }}</button>
+    </form>
+  </div>
+</div>
+
+{% if flow.is_published %}
+<p class="muted">{{ t('flows.published_note', n=flow.published_version, running=runs.running) }}</p>
+{% else %}
+<p class="badge warn">{{ t('flows.not_published_yet') }}</p>
+{% endif %}
+
+<div id="flow-status" class="flow-status muted" role="status" aria-live="polite"></div>
+<ul id="flow-problems" class="flow-problems"></ul>
+
+<div class="flow-editor">
+  {# Палитра сворачивается — но только на узком экране, где иначе она занимает
+     половину высоты и холст уезжает за край (проверено на 375×812). На
+     широком её открывает скрипт при загрузке. #}
+  <details class="flow-palette-box" id="flow-palette-box">
+    <summary>{{ t('flows.palette_open') }}</summary>
+    <div class="flow-palette" id="flow-palette" aria-label="{{ t('flows.palette') }}"></div>
+  </details>
+
+  <div class="flow-canvas-wrap">
+    <div class="flow-canvas" id="flow-canvas">
+      <svg class="flow-edges" id="flow-edges" aria-hidden="true"></svg>
+    </div>
+  </div>
+
+  <aside class="flow-inspector" id="flow-inspector" aria-label="{{ t('flows.inspector') }}"></aside>
+</div>
+
+<p class="hint">{{ t('flows.canvas_hint') }}</p>
+
+<script id="flow-kinds" type="application/json">{{ kinds_json | safe }}</script>
+<script id="flow-graph" type="application/json">{{ graph_json | safe }}</script>
+<script id="flow-text" type="application/json">{{ text_json | safe }}</script>
+<script>window.FLOW_SAVE_URL = "/flows/{{ flow.id }}/save";</script>
+<script src="/static/flow_canvas.js?v={{ asset_version }}" defer></script>
+{% endblock %}

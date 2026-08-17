@@ -194,7 +194,11 @@ def build(rail_id: int):  # noqa: ANN201 — тип адаптера объяв�
 
     try:
         credential = crypto.decrypt(encrypted, _master_key())
-    except crypto.InvalidToken as exc:
+    except Exception as exc:  # noqa: BLE001
+        # Не только `InvalidToken`: повреждённая на уровне байт запись даёт
+        # `binascii.Error`/`UnicodeEncodeError`, а вызывающий код ждёт
+        # `InvalidRail` — иначе владелец получает 500 вместо объяснения на
+        # странице приёма оплаты.
         raise InvalidRail(
             "Ключ не расшифровывается текущим мастер-ключом — его сменили "
             "после сохранения?"
