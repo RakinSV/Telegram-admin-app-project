@@ -1869,6 +1869,187 @@ class ChannelSubscription(Base):
     )
 
 
+class ManagedBot(Base):
+    """Бот, которым владеет система (F75).
+
+    МНОГО БОТОВ — ОДИН ПРОЦЕСС. aiogram ведёт несколько ботов одним
+    диспетчером (`start_polling(*bots)`, «one or more»), и обработчик получает
+    тот бот, которому пришёл апдейт. Поэтому реестр не требует ни отдельных
+    контейнеров, ни вебхуков, ни разводки апдейтов руками.
+
+    ТОКЕН ЛЕЖИТ ЗДЕСЬ, А НЕ В ТАБЛИЦЕ СЕКРЕТОВ. Та устроена «одно имя — одно
+    значение» и хороша для единственного токена; ботов же произвольное число,
+    и ключ вида `managed_bot_17` превратил бы таблицу секретов в свалку с
+    ручным разбором имён. Шифрование то же — мастер-ключом админки.
+
+    НАРУЖУ ТОКЕН НЕ ОТДАЁТСЯ НИКОГДА, даже владельцу: в объект для шаблона
+    он не попадает вовсе, а не маскируется.
+    """
+
+    __tablename__ = "managed_bots"
+    __table_args__ = (
+        # Один и тот же бот дважды — это два опроса одного апдейта и
+        # двойные ответы человеку.
+        UniqueConstraint("username", name="uq_managed_bot_username"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    name: Mapped[str] = mapped_column(String(128))
+    # Заполняется автоматически через `getMe` при сохранении: владелец не
+    # обязан помнить, какому боту принадлежит токен, а без имени в списке
+    # ботов не отличить.
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    token_encrypted: Mapped[str] = mapped_column(Text)
+    # Маска для показа: «••••a1b2». Отличить два токена в списке иначе нечем.
+    token_hint: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class Flow(Base):
+    """Сценарий-граф: узлы и переходы между ними (F75).
+
+    ВЕРСИИ ВМЕСТО ПРАВКИ НА ЖИВОМ. Позиция человека внутри сценария — это
+    КЛЮЧ УЗЛА; удалили узел, и человек оказался в пустоте. Поэтому правки
+    идут в черновик (`version = 0`), а публикация СНИМАЕТ КОПИЮ в новую
+    неизменяемую версию. Прохождения помнят свою версию и доигрывают по ней.
+    Тот же приём у чужих конструкторов, и здесь он не роскошь.
+
+    Ноль зарезервирован под черновик намеренно: так «текущая правка» всегда
+    находится одним и тем же условием, без поиска максимума.
+    """
+
+    __tablename__ = "flows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    bot_id: Mapped[int] = mapped_column(ForeignKey("managed_bots.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    # start | command | keyword
+    trigger: Mapped[str] = mapped_column(String(16), default="start", nullable=False)
+    # Для command — имя команды, для keyword — слово. Для start не нужен.
+    trigger_value: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # NULL — ни разу не публиковался, запускать нечего.
+    published_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class FlowNode(Base):
+    """Узел сценария (F75).
+
+    КЛЮЧ УЗЛА, А НЕ `id`, — ВОТ ЧТО ВАЖНО. При публикации строки копируются в
+    новую версию и получают новые `id`; переходы, ссылающиеся на `id`,
+    указывали бы после копирования в чужую версию. Поэтому и переходы, и
+    позиция человека ссылаются на `node_key` — он стабилен внутри сценария и
+    переживает копирование.
+    """
+
+    __tablename__ = "flow_nodes"
+    __table_args__ = (
+        UniqueConstraint("flow_id", "version", "node_key", name="uq_flow_node_key"),
+        Index("ix_flow_nodes_version", "flow_id", "version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    # 0 — черновик, 1..N — опубликованные снимки.
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    node_key: Mapped[str] = mapped_column(String(32))
+    kind: Mapped[str] = mapped_column(String(32))
+    # Настройки узла: текст, файл, варианты ответа, условие. JSON, потому что
+    # у двенадцати типов узлов нет общего набора колонок, а таблица на каждый
+    # тип означала бы двенадцать join'ов ради одного прохода по графу.
+    config_json: Mapped[str] = mapped_column(Text, default="{}")
+    # Координаты на холсте. Хранятся, потому что расположение узлов — часть
+    # смысла схемы: разложенный граф читается, автоматически уложенный нет.
+    x: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    y: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class FlowEdge(Base):
+    """Переход между узлами (F75).
+
+    ОТДЕЛЬНОЙ ТАБЛИЦЕЙ, А НЕ ПОЛЕМ `next` В УЗЛЕ. У узла выходов много: по
+    каждой кнопке, по верному и неверному ответу, «иначе», «не ответил».
+    Отдельная таблица даёт и это, и рисование связей на холсте, и проверку
+    графа одним запросом.
+    """
+
+    __tablename__ = "flow_edges"
+    __table_args__ = (
+        Index("ix_flow_edges_version", "flow_id", "version"),
+        Index("ix_flow_edges_from", "flow_id", "version", "from_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    from_key: Mapped[str] = mapped_column(String(32))
+    to_key: Mapped[str] = mapped_column(String(32))
+    # always | button | correct | wrong | true | false | timeout
+    condition: Mapped[str] = mapped_column(String(16), default="always", nullable=False)
+    # Для button — какая именно кнопка. Для остальных не нужно.
+    condition_value: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class FlowRun(Base):
+    """Прохождение сценария конкретным человеком (F75).
+
+    ХРАНИТ ВЕРСИЮ СЦЕНАРИЯ. Человек, начавший вчера, доигрывает по вчерашней
+    схеме, даже если владелец успел переставить половину узлов.
+
+    ЖДЁТ ЛИ ОТВЕТА — отдельное поле, а не «догадаться по типу узла».
+    Обработчик входящего сообщения должен одним запросом находить, кого этот
+    ответ касается; выяснять это разбором конфигурации текущего узла значило
+    бы дёргать граф на каждое сообщение в личке.
+
+    СРОК ОТВЕТА ОБЯЗАТЕЛЕН. Без него прохождения зависают навсегда и копятся
+    в базе, а человек остаётся в подвешенном состоянии.
+    """
+
+    __tablename__ = "flow_runs"
+    __table_args__ = (
+        # Один проход на человека: дважды нажатый «Запустить» иначе повёл бы
+        # его по двум копиям сценария одновременно.
+        UniqueConstraint("flow_id", "user_id", name="uq_flow_run"),
+        Index("ix_flow_runs_waiting", "status", "wait_until"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    flow_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    bot_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    current_node_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # running | done | stopped
+    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    # Чего ждём: buttons | quiz | text. NULL — не ждём, идём дальше сами.
+    waiting_for: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    wait_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Ответы человека: по ним ветвятся условия. Без этого конструктор
+    # бесполезен — ветвиться было бы не по чему.
+    variables_json: Mapped[str] = mapped_column(Text, default="{}")
+    stop_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 def parse_chat_ids_csv(raw: str | None) -> list[int]:
     """Разобрать CSV из chat_id (поле `Source.target_chat_ids`) в список int."""
     if not raw:
