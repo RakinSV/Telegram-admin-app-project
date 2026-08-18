@@ -146,3 +146,22 @@ def _keep_queue_handlers():
     yield
     task_queue._handlers.clear()
     task_queue._handlers.update(snapshot)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_environment():
+    """Переменные среды возвращаются в исходное состояние после теста.
+
+    Пять файлов удаляют `WEBUI_MASTER_KEY` из среды (иначе `set_secret()`
+    записал бы ключ в `.env` корня проекта — это уже случалось), и ни один не
+    возвращает его обратно. После первого такого файла ключа нет до конца
+    процесса, и настройки у всех следующих собираются иначе: секреты не
+    расшифровываются и подменяются значениями из `.env`.
+
+    Снимок целиком, а не по именам: список того, что тесты трогают в среде,
+    растёт быстрее, чем его успевают перечислять.
+    """
+    snapshot = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(snapshot)
