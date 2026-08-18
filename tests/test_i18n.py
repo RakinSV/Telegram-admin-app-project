@@ -256,3 +256,43 @@ def test_no_unresolved_translation_keys_on_public_pages(lang):
     token = setup_token.get_or_create_setup_token()
     r = client.get(f"/setup?token={token}")
     assert not _MISSING_KEY_RE.findall(r.text)
+
+
+def test_no_duplicate_keys_between_parts():
+    """Каталог собирается из восьми частей, и одинаковый ключ в двух из них
+    ничего не сломает заметно: победит тот, что подмешан последним.
+
+    Именно так уже случалось внутри одного файла: дубль `flows.published`
+    перекрыл заголовок столбца, и увидеть это можно было только глазами на
+    странице. После разбивки на части такой промах стал ВЕРОЯТНЕЕ, поэтому
+    проверка появилась вместе с ней.
+    """
+    from collections import Counter
+
+    from tg_repost.webui.i18n import _PARTS
+
+    seen = Counter(key for part in _PARTS for key in part.STRINGS)
+    duplicates = sorted(key for key, count in seen.items() if count > 1)
+
+    assert not duplicates, f"ключ определён в двух частях каталога: {duplicates}"
+
+
+def test_every_part_is_merged_into_the_catalog():
+    """Часть, забытая в списке сборки, — это раздел интерфейса, целиком
+    показывающий `[dotted.key]` вместо текста."""
+    import pathlib
+
+    from tg_repost.webui import i18n as catalog
+    from tg_repost.webui.i18n import _PARTS
+
+    # Путь берётся ОТ ПАКЕТА, а не от текущего каталога: изолирующая фикстура
+    # подменяет рабочий каталог на временный, и относительный путь смотрел бы
+    # в пустоту — тест падал бы всегда и ничего при этом не проверял.
+    package_dir = pathlib.Path(catalog.__file__).parent
+    files = {
+        path.stem for path in package_dir.glob("*.py")
+        if path.stem != "__init__"
+    }
+    merged = {part.__name__.rsplit(".", 1)[-1] for part in _PARTS}
+
+    assert files == merged, f"части не собраны: {sorted(files - merged)}"
