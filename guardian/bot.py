@@ -295,6 +295,12 @@ async def _auto_trust_repost_bot(bot: Bot) -> None:
     )
 
 
+# Сколько ждать перед новой попыткой, если Guardian не настроен. Минута:
+# достаточно редко, чтобы лог оставался читаемым, и достаточно часто, чтобы
+# введённый в админке токен подхватился сам.
+_UNCONFIGURED_WAIT_SECONDS = 60
+
+
 async def main() -> None:
     setup_logging("INFO")
     settings = get_guardian_settings()
@@ -302,9 +308,18 @@ async def main() -> None:
 
     if not settings.is_configured:
         logger.error(
-            "GUARDIAN_BOT_TOKEN не задан в .env — Guardian не может "
-            "стартовать (см. .env.example, секция Guardian)."
+            "GUARDIAN_BOT_TOKEN не задан — Guardian не может стартовать. "
+            "Впиши токен в веб-админке: /settings, группа «Guardian». "
+            "Проверю снова через %d секунд.",
+            _UNCONFIGURED_WAIT_SECONDS,
         )
+        # ЖДЁМ, А НЕ ВЫХОДИМ СРАЗУ. Контейнер поднимается заново по политике
+        # `restart: unless-stopped`, и мгновенный выход превращается в цикл
+        # перезапусков раз в десяток секунд: лог забивается одной и той же
+        # строкой, а настоящие сообщения в нём тонут. Ожидание не чинит
+        # причину — токен всё равно вводит владелец, — но делает лог читаемым
+        # и даёт токену примениться без ручного перезапуска контейнера.
+        await asyncio.sleep(_UNCONFIGURED_WAIT_SECONDS)
         return
     if not settings.protected_chat_ids:
         logger.warning(

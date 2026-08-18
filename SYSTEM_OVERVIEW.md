@@ -235,8 +235,16 @@ ModerationLog, BotConfig, DailyStats.
 - **Тестовый стенд**: `168.168.88.112` (Win10 + Docker Desktop), путь
   `C:/deploy/tg-app`, порт 8001. SSH:
   `ssh -i ~/.ssh/id_ed25519_win112 Root-Adm9@168.168.88.112`.
-- **Деплой**: `git pull && docker compose up -d --build --force-recreate tg_repost`
+- **Деплой**: пересобирать **все три сервиса**, а не один:
+  `docker compose build tg_repost guardian engage && docker compose up -d --force-recreate tg_repost guardian engage`
   (обычный `up -d --build` иногда не пересоздаёт контейнер).
+
+  **Почему все три.** У `guardian` и `engage` свои образы из того же
+  Dockerfile. Пересборка одного `tg_repost` оставляет их на старом коде, и это
+  не безобидно: 2026-08-18 Guardian бился в цикле перезапусков с
+  «Can't locate revision identified by '0003_spam_reviews'» — миграцию
+  применил новый tg_repost, а старый образ Guardian о ней не знал. Со стороны
+  это выглядело как сломанный бот, хотя сломан был деплой.
 - **Провайдер ИИ**: подключается **OmniRoute** — OpenAI-совместимый шлюз в
   Docker (LXC 304 на server009 / 88.210, дашборд 168.168.88.34:20128).
   Достаточно указать его `base_url` + ключ в `/settings → Рерайт`.
