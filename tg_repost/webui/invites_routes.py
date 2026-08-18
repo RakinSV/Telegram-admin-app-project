@@ -1,6 +1,6 @@
 """Инвайт-ссылки целевых групп + заявки на вступление (F32) — веб-роуты.
 
-Bot API вызовы идут через `application.bot` из супервизора (тот же паттерн,
+Bot API вызовы идут через `bot` из супервизора (тот же паттерн,
 что у `/moderation` — см. `crud_routes.py`), бизнес-логика в
 `telegram/invites.py`/`invites_repo.py`."""
 
@@ -59,8 +59,8 @@ def build_invites_router() -> APIRouter:
         member_limit: str = Form(""),
         creates_join_request: str = Form(""),
     ) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "invites.html",
                 _context(i18n.t("moderation_detail.error_bot_not_running")),
@@ -76,7 +76,7 @@ def build_invites_router() -> APIRouter:
                 )
             member_limit_int = int(member_limit.strip())
         link = await create_invite_link(
-            application.bot, chat_id, name.strip() or None, member_limit_int,
+            bot, chat_id, name.strip() or None, member_limit_int,
             creates_join_request=bool(creates_join_request),
         )
         audit.record_audit("invite_link_create", target=f"chat {chat_id}", detail=link.invite_link)
@@ -110,40 +110,40 @@ def build_invites_router() -> APIRouter:
 
     @router.post("/{link_id}/revoke")
     async def invites_revoke(request: Request, link_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "invites.html",
                 _context(i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        if await revoke_invite_link(application.bot, link_id):
+        if await revoke_invite_link(bot, link_id):
             audit.record_audit("invite_link_revoke", target=f"#{link_id}")
         return RedirectResponse(url="/invites", status_code=303)
 
     @router.post("/join-requests/{request_id}/approve")
     async def invites_join_approve(request: Request, request_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "invites.html",
                 _context(i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        if await approve_join_request(application.bot, request_id):
+        if await approve_join_request(bot, request_id):
             audit.record_audit("join_request_approve", target=f"#{request_id}")
         return RedirectResponse(url="/invites", status_code=303)
 
     @router.post("/join-requests/{request_id}/decline")
     async def invites_join_decline(request: Request, request_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "invites.html",
                 _context(i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        if await decline_join_request(application.bot, request_id):
+        if await decline_join_request(bot, request_id):
             audit.record_audit("join_request_decline", target=f"#{request_id}")
         return RedirectResponse(url="/invites", status_code=303)
 

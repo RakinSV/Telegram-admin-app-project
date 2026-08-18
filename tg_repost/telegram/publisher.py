@@ -11,8 +11,9 @@ import functools
 import json
 from pathlib import Path
 
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import RetryAfter
+from aiogram import Bot
+from aiogram.exceptions import TelegramRetryAfter
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from tg_repost import ad_marking, languages, post_targets_repo, utm
 from tg_repost.config import get_settings
@@ -32,7 +33,7 @@ from tg_repost.retry import retry_async
 def _retry_after_delay(exc: BaseException) -> float | None:
     """Уважать flood-wait от самого Telegram (см. retry.py::retry_async
     docstring) вместо фиксированного backoff."""
-    return exc.retry_after if isinstance(exc, RetryAfter) else None
+    return float(exc.retry_after) if isinstance(exc, TelegramRetryAfter) else None
 
 logger = get_logger(__name__)
 
@@ -220,7 +221,9 @@ async def _send_one(
         msg = await bot.send_poll(
             chat_id=chat_id,
             question=text[:300],
-            options=poll_options,
+            # Список приводится явно: у aiogram тип варианта —
+            # `InputPollOption | str`, а list инвариантен.
+            options=list(poll_options),
             is_anonymous=poll_is_anonymous,
             allows_multiple_answers=poll_allows_multiple,
         )
@@ -230,8 +233,13 @@ async def _send_one(
         caption, tail = split_for_caption(text) if text else ("", "")
         # Файл читаем в потоке, чтобы не блокировать event loop.
         photo_bytes = await asyncio.to_thread(Path(media_path).read_bytes)
+        # aiogram не принимает сырые байты: файл заворачивается в
+        # `BufferedInputFile`. Имя нужно самому Telegram — по нему он решает,
+        # что это картинка, а не произвольный документ.
         msg = await bot.send_photo(
-            chat_id=chat_id, photo=photo_bytes, caption=caption or None,
+            chat_id=chat_id,
+            photo=BufferedInputFile(photo_bytes, filename=Path(media_path).name),
+            caption=caption or None,
             reply_markup=reply_markup,
         )
         # Если текст не влез в подпись — досылаем хвост отдельным сообщением.
@@ -310,8 +318,10 @@ async def publish_post(bot: Bot, post_id: int) -> None:
         settings = get_settings()
         reply_markup = None
         if settings.post_source_button_enabled and post.source_link:
-            reply_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton(settings.post_source_button_label, url=post.source_link),
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text=settings.post_source_button_label, url=post.source_link,
+                ),
             ]])
 
     # Текст на язык каждой цели. Для активного языка берём `text` из поста —

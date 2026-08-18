@@ -968,7 +968,6 @@ def test_moderation_detail_hides_target_routing_for_already_posted_post():
 def test_moderation_target_edit_delete_pin_round_trip():
     """F29: управление уже опубликованным постом, по цели — веб-роуты."""
     from unittest.mock import AsyncMock
-    from types import SimpleNamespace
 
     from tg_repost import post_targets_repo
     from tg_repost.db.models import PostKind, PostStatus
@@ -990,7 +989,7 @@ def test_moderation_target_edit_delete_pin_round_trip():
 
     bot = AsyncMock()
     components = get_components()
-    components.application = SimpleNamespace(bot=bot)
+    components.moderation_bot = bot
     try:
         r = client.post(
             f"/moderation/{post_id}/targets/{target_id}/edit",
@@ -1013,7 +1012,7 @@ def test_moderation_target_edit_delete_pin_round_trip():
         bot.delete_message.assert_awaited_once()
         assert post_targets_repo.get_target(target_id).message_id is None
     finally:
-        components.application = None
+        components.moderation_bot = None
 
 
 def test_moderation_target_edit_400_when_bot_not_running():
@@ -1235,7 +1234,6 @@ def test_polls_create_rejects_empty_question():
 def test_invites_create_list_revoke_round_trip():
     """F32: создание/отзыв инвайт-ссылки через веб-роут."""
     from unittest.mock import AsyncMock
-    from types import SimpleNamespace
 
     from tg_repost import invites_repo, targets_repo
     from tg_repost.webui.supervisor import get_components
@@ -1247,7 +1245,7 @@ def test_invites_create_list_revoke_round_trip():
     bot = AsyncMock()
     bot.create_chat_invite_link.return_value = AsyncMock(invite_link="https://t.me/+abc123")
     components = get_components()
-    components.application = SimpleNamespace(bot=bot)
+    components.moderation_bot = bot
     try:
         r = client.post(
             "/invites",
@@ -1265,12 +1263,11 @@ def test_invites_create_list_revoke_round_trip():
         bot.revoke_chat_invite_link.assert_awaited_once()
         assert invites_repo.get_invite_link(link_id).is_revoked is True
     finally:
-        components.application = None
+        components.moderation_bot = None
 
 
 def test_invites_join_request_approve_via_web():
     from unittest.mock import AsyncMock
-    from types import SimpleNamespace
 
     from tg_repost import invites_repo
     from tg_repost.webui.supervisor import get_components
@@ -1282,14 +1279,14 @@ def test_invites_join_request_approve_via_web():
 
     bot = AsyncMock()
     components = get_components()
-    components.application = SimpleNamespace(bot=bot)
+    components.moderation_bot = bot
     try:
         r = client.post(f"/invites/join-requests/{request_id}/approve", follow_redirects=False)
         assert r.status_code == 303
         bot.approve_chat_join_request.assert_awaited_once_with(chat_id=-100555, user_id=777)
         assert invites_repo.get_join_request(request_id).status == "approved"
     finally:
-        components.application = None
+        components.moderation_bot = None
 
 
 def test_targets_toggle_guardian_syncs_protected_chat_ids():

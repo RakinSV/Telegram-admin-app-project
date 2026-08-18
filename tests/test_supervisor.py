@@ -32,11 +32,11 @@ def _live_components():
     иначе они проверяли бы не то, ради чего написаны.
     """
     components = get_components()
-    before = (components.tele_client, components.application)
+    before = (components.tele_client, components.moderation_bot)
     components.tele_client = object()
-    components.application = object()
+    components.moderation_bot = object()
     yield
-    components.tele_client, components.application = before
+    components.tele_client, components.moderation_bot = before
 
 
 
@@ -142,23 +142,23 @@ def test_sync_jobs_reschedule_updates_pipeline_tick_args(monkeypatch):
     # Регрессия (security-ревью): reschedule_job() меняет ТОЛЬКО
     # trigger/next_run_time (проверено по исходнику APScheduler), НЕ args —
     # без явного modify_job(args=...) джоба после restart_moderation_bot()
-    # продолжала бы держать ссылку на СТАРЫЙ (уже .shutdown()) Application,
+    # продолжала бы держать ссылку на СТАРЫЙ (уже закрытый) бот,
     # тихо ломая рерайт после ротации TG_BOT_TOKEN через /secrets.
     settings = Settings()
     scheduler = AsyncIOScheduler()
 
-    old_application = object()
-    monkeypatch.setattr(supervisor_module._components, "application", old_application)
+    old_bot = object()
+    monkeypatch.setattr(supervisor_module._components, "moderation_bot", old_bot)
     _sync_jobs(scheduler, settings)
-    assert scheduler.get_job("pipeline_tick").args[1] is old_application
+    assert scheduler.get_job("pipeline_tick").args[1] is old_bot
 
-    new_application = object()
-    monkeypatch.setattr(supervisor_module._components, "application", new_application)
+    new_bot = object()
+    monkeypatch.setattr(supervisor_module._components, "moderation_bot", new_bot)
     _sync_jobs(scheduler, settings)
 
     job = scheduler.get_job("pipeline_tick")
-    assert job.args[1] is new_application
-    assert job.args[1] is not old_application
+    assert job.args[1] is new_bot
+    assert job.args[1] is not old_bot
 
 
 def test_sync_jobs_no_optional_jobs_by_default():

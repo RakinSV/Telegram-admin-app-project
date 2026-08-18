@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from telegram import Bot
+from aiogram import Bot
 
 from tg_repost import invites_repo
 from tg_repost.db.models import InviteLink

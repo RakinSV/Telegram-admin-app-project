@@ -50,7 +50,9 @@ def _bot(monkeypatch) -> AsyncMock:
     bot.send_message = AsyncMock()
 
     class _Components:
-        application = type("App", (), {"bot": bot})()
+        # Поле называется как в супервизоре: бот модерации теперь хранится
+        # прямо, без объекта-приложения (aiogram).
+        moderation_bot = bot
 
     monkeypatch.setattr(
         "tg_repost.webui.supervisor.get_components", lambda: _Components(),

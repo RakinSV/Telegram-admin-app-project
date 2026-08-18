@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from telegram.ext import Application
+from aiogram import Bot
 
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStatus
@@ -41,7 +41,7 @@ def pending_approved_count() -> int:
         )
 
 
-async def publish_slot(application: Application) -> None:
+async def publish_slot(bot: Bot) -> None:
     """Опубликовать порцию одобренных постов (вызывается в каждом слоте)."""
     settings = get_settings()
     batch = max(1, settings.posting_batch_per_slot)
@@ -73,7 +73,7 @@ async def publish_slot(application: Application) -> None:
     logger.info("Слот публикации: публикую %d пост(ов)", len(post_ids))
     for post_id in post_ids:
         try:
-            await publish_post(application.bot, post_id)
+            await publish_post(bot, post_id)
         except Exception as exc:  # noqa: BLE001
             # Изоляция ошибок: publish_post сам ловит сбои самой отправки
             # (Telegram API), но это страхует от неожиданных исключений ДО

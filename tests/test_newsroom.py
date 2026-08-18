@@ -114,27 +114,27 @@ async def test_callback_failure_never_breaks_rewrite(monkeypatch):
 _FIRST_MESSAGE_ID = 500
 
 
-def _fake_application() -> MagicMock:
+def _fake_bot() -> MagicMock:
     """Бот, выдающий предсказуемые message_id начиная с _FIRST_MESSAGE_ID."""
-    app = MagicMock()
+    bot = MagicMock()
     counter = iter(range(_FIRST_MESSAGE_ID, _FIRST_MESSAGE_ID + 100))
 
     async def _send(**kwargs: object) -> MagicMock:
         del kwargs
         return MagicMock(message_id=next(counter))
 
-    app.bot.send_message = AsyncMock(side_effect=_send)
-    return app
+    bot.send_message = AsyncMock(side_effect=_send)
+    return bot
 
 
 def test_callback_is_none_when_disabled():
-    assert newsroom.build_newsroom_callback(_fake_application(), 1) is None
+    assert newsroom.build_newsroom_callback(_fake_bot(), 1) is None
 
 
 def test_callback_is_none_without_chat_id(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_ENABLED", "true")
     invalidate_settings_cache()
-    assert newsroom.build_newsroom_callback(_fake_application(), 1) is None
+    assert newsroom.build_newsroom_callback(_fake_bot(), 1) is None
 
 
 async def test_verbosity_all_sends_every_stage(monkeypatch):
@@ -142,20 +142,20 @@ async def test_verbosity_all_sends_every_stage(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "all")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 42)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 42)
     assert cb is not None
 
     await cb(editorial.STEP_DRAFT, "черновик")
     await cb(editorial.STEP_REVIEW, "замечания")
     await cb(editorial.STEP_VERDICT, "готово")
-    assert app.bot.send_message.await_count == 3
-    first = app.bot.send_message.await_args_list[0].kwargs
+    assert bot.send_message.await_count == 3
+    first = bot.send_message.await_args_list[0].kwargs
     assert first["chat_id"] == -100500
     assert "пост #42" in first["text"]
     assert first["reply_to_message_id"] is None  # первое — корень цепочки
     # остальные реплаятся к корню, чтобы в чате была ветка обсуждения
-    for call in app.bot.send_message.await_args_list[1:]:
+    for call in bot.send_message.await_args_list[1:]:
         assert call.kwargs["reply_to_message_id"] == _FIRST_MESSAGE_ID
 
 
@@ -164,13 +164,13 @@ async def test_verbosity_problems_stays_silent_when_editor_approves(monkeypatch)
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "problems")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
 
     await cb(editorial.STEP_DRAFT, "черновик")
     await cb(editorial.STEP_VERDICT, "✓ Редактор одобрил без правок.")
-    app.bot.send_message.assert_not_awaited()  # хорошему посту разбор не нужен
+    bot.send_message.assert_not_awaited()  # хорошему посту разбор не нужен
 
 
 async def test_verbosity_problems_flushes_held_draft_on_review(monkeypatch):
@@ -180,15 +180,15 @@ async def test_verbosity_problems_flushes_held_draft_on_review(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "problems")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
 
     await cb(editorial.STEP_DRAFT, "черновик")
-    app.bot.send_message.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
     await cb(editorial.STEP_REVIEW, "1. слабый лид")
-    assert app.bot.send_message.await_count == 2  # придержанный черновик + рецензия
-    texts = [c.kwargs["text"] for c in app.bot.send_message.await_args_list]
+    assert bot.send_message.await_count == 2  # придержанный черновик + рецензия
+    texts = [c.kwargs["text"] for c in bot.send_message.await_args_list]
     assert "черновик" in texts[0]
     assert "слабый лид" in texts[1]
 
@@ -198,15 +198,15 @@ async def test_verbosity_summary_sends_only_verdict(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "summary")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
 
     await cb(editorial.STEP_DRAFT, "черновик")
     await cb(editorial.STEP_REVIEW, "замечания")
     await cb(editorial.STEP_VERDICT, "Готово: раундов правки 1")
-    assert app.bot.send_message.await_count == 1
-    assert "Готово" in app.bot.send_message.await_args_list[0].kwargs["text"]
+    assert bot.send_message.await_count == 1
+    assert "Готово" in bot.send_message.await_args_list[0].kwargs["text"]
 
 
 async def test_unknown_verbosity_falls_back_to_problems(monkeypatch):
@@ -214,11 +214,11 @@ async def test_unknown_verbosity_falls_back_to_problems(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "опечатка")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
     await cb(editorial.STEP_DRAFT, "черновик")
-    app.bot.send_message.assert_not_awaited()  # ведёт себя как problems
+    bot.send_message.assert_not_awaited()  # ведёт себя как problems
 
 
 async def test_send_failure_is_swallowed(monkeypatch):
@@ -226,9 +226,9 @@ async def test_send_failure_is_swallowed(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "all")
     invalidate_settings_cache()
-    app = MagicMock()
-    app.bot.send_message = AsyncMock(side_effect=RuntimeError("chat not found"))
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = MagicMock()
+    bot.send_message = AsyncMock(side_effect=RuntimeError("chat not found"))
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
     await cb(editorial.STEP_DRAFT, "черновик")  # не должно бросить
 
@@ -238,13 +238,13 @@ async def test_long_text_is_clipped_under_telegram_limit(monkeypatch):
     monkeypatch.setenv("EDITORIAL_NEWSROOM_CHAT_ID", "-100500")
     monkeypatch.setenv("EDITORIAL_NEWSROOM_VERBOSITY", "all")
     invalidate_settings_cache()
-    app = _fake_application()
-    cb = newsroom.build_newsroom_callback(app, 7)
+    bot = _fake_bot()
+    cb = newsroom.build_newsroom_callback(bot, 7)
     assert cb is not None
 
     await cb(editorial.STEP_DRAFT, "🔥" * 5000)  # эмодзи вне BMP = 2 единицы каждый
     from tg_repost.telegram.text_utils import tg_len
 
-    sent = app.bot.send_message.await_args_list[0].kwargs["text"]
+    sent = bot.send_message.await_args_list[0].kwargs["text"]
     assert tg_len(sent) <= newsroom._MESSAGE_LIMIT
     assert sent.endswith("…")

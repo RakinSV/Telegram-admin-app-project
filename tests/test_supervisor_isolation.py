@@ -39,15 +39,15 @@ def _broken_telethon():
 
 @pytest.fixture
 def _working_bot():
-    application = MagicMock()
-    application.initialize = AsyncMock()
-    application.start = AsyncMock()
-    application.stop = AsyncMock()
-    application.shutdown = AsyncMock()
-    application.updater.start_polling = AsyncMock()
-    application.updater.stop = AsyncMock()
-    with patch.object(supervisor, "build_application", return_value=application):
-        yield application
+    bot = MagicMock()
+    bot.initialize = AsyncMock()
+    bot.start = AsyncMock()
+    bot.stop = AsyncMock()
+    bot.shutdown = AsyncMock()
+    bot.updater.start_polling = AsyncMock()
+    bot.updater.stop = AsyncMock()
+    with patch.object(supervisor, "build_bot", return_value=bot):
+        yield bot
 
 
 async def test_scheduler_starts_even_when_telethon_is_down(
@@ -106,7 +106,7 @@ async def test_telethon_jobs_are_not_scheduled_without_a_client(
 async def test_pipeline_tick_is_not_scheduled_without_the_bot(_broken_telethon):
     """Без бота модерации пайплайн-тику некуда отправлять посты."""
     with patch.object(
-        supervisor, "build_application", side_effect=RuntimeError("нет токена"),
+        supervisor, "build_bot", side_effect=RuntimeError("нет токена"),
     ):
         await supervisor.start_components()
 
@@ -132,5 +132,5 @@ async def test_everything_stops_even_if_telethon_never_started(
 
     components = supervisor.get_components()
     assert components.scheduler is None
-    assert components.application is None
+    assert components.moderation_bot is None
     assert runtime_state.get_component_status()["scheduler"] is False

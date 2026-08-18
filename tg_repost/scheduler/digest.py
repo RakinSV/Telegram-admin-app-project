@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from telegram.ext import Application
+from aiogram import Bot
 
 from tg_repost import post_stats_repo
 from tg_repost.config import get_settings
@@ -77,11 +77,11 @@ async def build_digest_text(rewriter: RewriterClient, posts: list[Post]) -> str:
     return text.strip()
 
 
-async def run_digest_job(rewriter: RewriterClient, application: Application) -> None:
-    """Джоба еженедельного дайджеста (F20). `application` пока не используется
+async def run_digest_job(rewriter: RewriterClient, bot: Bot) -> None:
+    """Джоба еженедельного дайджеста (F20). `bot` пока не используется
     напрямую — дайджест публикуется через обычный пайплайн модерации/постинга,
     параметр оставлен для единообразия сигнатур job-функций APScheduler."""
-    del application  # пайплайн подхватит REWRITTEN-пост на следующем тике
+    del bot  # пайплайн подхватит REWRITTEN-пост на следующем тике
     settings = get_settings()
     posts = select_top_posts_for_digest(settings.digest_window_days, settings.digest_top_n)
     if not posts:

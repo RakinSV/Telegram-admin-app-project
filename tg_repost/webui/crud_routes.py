@@ -610,8 +610,8 @@ def build_crud_router() -> APIRouter:
 
     @router.post("/moderation/{post_id}/approve")
     async def moderation_approve(request: Request, post_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
@@ -622,7 +622,7 @@ def build_crud_router() -> APIRouter:
             # пост сразу или будет ждать владельца; подставить сюда «владелец»
             # значило бы отключить согласование для всех.
             outcome = await moderation_repo.approve_post(
-                application.bot, post_id,
+                bot, post_id,
                 by_username=request.session.get("username", "?"),
                 by_role=request.session.get("role", access.ROLE_EDITOR),
             )
@@ -733,15 +733,15 @@ def build_crud_router() -> APIRouter:
     async def moderation_target_edit(
         request: Request, post_id: int, target_id: int, published_text: str = Form(...)
     ) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
         err = await moderation_repo.edit_published_post(
-            application.bot, post_id, target_id, published_text
+            bot, post_id, target_id, published_text
         )
         if err:
             return _templates.TemplateResponse(
@@ -753,14 +753,14 @@ def build_crud_router() -> APIRouter:
 
     @router.post("/moderation/{post_id}/targets/{target_id}/delete")
     async def moderation_target_delete(request: Request, post_id: int, target_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.delete_published_post(application.bot, post_id, target_id)
+        err = await moderation_repo.delete_published_post(bot, post_id, target_id)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),
@@ -771,14 +771,14 @@ def build_crud_router() -> APIRouter:
 
     @router.post("/moderation/{post_id}/targets/{target_id}/pin")
     async def moderation_target_pin(request: Request, post_id: int, target_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.pin_published_post(application.bot, post_id, target_id, pin=True)
+        err = await moderation_repo.pin_published_post(bot, post_id, target_id, pin=True)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),
@@ -789,14 +789,14 @@ def build_crud_router() -> APIRouter:
 
     @router.post("/moderation/{post_id}/targets/{target_id}/unpin")
     async def moderation_target_unpin(request: Request, post_id: int, target_id: int) -> Response:
-        application = get_components().application
-        if application is None:
+        bot = get_components().moderation_bot
+        if bot is None:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html",
                 _moderation_detail_context(post_id, i18n.t("moderation_detail.error_bot_not_running")),
                 status_code=400,
             )
-        err = await moderation_repo.pin_published_post(application.bot, post_id, target_id, pin=False)
+        err = await moderation_repo.pin_published_post(bot, post_id, target_id, pin=False)
         if err:
             return _templates.TemplateResponse(
                 request, "moderation_detail.html", _moderation_detail_context(post_id, err),

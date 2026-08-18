@@ -24,8 +24,7 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from telegram import Update
-from telegram.ext import Application
+from aiogram import Bot
 from telethon import TelegramClient
 
 from tg_repost.config import Settings, get_settings
@@ -49,7 +48,7 @@ from tg_repost.scheduler.smart_schedule import auto_apply_slots_job
 from tg_repost.rss.poller import poll_rss_sources
 from tg_repost.scheduler.stats import collect_stats
 from tg_repost.telegram.listener import build_client, build_extra_clients, start_listeners
-from tg_repost.telegram.moderation_bot import build_application
+from tg_repost.telegram.moderation_bot import build_bot, build_dispatcher
 from tg_repost.webui import runtime_state
 
 logger = get_logger(__name__)
@@ -101,7 +100,12 @@ class RunningComponents:
 
     tele_client: TelegramClient | None = None
     extra_tele_clients: list[TelegramClient] = field(default_factory=list)
-    application: Application | None = None
+    # Бот модерации: с 2026-08-18 это aiogram, как и остальные три бота.
+    # Поле называется `moderation_bot`, а не `application`: объекта-приложения
+    # у aiogram нет, и прежнее имя врало бы о том, что здесь лежит.
+    moderation_bot: Bot | None = None
+    moderation_dispatcher: object | None = None
+    moderation_polling: object | None = None
     scheduler: AsyncIOScheduler | None = None
     rewriter: RewriterClient | None = None
     # F75: диспетчер aiogram, ведущий ВСЕ боты реестра, и задача его опроса.
@@ -122,7 +126,7 @@ class RunningComponents:
         """
         return any((
             self.tele_client is not None,
-            self.application is not None,
+            self.moderation_bot is not None,
             self.scheduler is not None,
             self.flow_polling is not None,
         ))
@@ -186,7 +190,7 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     # применилась к рерайту, но не к эмбеддингам при захвате сообщения).
     invalidate_rewriter_cache()
     rewriter = _components.rewriter
-    application = _components.application
+    application = _components.moderation_bot
     tele_client = _components.tele_client
 
     # Пайплайн-тик отправляет посты на одобрение и публикует их — без бота
@@ -328,6 +332,57 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     )
 
 
+async def _start_moderation_polling() -> None:
+    """Начать опрос бота модерации.
+
+    Диспетчер создаётся ОДИН раз на процесс: router в aiogram — модульный
+    синглтон, и включить его во второй диспетчер нельзя («router is already
+    attached»). Та же причина и то же решение, что у ботов конструктора.
+
+    allowed_updates перечисляются ЯВНО: `my_chat_member` нужен для обнаружения
+    чатов (F08-доп.), `chat_member` — для атрибуции рекламы (F41), а по
+    умолчанию Telegram их не присылает вовсе.
+    """
+    if _components.moderation_bot is None:
+        return
+    if _components.moderation_dispatcher is None:
+        _components.moderation_dispatcher = build_dispatcher()
+    dispatcher = _components.moderation_dispatcher
+    _components.moderation_polling = asyncio.create_task(
+        dispatcher.start_polling(  # type: ignore[attr-defined]
+            _components.moderation_bot,
+            handle_signals=False,
+            drop_pending_updates=True,
+            allowed_updates=[
+                "message", "edited_message", "callback_query",
+                "my_chat_member", "chat_member", "chat_join_request",
+            ],
+        ),
+    )
+
+
+async def _stop_moderation_polling() -> None:
+    """Остановить опрос и закрыть соединение бота модерации.
+
+    Сессия закрывается явно: брошенный клиент держит открытое соединение, и
+    при каждой смене токена их накопилось бы по числу правок.
+    """
+    dispatcher = _components.moderation_dispatcher
+    task = _components.moderation_polling
+    _components.moderation_polling = None
+    if dispatcher is not None and task is not None:
+        with contextlib.suppress(Exception):
+            await dispatcher.stop_polling()  # type: ignore[attr-defined]
+    if isinstance(task, asyncio.Task):
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+    bot = _components.moderation_bot
+    if bot is not None:
+        with contextlib.suppress(Exception):
+            await bot.session.close()  # type: ignore[attr-defined]
+
+
 async def start_components(settings: Settings | None = None) -> None:
     """Поднять Telethon listener + бот модерации + боты сценариев + планировщик.
 
@@ -367,24 +422,15 @@ async def start_components(settings: Settings | None = None) -> None:
         runtime_state.set_component_status("listener", False)
 
     try:
-        _components.application = build_application()
-        await _components.application.initialize()
-        await _components.application.start()
-        assert _components.application.updater is not None  # build_application() не отключает updater
-        # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
-        # my_chat_member нужен для обнаружения чатов (F08-доп., см.
-        # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
-        # недокументированного здесь дефолтного поведения getUpdates.
-        await _components.application.updater.start_polling(
-            drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
-        )
+        _components.moderation_bot = build_bot()
+        await _start_moderation_polling()
         runtime_state.set_component_status("bot", True)
         logger.info("Бот модерации запущен")
     except Exception:
         logger.exception(
             "Бот модерации не поднялся — остальные компоненты запускаю без него"
         )
-        _components.application = None
+        _components.moderation_bot = None
         runtime_state.set_component_status("bot", False)
 
     # F75: боты-конструкторы. Поднимаются ПОСЛЕ бота модерации и до
@@ -404,7 +450,7 @@ async def start_components(settings: Settings | None = None) -> None:
     # из-за которого потом ищут несуществующую проблему.
     jobs = sorted(job.id for job in _components.scheduler.get_jobs())
     logger.info("Планировщик запущен, джоб %d: %s", len(jobs), ", ".join(jobs))
-    if _components.application is not None:
+    if _components.moderation_bot is not None:
         logger.info(
             "Пайплайн-тик каждые %d с (auto_post=%s, scheduled_posting=%s)",
             settings.pipeline_interval_seconds, settings.auto_post_enabled,
@@ -421,13 +467,10 @@ async def stop_components() -> None:
         runtime_state.set_component_status("scheduler", False)
         _components.scheduler = None
     await stop_flow_bots()
-    if _components.application is not None:
-        assert _components.application.updater is not None  # build_application() не отключает updater
-        await _components.application.updater.stop()
-        await _components.application.stop()
-        await _components.application.shutdown()
+    if _components.moderation_bot is not None:
+        await _stop_moderation_polling()
         runtime_state.set_component_status("bot", False)
-        _components.application = None
+        _components.moderation_bot = None
     if _components.tele_client is not None:
         await _components.tele_client.disconnect()
         runtime_state.set_component_status("listener", False)
@@ -472,22 +515,9 @@ async def restart_moderation_bot() -> None:
     if not _components.is_running:
         logger.warning("restart_moderation_bot: компоненты не запущены")
         return
-    if _components.application is not None:
-        assert _components.application.updater is not None  # build_application() не отключает updater
-        await _components.application.updater.stop()
-        await _components.application.stop()
-        await _components.application.shutdown()
-    _components.application = build_application()
-    await _components.application.initialize()
-    await _components.application.start()
-    assert _components.application.updater is not None  # build_application() не отключает updater
-    # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
-    # my_chat_member нужен для обнаружения чатов (F08-доп., см.
-    # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
-    # недокументированного здесь дефолтного поведения getUpdates.
-    await _components.application.updater.start_polling(
-        drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
-    )
+    await _stop_moderation_polling()
+    _components.moderation_bot = build_bot()
+    await _start_moderation_polling()
     runtime_state.set_component_status("bot", True)
     if _components.scheduler is not None:
         _sync_jobs(_components.scheduler, get_settings())

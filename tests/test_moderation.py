@@ -4,7 +4,7 @@ Telegram-ботом, и веб-админкой."""
 from unittest.mock import AsyncMock
 
 import pytest
-from telegram.error import BadRequest
+from aiogram.exceptions import TelegramBadRequest
 
 from tg_repost import post_targets_repo
 from tg_repost.config import get_settings, invalidate_settings_cache
@@ -204,7 +204,7 @@ async def test_edit_published_post_bad_request_returns_error_text():
     post_id = _make_post()
     target_id = _make_target(post_id)
     bot = AsyncMock()
-    bot.edit_message_text = AsyncMock(side_effect=BadRequest("message is not modified"))
+    bot.edit_message_text = AsyncMock(side_effect=TelegramBadRequest(method=None, message="message is not modified"))
 
     err = await edit_published_post(bot, post_id, target_id, "новый текст")
 

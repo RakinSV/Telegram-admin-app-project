@@ -1,34 +1,47 @@
-"""Бот ручной модерации (F07) на python-telegram-bot.
+"""Бот ручной модерации (F07) на aiogram.
 
 Шлёт владельцу (`TG_OWNER_USER_ID`) рерайченные посты с inline-кнопками
 ✅ Одобрить / ❌ Отклонить / ✏️ Редактировать. Обрабатывает нажатия, меняет
 статус поста в БД. При одобрении пост сразу публикуется (F08).
+
+ПЕРЕВЕДЁН С PYTHON-TELEGRAM-BOT НА AIOGRAM 2026-08-18. Две библиотеки ботов в
+одной системе — это два набора привычек и два места, где ловится одна и та же
+ошибка Telegram; конструктор, Guardian и Engage уже жили на aiogram, а здесь
+оставалась вторая. Логика не менялась: только вызовы API, типы исключений и
+способ регистрации обработчиков.
+
+РЕЖИМ ПРАВКИ ЖИВЁТ В FSM, А НЕ В `user_data`. У aiogram нет словаря на
+пользователя; его роль играет хранилище состояний диспетчера — то же
+поведение (в памяти процесса, своё на каждого) и тот же смысл.
 """
 
 from __future__ import annotations
 
 import asyncio
-from io import BytesIO
 from pathlib import Path
 
-from telegram import (
-    ChatMember,
+from aiogram import Bot, Dispatcher, F, Router
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.enums import ChatMemberStatus, ChatType
+from aiogram.exceptions import (
+    TelegramNetworkError,
+    TelegramRetryAfter,
+    TelegramServerError,
+)
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.utils.token import TokenValidationError
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    ChatJoinRequest,
+    ChatMemberUnion,
+    ChatMemberUpdated,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaPhoto,
-    Update,
-)
-from telegram.constants import ChatMemberStatus
-from telegram.error import NetworkError, RetryAfter, TimedOut
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    ChatJoinRequestHandler,
-    ChatMemberHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
+    Message,
 )
 
 from tg_repost import (
@@ -52,6 +65,22 @@ from tg_repost.telegram.publisher import resolve_target_labels_for_post
 from tg_repost.telegram.text_utils import clip, tg_len
 
 logger = get_logger(__name__)
+
+# Один роутер на весь бот модерации. Обработчики вешаются декораторами по
+# месту, а не списком в конце файла: так видно, что именно ловит функция,
+# прямо над ней.
+router = Router(name="moderation")
+
+
+def _is_owner(event) -> bool:  # noqa: ANN001 — Message | CallbackQuery
+    """Только владелец. Проверка ЧИТАЕТ НАСТРОЙКИ НА КАЖДОЕ СОБЫТИЕ, а не при
+    сборке роутера: идентификатор владельца меняется в админке, и фильтр,
+    запомнивший его при старте, продолжал бы пускать прежнего до перезапуска
+    процесса.
+    """
+    user = getattr(event, "from_user", None)
+    return user is not None and user.id == get_settings().tg_owner_user_id
+
 
 # Ключ в user_data: id поста, для которого ждём новый текст (режим редактирования).
 _EDIT_KEY = "editing_post_id"
@@ -77,7 +106,13 @@ _send_failures: dict[int, int] = {}
 # бессмысленно и вредно. Найдено на живом стенде: за время недоступности
 # провайдера в failed уехал 71 совершенно здоровый пост с причиной
 # «Отправка на модерацию: Timed out».
-_TRANSIENT_SEND_ERRORS = (TimedOut, NetworkError, RetryAfter, asyncio.TimeoutError, TimeoutError)
+_TRANSIENT_SEND_ERRORS = (
+    TelegramNetworkError,   # обрыв связи и таймаут — у aiogram это один тип
+    TelegramRetryAfter,     # флуд-лимит: подождать и повторить
+    TelegramServerError,    # 5xx на стороне Telegram — пост тут ни при чём
+    asyncio.TimeoutError,
+    TimeoutError,
+)
 
 
 def is_transient_send_error(exc: BaseException) -> bool:
@@ -122,33 +157,38 @@ def _keyboard(
     поведение) строки не показываются вообще."""
     rows = [
         [
-            InlineKeyboardButton("✅ Одобрить", callback_data=f"approve:{post_id}"),
-            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject:{post_id}"),
+            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve:{post_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject:{post_id}"),
         ],
-        [InlineKeyboardButton("✏️ Редактировать", callback_data=f"edit:{post_id}")],
+        [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit:{post_id}")],
     ]
     if rewrite_count > 1:
         rows.append([
-            InlineKeyboardButton("◀", callback_data=f"rwprev:{post_id}"),
+            InlineKeyboardButton(text="◀", callback_data=f"rwprev:{post_id}"),
             InlineKeyboardButton(
                 # Язык в подписи обязателен, когда вариантов несколько: у поста,
                 # уходящего в разноязычные группы, соседние варианты отличаются
                 # именно языком, и без пометки «Текст 2/4» ничего не говорит.
-                f"📝 {languages.label(rewrite_language)} {rewrite_index + 1}/{rewrite_count}"
-                if rewrite_language else f"📝 Текст {rewrite_index + 1}/{rewrite_count}",
+                text=(
+                    f"📝 {languages.label(rewrite_language)} "
+                    f"{rewrite_index + 1}/{rewrite_count}"
+                    if rewrite_language
+                    else f"📝 Текст {rewrite_index + 1}/{rewrite_count}"
+                ),
                 callback_data=f"noop:{post_id}",
             ),
-            InlineKeyboardButton("▶", callback_data=f"rwnext:{post_id}"),
+            InlineKeyboardButton(text="▶", callback_data=f"rwnext:{post_id}"),
         ])
     if cover_count > 1:
         rows.append([
-            InlineKeyboardButton("◀", callback_data=f"cvprev:{post_id}"),
+            InlineKeyboardButton(text="◀", callback_data=f"cvprev:{post_id}"),
             InlineKeyboardButton(
-                f"🖼 Обложка {cover_index + 1}/{cover_count}", callback_data=f"noop:{post_id}",
+                text=f"🖼 Обложка {cover_index + 1}/{cover_count}",
+                callback_data=f"noop:{post_id}",
             ),
-            InlineKeyboardButton("▶", callback_data=f"cvnext:{post_id}"),
+            InlineKeyboardButton(text="▶", callback_data=f"cvnext:{post_id}"),
         ])
-    return InlineKeyboardMarkup(rows)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 _KIND_LABELS = {
@@ -208,7 +248,7 @@ def _format_preview(
     return f"{header}{body}{tail}"
 
 
-async def send_pending_for_approval(application: Application) -> None:
+async def send_pending_for_approval(bot: Bot) -> None:
     """Отправить владельцу все посты со статусом `rewritten` (F07).
 
     Вызывается периодически из планировщика. После отправки статус →
@@ -226,7 +266,6 @@ async def send_pending_for_approval(application: Application) -> None:
     в логах.
     """
     settings = get_settings()
-    bot = application.bot
 
     with session_scope() as session:
         post_ids = [
@@ -276,7 +315,9 @@ async def send_pending_for_approval(application: Application) -> None:
             if photo_bytes:
                 msg = await bot.send_photo(
                     chat_id=settings.tg_owner_user_id,
-                    photo=BytesIO(photo_bytes),
+                    # aiogram не принимает сырые байты и файловые объекты:
+                    # обложка заворачивается в `BufferedInputFile`.
+                    photo=BufferedInputFile(photo_bytes, filename="cover.jpg"),
                     caption=preview,
                     reply_markup=keyboard,
                 )
@@ -322,16 +363,16 @@ async def send_pending_for_approval(application: Application) -> None:
         logger.info("Пост %s отправлен на модерацию", post_id)
 
 
-async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.callback_query()
+async def _on_callback(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
     """Обработчик нажатий inline-кнопок."""
-    query = update.callback_query
-    if query is None or query.data is None:
+    if query.data is None:
         return
 
     # Defense-in-depth: callback-кнопки шлются только в личку владельцу, но на
     # всякий случай отвергаем нажатия от любого другого пользователя.
     settings = get_settings()
-    if update.effective_user is None or update.effective_user.id != settings.tg_owner_user_id:
+    if query.from_user is None or query.from_user.id != settings.tg_owner_user_id:
         await query.answer("Доступ запрещён", show_alert=True)
         return
 
@@ -361,11 +402,11 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     logger.info("Кнопка модерации: %s пост %s", action, post_id)
 
     if action == "approve":
-        await _approve(query, context, post_id)
+        await _approve(query, bot, post_id)
     elif action == "reject":
         await _reject(query, post_id)
     elif action == "edit":
-        await _start_edit(query, context, post_id)
+        await _start_edit(query, state, post_id)
     elif action == "noop":
         return
     elif action == "rwprev":
@@ -377,35 +418,49 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     elif action == "cvnext":
         await _cycle_cover(query, post_id, 1)
     elif action == "jrq_ok":
-        await _decide_join_request(query, context, post_id, approved=True)
+        await _decide_join_request(query, bot, post_id, approved=True)
     elif action == "jrq_no":
-        await _decide_join_request(query, context, post_id, approved=False)
+        await _decide_join_request(query, bot, post_id, approved=False)
 
 
-async def _edit_result_message(query, text: str) -> None:
+def _editable(query: CallbackQuery) -> Message | None:
+    """Сообщение нажатой кнопки, если его ещё можно править.
+
+    `callback.message` бывает `InaccessibleMessage` — заглушка, которую
+    Telegram отдаёт вместо сообщений старше 48 часов: у неё нет ни текста, ни
+    методов правки. Для модерации это НЕ редкий случай: превью висит в личке
+    владельца неделями, и нажатие по старой кнопке — обычное дело.
+    """
+    return query.message if isinstance(query.message, Message) else None
+
+
+async def _edit_result_message(query: CallbackQuery, text: str) -> None:
     """Показать финальный текст в сообщении модерации — как подпись, если
     это сообщение с фото обложки (F18-доп.), иначе как обычный текст.
     `query.message.photo` — это ФАКТ о текущем сообщении (не о БД), поэтому
     надёжнее, чем сверяться с `Post.media_path`, который мог с тех пор
     измениться (например, циклированием обложки)."""
-    if query.message is not None and query.message.photo:
-        await query.edit_message_caption(caption=text)
+    message = _editable(query)
+    if message is None:
+        return
+    if message.photo:
+        await message.edit_caption(caption=text)
     else:
-        await query.edit_message_text(text)
+        await message.edit_text(text)
 
 
-async def _approve(query, context: ContextTypes.DEFAULT_TYPE, post_id: int) -> None:
+async def _approve(query: CallbackQuery, bot: Bot, post_id: int) -> None:
     """Одобрить пост через общую логику `tg_repost.moderation` (Фаза 5.3) —
     та же функция, что использует и веб-админка (`/moderation`)."""
     try:
-        outcome = await approve_post(context.application.bot, post_id)
+        outcome = await approve_post(bot, post_id)
     except InvalidStatusTransition as exc:
         await _edit_result_message(query, f"Пост #{post_id}: {exc}")
         return
     await _edit_result_message(query, f"✅ Пост #{post_id}: {outcome}.")
 
 
-async def _reject(query, post_id: int) -> None:
+async def _reject(query: CallbackQuery, post_id: int) -> None:
     try:
         found = reject_post(post_id)
     except InvalidStatusTransition as exc:
@@ -418,11 +473,11 @@ async def _reject(query, post_id: int) -> None:
 
 
 async def _decide_join_request(
-    query, context: ContextTypes.DEFAULT_TYPE, request_id: int, *, approved: bool
+    query: CallbackQuery, bot: Bot, request_id: int, *, approved: bool
 ) -> None:
     """F32: одобрить/отклонить заявку на вступление по кнопке из уведомления."""
     fn = approve_join_request if approved else decline_join_request
-    ok = await fn(context.application.bot, request_id)
+    ok = await fn(bot, request_id)
     if not ok:
         await _edit_result_message(query, "Заявка уже решена или не найдена.")
         return
@@ -430,19 +485,22 @@ async def _decide_join_request(
     await _edit_result_message(query, f"Заявка #{request_id}: {verdict}.")
 
 
-async def _start_edit(query, context: ContextTypes.DEFAULT_TYPE, post_id: int) -> None:
+async def _start_edit(query: CallbackQuery, state: FSMContext, post_id: int) -> None:
     """Войти в режим редактирования (F07) — показывает ТЕКУЩИЙ текст поста,
     чтобы было что скопировать и подправить, а не редактировать вслепую
     (раньше кнопка просто стирала превью словами "пришли новый текст",
     реальный текст поста нигде не оставался виден — жалоба пользователя)."""
-    assert context.user_data is not None  # приватный чат с владельцем — всегда есть
-    context.user_data[_EDIT_KEY] = post_id
+    # Состояние правки — в хранилище диспетчера: у aiogram нет словаря на
+    # пользователя, его роль играет FSM. Смысл тот же: в памяти процесса,
+    # своё на каждого.
+    await state.update_data({_EDIT_KEY: post_id})
 
     with session_scope() as session:
         post = session.get(Post, post_id)
         current_text = (post.rewritten_text if post else None) or ""
 
-    limit = _CAPTION_LEN if (query.message is not None and query.message.photo) else _PREVIEW_LEN
+    message = _editable(query)
+    limit = _CAPTION_LEN if (message is not None and message.photo) else _PREVIEW_LEN
     body = current_text[:limit]
     if len(current_text) > limit:
         body += "…"
@@ -450,7 +508,7 @@ async def _start_edit(query, context: ContextTypes.DEFAULT_TYPE, post_id: int) -
     await _edit_result_message(query, prompt)
 
 
-async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
+async def _cycle_rewrite(query: CallbackQuery, post_id: int, direction: int) -> None:
     """Переключить активный вариант текста на предыдущий/следующий (F06-доп.,
     кнопки ◀▶). direction — +1 (▶) или -1 (◀), с зацикливанием."""
     variants = post_variants_repo.list_rewrite_variants(post_id)
@@ -487,17 +545,20 @@ async def _cycle_rewrite(query, post_id: int, direction: int) -> None:
             rewrite_language=variants[new_index].language,
         )
         preview = _format_preview(
-            post, for_caption=bool(query.message and query.message.photo),
+            post, for_caption=bool(_editable(query) and _editable(query).photo),  # type: ignore[union-attr]
             target_labels=target_labels,
         )
 
-    if query.message is not None and query.message.photo:
-        await query.edit_message_caption(caption=preview, reply_markup=keyboard)
+    message = _editable(query)
+    if message is None:
+        return
+    if message.photo:
+        await message.edit_caption(caption=preview, reply_markup=keyboard)
     else:
-        await query.edit_message_text(preview, reply_markup=keyboard)
+        await message.edit_text(preview, reply_markup=keyboard)
 
 
-async def _cycle_cover(query, post_id: int, direction: int) -> None:
+async def _cycle_cover(query: CallbackQuery, post_id: int, direction: int) -> None:
     """Переключить активный вариант обложки на предыдущий/следующий (F18-доп.,
     кнопки ◀▶) — меняет саму фотографию сообщения (`edit_message_media`),
     не только подпись."""
@@ -557,14 +618,20 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
     # варианта в БД уже применился, а сама картинка в сообщении — нет, юзер
     # видел старое фото). retry_async — тот же helper, что и в publisher.py.
     #
-    # ВАЖНО: InputMediaPhoto/BytesIO пересобираются НА КАЖДУЮ попытку внутри
+    # ВАЖНО: InputMediaPhoto и обёртка файла пересобираются НА КАЖДУЮ попытку
     # лямбды, а не один раз снаружи — если первая попытка успела прочитать
-    # часть/весь BytesIO до TimedOut, повторное использование ТОГО ЖЕ объекта
+    # часть/весь файл до таймаута, повторное использование ТОГО ЖЕ объекта
     # отправило бы retry с обрезанным или пустым файлом (курсор потока не
     # сбрасывается сам).
     async def _edit_media() -> None:
-        media = InputMediaPhoto(media=BytesIO(photo_bytes), caption=preview)
-        await query.edit_message_media(media=media, reply_markup=keyboard)
+        media = InputMediaPhoto(
+            media=BufferedInputFile(photo_bytes, filename="cover.jpg"),
+            caption=preview,
+        )
+        message = _editable(query)
+        if message is None:
+            return
+        await message.edit_media(media=media, reply_markup=keyboard)
 
     try:
         await retry_async(_edit_media, attempts=3, description=f"переключение обложки поста {post_id}")
@@ -575,19 +642,20 @@ async def _cycle_cover(query, post_id: int, direction: int) -> None:
         )
 
 
-async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.message(F.text, ~F.text.startswith("/"), _is_owner)
+async def _on_text(message: Message, state: FSMContext) -> None:
     """Приём нового текста в режиме редактирования (F07)."""
-    assert context.user_data is not None  # приватный чат с владельцем — всегда есть
-    post_id = context.user_data.get(_EDIT_KEY)
-    if post_id is None or update.message is None or not update.message.text:
+    data = await state.get_data()
+    post_id = data.get(_EDIT_KEY)
+    if post_id is None or not message.text:
         return
 
-    if not edit_post_text(post_id, update.message.text):
-        await update.message.reply_text(f"Пост #{post_id} не найден.")
-        context.user_data.pop(_EDIT_KEY, None)
+    if not edit_post_text(post_id, message.text):
+        await message.answer(f"Пост #{post_id} не найден.")
+        await state.update_data({_EDIT_KEY: None})
         return
 
-    context.user_data.pop(_EDIT_KEY, None)
+    await state.update_data({_EDIT_KEY: None})
 
     # Ручная правка не трогает уже сгенерированные варианты (F06/F18-доп.) —
     # кнопки ◀▶ должны остаться доступны, если у поста их было больше одного
@@ -599,7 +667,7 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     rewrite_count = len(post_variants_repo.list_rewrite_variants(post_id)) or 1
     cover_count = len(post_variants_repo.list_cover_variants(post_id)) or 1
 
-    await update.message.reply_text(
+    await message.answer(
         f"✏️ Текст поста #{post_id} обновлён.",
         reply_markup=_keyboard(
             post_id,
@@ -610,12 +678,12 @@ async def _on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def _cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        await update.message.reply_text(
-            "Бот модерации запущен. Рерайченные посты будут приходить сюда "
-            "с кнопками одобрения.\nКоманды: /stats, /best_times, /growth."
-        )
+@router.message(CommandStart(), _is_owner)
+async def _cmd_start(message: Message) -> None:
+    await message.answer(
+        "Бот модерации запущен. Рерайченные посты будут приходить сюда "
+        "с кнопками одобрения.\nКоманды: /stats, /best_times, /growth."
+    )
 
 
 def _discovered_can_post(chat_type: str, member) -> bool | None:
@@ -637,7 +705,8 @@ def _discovered_can_post(chat_type: str, member) -> bool | None:
     return False
 
 
-async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.my_chat_member()
+async def _on_my_chat_member(membership: ChatMemberUpdated) -> None:
     """F08-доп.: авто-обнаружение чатов для целевых групп публикации.
 
     Telegram шлёт `my_chat_member`-апдейт при ЛЮБОЙ смене статуса САМОГО
@@ -646,9 +715,7 @@ async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
     Личка (chat.type == "private") пропускается — это не целевая группа,
     там `my_chat_member` тоже стреляет при /start или блокировке бота.
     """
-    del context
-    membership = update.my_chat_member
-    if membership is None or membership.chat.type == "private":
+    if membership.chat.type == ChatType.PRIVATE:
         return
     chat = membership.chat
     member = membership.new_chat_member
@@ -677,11 +744,11 @@ async def _on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # список не входит безусловно: ограниченный участник может быть как в чате
 # (is_member=True), так и уже вне его — проверяется отдельно ниже.
 _PRESENT_STATUSES = frozenset({
-    ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER,
+    ChatMemberStatus.CREATOR, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER,
 })
 
 
-def _is_present(member: ChatMember) -> bool:
+def _is_present(member: ChatMemberUnion) -> bool:
     """Находится ли участник в чате прямо сейчас."""
     if member.status in _PRESENT_STATUSES:
         return True
@@ -691,7 +758,8 @@ def _is_present(member: ChatMember) -> bool:
     return False
 
 
-async def _on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.chat_member()
+async def _on_chat_member(membership: ChatMemberUpdated) -> None:
     """F41: вступление/уход УЧАСТНИКА — источник данных для атрибуции рекламы.
 
     Не путать с `my_chat_member` ниже: там меняется статус САМОГО бота, здесь —
@@ -701,10 +769,6 @@ async def _on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     Именно здесь Telegram отдаёт `invite_link` — по какой ссылке человек
     пришёл. До F41 это поле молча выбрасывалось.
     """
-    del context
-    membership = update.chat_member
-    if membership is None:
-        return
     was_present = _is_present(membership.old_chat_member)
     is_present = _is_present(membership.new_chat_member)
     if was_present == is_present:
@@ -728,15 +792,13 @@ async def _on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.info("Уход из чата %s: user=%s", chat_id, user_id)
 
 
-async def _on_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.chat_join_request()
+async def _on_chat_join_request(request: ChatJoinRequest, bot: Bot) -> None:
     """F32: заявка на вступление в группу с подтверждением админом —
     приходит ТОЛЬКО если у чата включена настройка "одобрять новых
     участников" (отдельная от обычного вступления, `chat_member`-апдейта
     здесь НЕТ). Записываем и уведомляем владельца кнопками
     Одобрить/Отклонить — то же место (личка боту), что и модерация постов."""
-    request = update.chat_join_request
-    if request is None:
-        return
     # F41: по какой ссылке подана заявка. Telegram отдаёт это здесь же —
     # сохраняем, чтобы источник не потерялся к моменту одобрения.
     request_link = request.invite_link
@@ -751,91 +813,86 @@ async def _on_chat_join_request(update: Update, context: ContextTypes.DEFAULT_TY
     settings = get_settings()
     who = f"@{request.from_user.username}" if request.from_user.username else request.from_user.full_name
     text = f"📥 Заявка на вступление в «{request.chat.title}» от {who} (id{request.from_user.id})."
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Одобрить", callback_data=f"jrq_ok:{record.id}"),
-        InlineKeyboardButton("❌ Отклонить", callback_data=f"jrq_no:{record.id}"),
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Одобрить", callback_data=f"jrq_ok:{record.id}"),
+        InlineKeyboardButton(text="❌ Отклонить", callback_data=f"jrq_no:{record.id}"),
     ]])
     try:
-        await context.bot.send_message(
+        await bot.send_message(
             chat_id=settings.tg_owner_user_id, text=text, reply_markup=keyboard,
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("Не удалось уведомить о заявке на вступление: %s", sanitize_proxy_error(str(exc)))
 
 
-async def _cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.message(Command("stats"), _is_owner)
+async def _cmd_stats(message: Message) -> None:
     """Команда /stats — сводка просмотров за период (F14)."""
     from tg_repost.scheduler.stats import stats_summary
 
-    if update.message is None:
-        return
     settings = get_settings()
-    summary = stats_summary(settings.stats_window_days)
-    await update.message.reply_text(summary)
+    await message.answer(stats_summary(settings.stats_window_days))
 
 
-async def _cmd_best_times(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.message(Command("best_times"), _is_owner)
+async def _cmd_best_times(message: Message) -> None:
     """Команда /best_times — рекомендация часов публикации (F19, каркас)."""
     from tg_repost.scheduler.smart_schedule import best_times_summary
 
-    if update.message is None:
-        return
-    await update.message.reply_text(best_times_summary())
+    await message.answer(best_times_summary())
 
 
-async def _cmd_growth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@router.message(Command("growth"), _is_owner)
+async def _cmd_growth(message: Message) -> None:
     """Команда /growth — отчёт о приросте подписчиков (F22, каркас)."""
     from tg_repost.scheduler.growth import growth_summary
 
-    if update.message is None:
-        return
-    await update.message.reply_text(growth_summary())
+    await message.answer(growth_summary())
 
 
-def build_application() -> Application:
-    """Собрать PTB Application с хендлерами модерации."""
+def build_bot() -> Bot:
+    """Собрать бота модерации, при необходимости через прокси.
+
+    Прокси нужен именно HTTPS/SOCKS5 (Bot API ходит по HTTP, не по MTProto) и
+    берётся из единого раздела настроек — та же галочка «использовать для
+    Telegram», что у остальных ботов.
+
+    БИТЫЙ АДРЕС ПРОКСИ НЕ ДОЛЖЕН РОНЯТЬ ПРОЦЕСС: веб-админка обязана
+    подниматься всегда, потому что чинят прокси именно в ней. Раньше это уже
+    ловили security-ревью на PTB — при переводе на aiogram защита сохранена.
+    """
     settings = get_settings()
-    owner_filter = filters.User(user_id=settings.tg_owner_user_id)
-
-    builder = Application.builder().token(settings.tg_bot_token)
     bot_proxy = proxy_module.httpx_proxy_url(settings, "telegram")
+    session = None
     if bot_proxy:
-        # Bot API ходит по HTTPS, не по MTProto — тут нужен SOCKS5/HTTP-прокси
-        # (единый прокси-раздел, галочка «использовать для Telegram», см.
-        # tg_repost/proxy.py). `.get_updates_proxy()` — отдельно для
-        # долгоживущего long-polling соединения (иначе оно шло бы напрямую).
-        builder = builder.proxy(bot_proxy).get_updates_proxy(bot_proxy)
+        try:
+            session = AiohttpSession(proxy=bot_proxy)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Прокси для Bot API некорректен (%s) — бот модерации запускается "
+                "БЕЗ прокси, напрямую. Проверь адрес/логин/пароль прокси в "
+                "разделе «Прокси» на /settings.", exc,
+            )
+            session = None
     try:
-        # URL прокси парсится именно ЗДЕСЬ, в .build() (не лениво при первом
-        # запросе, проверено эмпирически) — битый прокси-URL иначе ронял бы
-        # необработанным ValueError весь процесс main.py (веб-панель ДОЛЖНА
-        # подниматься всегда, даже без рабочего Telegram-конфига — см.
-        # main.py::run) (найдено security-ревью, тот же класс бага, что и в
-        # guardian/bot.py::main). Хотя proxy.py и собирает только валидные
-        # URL (split_host_port отбрасывает мусорный адрес → None → без прокси),
-        # оставляем защиту: типов прокси-полей несколько, и цена ошибки —
-        # упавший веб-сервер.
-        application = builder.build()
-    except ValueError as exc:
-        if not bot_proxy:
-            raise  # ValueError не про прокси — не глотать чужую ошибку
-        logger.error(
-            "Прокси для Bot API некорректен (%s) — бот модерации запускается "
-            "БЕЗ прокси, напрямую. Проверь адрес/логин/пароль прокси в разделе "
-            "«Прокси» на /settings.", exc,
-        )
-        application = Application.builder().token(settings.tg_bot_token).build()
-    application.add_handler(CommandHandler("start", _cmd_start, filters=owner_filter))
-    application.add_handler(CommandHandler("stats", _cmd_stats, filters=owner_filter))
-    application.add_handler(CommandHandler("best_times", _cmd_best_times, filters=owner_filter))
-    application.add_handler(CommandHandler("growth", _cmd_growth, filters=owner_filter))
-    application.add_handler(CallbackQueryHandler(_on_callback))
-    application.add_handler(
-        MessageHandler(owner_filter & filters.TEXT & ~filters.COMMAND, _on_text)
-    )
-    application.add_handler(ChatMemberHandler(_on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
-    # F41: вступления/уходы УЧАСТНИКОВ — атрибуция рекламы (кто по какой
-    # ссылке пришёл). Отдельный тип от MY_CHAT_MEMBER выше.
-    application.add_handler(ChatMemberHandler(_on_chat_member, ChatMemberHandler.CHAT_MEMBER))
-    application.add_handler(ChatJoinRequestHandler(_on_chat_join_request))
-    return application
+        return Bot(token=settings.tg_bot_token, session=session)
+    except TokenValidationError as exc:
+        # aiogram проверяет формат токена сразу, в отличие от прежней
+        # библиотеки, которая принимала любую строку и падала уже в бою. Это
+        # лучше — но только если владелец поймёт из лога, что чинить.
+        raise RuntimeError(
+            "Токен бота модерации не похож на токен Telegram (ожидается "
+            "«цифры:буквы»). Впиши его в админке: /settings, группа «Telegram»."
+        ) from exc
+
+
+def build_dispatcher() -> Dispatcher:
+    """Диспетчер с обработчиками модерации.
+
+    Хранилище состояний — в памяти: режим правки текста живёт ровно столько,
+    сколько процесс, и переживать перезапуск ему незачем (после рестарта
+    владелец всё равно нажмёт «Редактировать» заново).
+    """
+    dispatcher = Dispatcher(storage=MemoryStorage())
+    dispatcher.include_router(router)
+    return dispatcher

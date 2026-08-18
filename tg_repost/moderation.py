@@ -8,8 +8,8 @@ inline-кнопки ✅/❌/✏️), и веб-админкой (`webui/app.py`,
 
 from __future__ import annotations
 
-from telegram import Bot
-from telegram.error import BadRequest
+from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
 
 from tg_repost import post_targets_repo
 from tg_repost.config import get_settings
@@ -156,6 +156,17 @@ def _get_valid_target(target_id: int, post_id: int) -> tuple[PostTarget | None, 
     return target, None
 
 
+def _reason(exc: "TelegramBadRequest") -> str:
+    """Текст отказа Telegram — БЕЗ технической приписки.
+
+    aiogram оборачивает ответ в «Telegram server says - ...». Владельцу в
+    админке эта приписка ничего не добавляет: он и так понимает, кто отказал,
+    а из-за неё сообщение вида «message is not modified» перестаёт читаться
+    с первого взгляда.
+    """
+    return exc.message or str(exc)
+
+
 async def edit_published_post(
     bot: Bot, post_id: int, target_id: int, new_text: str
 ) -> str | None:
@@ -186,8 +197,8 @@ async def edit_published_post(
             await bot.edit_message_text(
                 chat_id=target.chat_id, message_id=target.message_id, text=new_text[:4096],
             )
-    except BadRequest as exc:
-        return str(exc)
+    except TelegramBadRequest as exc:
+        return _reason(exc)
     return None
 
 
@@ -199,8 +210,8 @@ async def delete_published_post(bot: Bot, post_id: int, target_id: int) -> str |
     assert target.message_id is not None  # гарантировано _get_valid_target
     try:
         await bot.delete_message(chat_id=target.chat_id, message_id=target.message_id)
-    except BadRequest as exc:
-        return str(exc)
+    except TelegramBadRequest as exc:
+        return _reason(exc)
     post_targets_repo.set_message_id(target_id, None)
     return None
 
@@ -220,7 +231,7 @@ async def pin_published_post(bot: Bot, post_id: int, target_id: int, pin: bool) 
             )
         else:
             await bot.unpin_chat_message(chat_id=target.chat_id, message_id=target.message_id)
-    except BadRequest as exc:
-        return str(exc)
+    except TelegramBadRequest as exc:
+        return _reason(exc)
     post_targets_repo.set_pinned(target_id, pin)
     return None

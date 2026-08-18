@@ -26,7 +26,7 @@ from guardian.config import invalidate_settings_cache as guardian_invalidate_set
 from tg_repost import proxy
 from tg_repost.config import get_settings, invalidate_settings_cache
 from tg_repost.telegram.listener import build_client
-from tg_repost.telegram.moderation_bot import build_application
+from tg_repost.telegram.moderation_bot import build_bot
 from tg_repost.tools.gen_session import start_telethon_login
 
 _ENV_EXAMPLE = Path(__file__).parent.parent / ".env.example"
@@ -210,15 +210,38 @@ async def test_start_telethon_login_applies_proxy(monkeypatch):
 # --- Bot API репост-бота ---
 
 
-def test_build_application_without_proxy_does_not_crash():
-    build_application()
+# Токен правдоподобный: aiogram проверяет формат при создании бота, и с
+# заглушкой «test» эти тесты проверяли бы валидацию токена вместо прокси.
+_REALISTIC_TOKEN = "123456789:AAHrealistic_looking_token_value_x"
 
 
-def test_build_application_with_socks5_proxy_does_not_crash(monkeypatch):
-    _set(monkeypatch, PROXY_SOCKS5_ENABLED="true",
+def test_build_bot_without_proxy_does_not_crash(monkeypatch):
+    _set(monkeypatch, TG_BOT_TOKEN=_REALISTIC_TOKEN)
+    build_bot()
+
+
+def test_build_bot_with_socks5_proxy_does_not_crash(monkeypatch):
+    _set(monkeypatch, TG_BOT_TOKEN=_REALISTIC_TOKEN,
+         PROXY_SOCKS5_ENABLED="true",
          PROXY_SOCKS5_ADDRESS="1.2.3.4:1080", PROXY_SOCKS5_LOGIN="user",
          PROXY_SOCKS5_PASSWORD="pass", PROXY_USE_FOR_TELEGRAM="true")
-    build_application()
+    build_bot()
+
+
+def test_build_bot_explains_a_broken_token(monkeypatch):
+    """aiogram отказывается создавать бота с мусорным токеном — и хорошо.
+
+    Но владельцу нужна причина, а не `TokenValidationError` в трассировке:
+    чинится это одним полем в админке.
+    """
+    import pytest
+
+    _set(monkeypatch, TG_BOT_TOKEN="не-токен")
+
+    with pytest.raises(RuntimeError) as exc:
+        build_bot()
+
+    assert "не похож на токен" in str(exc.value)
 
 
 # --- Guardian (свой отдельный прокси, не трогали) ---

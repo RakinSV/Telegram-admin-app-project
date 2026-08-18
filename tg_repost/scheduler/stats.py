@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from telegram.ext import Application
+from aiogram import Bot
 from telethon import TelegramClient
 
 from tg_repost import post_stats_repo, post_targets_repo
@@ -71,7 +71,7 @@ def _count_negative_reactions(message) -> int:
 
 
 async def _handle_negative_reactions(
-    application: Application | None,
+    bot: Bot | None,
     post_id: int,
     chat_id: int,
     message_id: int,
@@ -98,7 +98,7 @@ async def _handle_negative_reactions(
         if post is None or post.negative_alert_sent:
             return
 
-    if application is None:
+    if bot is None:
         logger.warning(
             "F25: порог негативных реакций превышен у поста %s (%d), но бот не "
             "запущен — уведомление не отправлено (повторим на следующем цикле)",
@@ -124,7 +124,7 @@ async def _handle_negative_reactions(
                 f"{settings.max_auto_deletes_per_hour} удалений) — реши вручную."
             )
     try:
-        await application.bot.send_message(chat_id=settings.tg_owner_user_id, text=text)
+        await bot.send_message(chat_id=settings.tg_owner_user_id, text=text)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "F25: не удалось отправить уведомление о посте %s: %s — "
@@ -141,7 +141,7 @@ async def _handle_negative_reactions(
 
     if will_delete:
         try:
-            await application.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
             logger.info(
                 "F25: пост %s удалён из %s (%d негативных реакций)",
                 post_id, chat_id, negative_count,
@@ -150,7 +150,7 @@ async def _handle_negative_reactions(
             logger.warning("F25: не удалось удалить пост %s: %s", post_id, exc)
 
 
-async def collect_stats(client: TelegramClient, application: Application | None = None) -> int:
+async def collect_stats(client: TelegramClient, bot: Bot | None = None) -> int:
     """Снять метрики недавно опубликованных постов. Возвращает число снимков.
 
     F31: раньше опрашивалась только ПЕРВАЯ цель публикации (`Post.
@@ -162,7 +162,7 @@ async def collect_stats(client: TelegramClient, application: Application | None 
     остаётся ПОСТ-уровневым (не хочется плодить снимки на каждую цель —
     /stats и так агрегирует по постам, не по целям).
 
-    `application` нужен только для F25 (уведомление/авто-удаление при
+    `bot` нужен только для F25 (уведомление/авто-удаление при
     негативных реакциях) — без него сбор метрик работает как раньше, просто
     без этой проверки (см. `_handle_negative_reactions`). F25-проверка
     теперь идёт ПО КАЖДОЙ цели отдельно (превышение порога в одной группе не
@@ -214,7 +214,7 @@ async def collect_stats(client: TelegramClient, application: Application | None 
                 negative = _count_negative_reactions(message)
                 if negative >= settings.negative_reaction_threshold:
                     await _handle_negative_reactions(
-                        application, post_id, target.chat_id, target.message_id, negative,
+                        bot, post_id, target.chat_id, target.message_id, negative,
                     )
 
             # F17 — мягкий джиттер между запросами метрик.

@@ -1,11 +1,11 @@
 """Тесты авто-обнаружения чатов для целевых групп (F08-доп.): CRUD-логика
 `discovered_chats_repo.py` и хендлер `my_chat_member` в `moderation_bot.py`."""
 
-from types import SimpleNamespace
 
 from tg_repost import discovered_chats_repo, targets_repo
 from tg_repost.db.models import DiscoveredChat, TargetGroup
 from tg_repost.db.session import session_scope
+from tests.aiogram_fakes import fake_membership
 from tg_repost.telegram.moderation_bot import _discovered_can_post, _on_my_chat_member
 
 
@@ -15,18 +15,6 @@ def _clear() -> None:
         session.query(TargetGroup).delete()
 
 
-def _membership(
-    chat_id: int, chat_type: str, title: str | None, status: str,
-    can_post_messages: bool | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        chat=SimpleNamespace(id=chat_id, type=chat_type, title=title),
-        new_chat_member=SimpleNamespace(status=status, can_post_messages=can_post_messages),
-    )
-
-
-def _update(membership: SimpleNamespace | None) -> SimpleNamespace:
-    return SimpleNamespace(my_chat_member=membership)
 
 
 # --- discovered_chats_repo ---
@@ -90,8 +78,8 @@ def test_list_pending_excludes_already_added_targets():
 
 async def test_on_my_chat_member_records_chat_when_bot_added():
     _clear()
-    update = _update(_membership(-100333, "supergroup", "New Group", "member"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100333, chat_type="supergroup", title="New Group", new_status="member")
+    await _on_my_chat_member(update)
     rows = discovered_chats_repo.list_pending_discovered_chats()
     assert [r.chat_id for r in rows] == [-100333]
     assert rows[0].can_post is None  # группа — не проверяем, участник и так может писать
@@ -99,10 +87,8 @@ async def test_on_my_chat_member_records_chat_when_bot_added():
 
 async def test_on_my_chat_member_records_chat_when_bot_promoted_to_admin():
     _clear()
-    update = _update(_membership(
-        -100333, "channel", "News", "administrator", can_post_messages=True,
-    ))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100333, chat_type="channel", title="News", new_status="administrator", can_post=True)
+    await _on_my_chat_member(update)
     rows = discovered_chats_repo.list_pending_discovered_chats()
     assert [r.chat_id for r in rows] == [-100333]
     assert rows[0].can_post is True
@@ -111,16 +97,16 @@ async def test_on_my_chat_member_records_chat_when_bot_promoted_to_admin():
 async def test_on_my_chat_member_removes_chat_when_bot_kicked():
     _clear()
     discovered_chats_repo.record_discovered_chat(-100333, "Group", "group")
-    update = _update(_membership(-100333, "group", "Group", "kicked"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100333, chat_type="group", title="Group", new_status="kicked")
+    await _on_my_chat_member(update)
     assert discovered_chats_repo.list_pending_discovered_chats() == []
 
 
 async def test_on_my_chat_member_removes_chat_when_bot_left():
     _clear()
     discovered_chats_repo.record_discovered_chat(-100333, "Group", "group")
-    update = _update(_membership(-100333, "group", "Group", "left"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100333, chat_type="group", title="Group", new_status="left")
+    await _on_my_chat_member(update)
     assert discovered_chats_repo.list_pending_discovered_chats() == []
 
 
@@ -131,8 +117,8 @@ async def test_on_my_chat_member_syncs_can_post_on_already_added_target():
     следующей публикации."""
     _clear()
     target, _ = targets_repo.add_target(-100444, "Already A Target")
-    update = _update(_membership(-100444, "channel", "Already A Target", "member"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100444, chat_type="channel", title="Already A Target", new_status="member")
+    await _on_my_chat_member(update)
     with session_scope() as session:
         updated = session.get(TargetGroup, target.id)
         assert updated.can_post is False
@@ -141,8 +127,8 @@ async def test_on_my_chat_member_syncs_can_post_on_already_added_target():
 async def test_on_my_chat_member_sets_can_post_false_on_already_added_target_when_kicked():
     _clear()
     target, _ = targets_repo.add_target(-100555, "Kicked From Target")
-    update = _update(_membership(-100555, "channel", "Kicked From Target", "kicked"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=-100555, chat_type="channel", title="Kicked From Target", new_status="kicked")
+    await _on_my_chat_member(update)
     with session_scope() as session:
         updated = session.get(TargetGroup, target.id)
         assert updated.can_post is False
@@ -152,43 +138,44 @@ async def test_on_my_chat_member_ignores_private_chats():
     # my_chat_member тоже стреляет для личных чатов (/start, блокировка бота)
     # — это не целевая группа, не должно попадать в discovered_chats.
     _clear()
-    update = _update(_membership(555, "private", None, "member"))
-    await _on_my_chat_member(update, None)
+    update = fake_membership(chat_id=555, chat_type="private", title="", new_status="member")
+    await _on_my_chat_member(update)
     assert discovered_chats_repo.list_pending_discovered_chats() == []
 
 
-async def test_on_my_chat_member_noop_when_no_membership_update():
-    _clear()
-    update = _update(None)
-    await _on_my_chat_member(update, None)
-    assert discovered_chats_repo.list_pending_discovered_chats() == []
+# Прежний тест «апдейт без членства» удалён вместе с переходом на aiogram:
+# обработчик получает `ChatMemberUpdated` напрямую, и события без членства не
+# существует — проверять было бы нечего.
 
 
 # --- moderation_bot._discovered_can_post ---
 # Значимо только для каналов (см. docstring) — обычный участник канала
 # никогда не может постить от своего имени, в отличие от групп.
 
+def _member(status: str, can_post: bool | None = None):
+    """Участник нужного статуса — настоящим типом aiogram."""
+    return fake_membership(
+        chat_id=-1, new_status=status, can_post=can_post,
+    ).new_chat_member
+
+
 def test_discovered_can_post_none_for_non_channel():
-    member = SimpleNamespace(status="member", can_post_messages=None)
+    member = _member("member")
     assert _discovered_can_post("group", member) is None
     assert _discovered_can_post("supergroup", member) is None
 
 
 def test_discovered_can_post_false_for_plain_member_in_channel():
-    member = SimpleNamespace(status="member", can_post_messages=None)
-    assert _discovered_can_post("channel", member) is False
+    assert _discovered_can_post("channel", _member("member")) is False
 
 
 def test_discovered_can_post_true_for_creator_in_channel():
-    member = SimpleNamespace(status="creator", can_post_messages=None)
-    assert _discovered_can_post("channel", member) is True
+    assert _discovered_can_post("channel", _member("creator")) is True
 
 
 def test_discovered_can_post_true_for_admin_with_post_rights():
-    member = SimpleNamespace(status="administrator", can_post_messages=True)
-    assert _discovered_can_post("channel", member) is True
+    assert _discovered_can_post("channel", _member("administrator", True)) is True
 
 
 def test_discovered_can_post_false_for_admin_without_post_rights():
-    member = SimpleNamespace(status="administrator", can_post_messages=False)
-    assert _discovered_can_post("channel", member) is False
+    assert _discovered_can_post("channel", _member("administrator", False)) is False

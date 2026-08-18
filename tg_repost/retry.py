@@ -30,7 +30,7 @@ async def retry_async(
     """Выполнить корутину с ретраями и экспоненциальным backoff.
 
     `delay_override` — хук для исключений, которые сами говорят, сколько
-    ждать (например `telegram.error.RetryAfter.retry_after` — flood-wait от
+    ждать (например `aiogram.exceptions.TelegramRetryAfter.retry_after` — flood-wait от
     самого Telegram). Если возвращает не-`None` — используется ЭТА пауза
     вместо экспоненциальной, БЕЗ ограничения `max_delay` (Telegram лучше
     знает, сколько реально нужно ждать; искусственный потолок в 30с иначе

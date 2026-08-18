@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from telegram.ext import Application
+from aiogram import Bot
 
 from tg_repost.config import get_settings
 from tg_repost.logging_conf import get_logger, sanitize_proxy_error
@@ -73,7 +73,7 @@ class _ThreadState:
 
 
 def build_newsroom_callback(
-    application: Application, post_id: int,
+    bot: Bot, post_id: int,
 ) -> StepCallback | None:
     """Собрать callback трансляции для ОДНОГО поста, либо None если выключено.
 
@@ -109,8 +109,8 @@ def build_newsroom_callback(
             # Пошли замечания — сначала выливаем придержанный черновик.
             held, state.pending = state.pending, []
             for held_stage, held_text in held:
-                await _deliver(application, chat_id, post_id, held_stage, held_text, state)
-        await _deliver(application, chat_id, post_id, stage, text, state)
+                await _deliver(bot, chat_id, post_id, held_stage, held_text, state)
+        await _deliver(bot, chat_id, post_id, stage, text, state)
 
     return _send
 
@@ -127,13 +127,13 @@ def _format(post_id: int, stage: str, text: str) -> str:
 
 
 async def _deliver(
-    application: Application, chat_id: int, post_id: int,
+    bot: Bot, chat_id: int, post_id: int,
     stage: str, text: str, state: _ThreadState,
 ) -> None:
     """Отправить одно сообщение цепочки. Первое становится корнем, остальные
     реплаятся к нему — в чате это выглядит как ветка обсуждения."""
     try:
-        message = await application.bot.send_message(
+        message = await bot.send_message(
             chat_id=chat_id,
             text=_format(post_id, stage, text),
             # Никакого parse_mode: в текстах агентов бывают <, > и *, а

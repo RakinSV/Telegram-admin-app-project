@@ -181,14 +181,14 @@ def _make_posted_post_with_target(chat_id: int, message_id: int, **kwargs) -> in
 
 async def test_handle_negative_reactions_sets_flag_and_notifies():
     post_id = _make_posted_post()
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    await _handle_negative_reactions(application, post_id, chat_id=-100123, message_id=42, negative_count=7)
+    await _handle_negative_reactions(bot, post_id, chat_id=-100123, message_id=42, negative_count=7)
 
     with session_scope() as session:
         assert session.get(Post, post_id).negative_alert_sent is True
-    application.bot.send_message.assert_awaited_once()
-    application.bot.delete_message.assert_not_awaited()  # auto_delete выключен по умолчанию
+    bot.send_message.assert_awaited_once()
+    bot.delete_message.assert_not_awaited()  # auto_delete выключен по умолчанию
 
 
 async def test_handle_negative_reactions_does_not_set_flag_on_send_failure():
@@ -197,34 +197,34 @@ async def test_handle_negative_reactions_does_not_set_flag_on_send_failure():
     узнавал, а флаг уже стоял, блокируя повторную попытку. Теперь при
     неудачной отправке флаг НЕ ставится."""
     post_id = _make_posted_post()
-    application = AsyncMock()
-    application.bot.send_message.side_effect = RuntimeError("Telegram API недоступен")
+    bot = AsyncMock()
+    bot.send_message.side_effect = RuntimeError("Telegram API недоступен")
 
-    await _handle_negative_reactions(application, post_id, chat_id=-100123, message_id=42, negative_count=7)
+    await _handle_negative_reactions(bot, post_id, chat_id=-100123, message_id=42, negative_count=7)
 
     with session_scope() as session:
         assert session.get(Post, post_id).negative_alert_sent is False
-    application.bot.delete_message.assert_not_awaited()
+    bot.delete_message.assert_not_awaited()
 
 
 async def test_handle_negative_reactions_does_not_notify_twice():
     post_id = _make_posted_post(negative_alert_sent=True)
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    await _handle_negative_reactions(application, post_id, chat_id=-100123, message_id=42, negative_count=7)
+    await _handle_negative_reactions(bot, post_id, chat_id=-100123, message_id=42, negative_count=7)
 
-    application.bot.send_message.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
 
 
 async def test_handle_negative_reactions_auto_deletes_when_enabled():
     settings_store.save_setting("auto_delete_on_negative", True, "bool")
     invalidate_settings_cache()
     post_id = _make_posted_post()
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    await _handle_negative_reactions(application, post_id, chat_id=-100123, message_id=42, negative_count=7)
+    await _handle_negative_reactions(bot, post_id, chat_id=-100123, message_id=42, negative_count=7)
 
-    application.bot.delete_message.assert_awaited_once_with(chat_id=-100123, message_id=42)
+    bot.delete_message.assert_awaited_once_with(chat_id=-100123, message_id=42)
     with session_scope() as session:
         assert "авто-удалён" in session.get(Post, post_id).status_reason
 
@@ -240,19 +240,19 @@ async def test_handle_negative_reactions_respects_hourly_delete_cap():
 
     post_id_1 = _make_posted_post()
     post_id_2 = _make_posted_post()
-    application = AsyncMock()
+    bot = AsyncMock()
 
     # Первый пост — лимит ещё свободен, удаляется.
-    await _handle_negative_reactions(application, post_id_1, chat_id=-100123, message_id=1, negative_count=7)
-    application.bot.delete_message.assert_awaited_once()
+    await _handle_negative_reactions(bot, post_id_1, chat_id=-100123, message_id=1, negative_count=7)
+    bot.delete_message.assert_awaited_once()
 
     # Второй пост в том же часовом окне — лимит исчерпан, НЕ удаляется, но
     # уведомление всё равно отправляется с честным текстом.
-    application.bot.delete_message.reset_mock()
-    await _handle_negative_reactions(application, post_id_2, chat_id=-100123, message_id=2, negative_count=7)
-    application.bot.delete_message.assert_not_awaited()
-    application.bot.send_message.assert_awaited()
-    last_call_text = application.bot.send_message.call_args.kwargs["text"]
+    bot.delete_message.reset_mock()
+    await _handle_negative_reactions(bot, post_id_2, chat_id=-100123, message_id=2, negative_count=7)
+    bot.delete_message.assert_not_awaited()
+    bot.send_message.assert_awaited()
+    last_call_text = bot.send_message.call_args.kwargs["text"]
     assert "ПРОПУЩЕНО" in last_call_text
 
     with session_scope() as session:
@@ -262,14 +262,14 @@ async def test_handle_negative_reactions_respects_hourly_delete_cap():
 
 
 async def test_handle_negative_reactions_missing_post_noop():
-    application = AsyncMock()
-    await _handle_negative_reactions(application, 999999, chat_id=-100123, message_id=42, negative_count=7)
-    application.bot.send_message.assert_not_awaited()
+    bot = AsyncMock()
+    await _handle_negative_reactions(bot, 999999, chat_id=-100123, message_id=42, negative_count=7)
+    bot.send_message.assert_not_awaited()
 
 
 async def test_handle_negative_reactions_no_application_does_not_raise():
     """Регрессия: раньше `negative_alert_sent` ставился ДО попытки
-    уведомления — если бот не запущен (application=None), владелец никогда
+    уведомления — если бот не запущен (bot=None), владелец никогда
     не узнавал о посте, а флаг уже стоял, блокируя повторную попытку на
     следующем цикле. Теперь флаг НЕ ставится, пока уведомление реально не
     доставлено — следующий цикл сбора статистики попробует снова."""
@@ -288,12 +288,12 @@ async def test_collect_stats_triggers_negative_alert_when_threshold_exceeded():
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 5})
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    captured = await collect_stats(client, application)
+    captured = await collect_stats(client, bot)
 
     assert captured == 1
-    application.bot.send_message.assert_awaited_once()
+    bot.send_message.assert_awaited_once()
     with session_scope() as session:
         assert session.get(Post, post_id).negative_alert_sent is True
 
@@ -307,11 +307,11 @@ async def test_collect_stats_no_alert_when_threshold_zero():
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 999})
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    await collect_stats(client, application)
+    await collect_stats(client, bot)
 
-    application.bot.send_message.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
 
 
 async def test_collect_stats_no_alert_below_threshold():
@@ -323,11 +323,11 @@ async def test_collect_stats_no_alert_below_threshold():
 
     client = AsyncMock()
     client.get_messages.return_value = _fake_message({"👎": 3})
-    application = AsyncMock()
+    bot = AsyncMock()
 
-    await collect_stats(client, application)
+    await collect_stats(client, bot)
 
-    application.bot.send_message.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
 
 
 # --- F31: метрики суммируются по ВСЕМ успешным целям поста ---

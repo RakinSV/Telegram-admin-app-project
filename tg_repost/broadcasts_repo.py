@@ -26,6 +26,8 @@ from tg_repost import segments_repo, subscribers_repo, task_queue
 from tg_repost.antiban import jitter_sleep
 from tg_repost.db.models import Broadcast
 from tg_repost.db.session import session_scope
+from aiogram.types import InlineKeyboardMarkup
+
 from tg_repost.logging_conf import get_logger
 
 logger = get_logger(__name__)
@@ -171,14 +173,14 @@ def _finish(broadcast_id: int) -> None:
         row.finished_at = _utcnow()
 
 
-def build_message(text: str) -> tuple[str, object]:
+def build_message(text: str) -> tuple[str, "InlineKeyboardMarkup"]:
     """Текст рассылки + клавиатура с кнопкой отписки.
 
     Кнопка обязательна в КАЖДОМ сообщении. Без неё единственным способом
     прекратить поток остаётся блокировка бота — а это потеря человека
     навсегда, включая ответы на его собственные вопросы.
     """
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    from aiogram.types import InlineKeyboardButton
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🔕 Отписаться от рассылок", callback_data="bcast:off"),
@@ -228,7 +230,15 @@ async def handle_broadcast_task(view: task_queue.TaskView) -> str | None:
 
     from tg_repost.webui.supervisor import get_components
 
-    bot = get_components().application.bot  # type: ignore[union-attr]
+    bot = get_components().moderation_bot
+    if bot is None:
+        # Бот модерации не поднялся (нет токена, не отвечает Telegram) —
+        # рассылать нечем. Отметок «отправлено» не ставим: следующий проход
+        # воркера возьмёт ту же порцию, когда бот появится.
+        logger.warning(
+            "Рассылка %s отложена: бот модерации не запущен", broadcast_id,
+        )
+        return None
     text, keyboard = build_message(row.text)
 
     last_user_id = after

@@ -2,10 +2,9 @@
 текста и обложки + переключение (без реального Telegram — фейковый
 `query` через AsyncMock, тот же приём, что в остальных тестах хендлеров)."""
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from tg_repost.config import get_settings
+from tests.aiogram_fakes import fake_bot, fake_callback, sent_methods
 from tg_repost.db.models import Post, PostCoverVariant, PostKind, PostRewriteVariant, PostStatus
 from tg_repost.db.session import session_scope
 from tg_repost.telegram.moderation_bot import (
@@ -115,6 +114,14 @@ def test_clip_never_splits_a_surrogate_pair():
     assert _tg_len(clipped) <= 3
 
 
+
+def _method_names(bot) -> list[str]:
+    """Какие методы Telegram бот вызвал: у aiogram правка сообщения — это
+    вызов бота объектом `EditMessageText`/`EditMessageCaption`/
+    `EditMessageMedia`, а не одноимённый метод."""
+    return [type(method).__name__ for method in sent_methods(bot)]
+
+
 # --- _cycle_rewrite ---
 
 async def test_cycle_rewrite_updates_db_and_edits_text_message():
@@ -123,8 +130,8 @@ async def test_cycle_rewrite_updates_db_and_edits_text_message():
         session.add(PostRewriteVariant(post_id=post.id, variant_index=0, text="v0", tokens=1))
         session.add(PostRewriteVariant(post_id=post.id, variant_index=1, text="v1", tokens=1))
 
-    query = AsyncMock()
-    query.message = SimpleNamespace(photo=None)
+    bot = fake_bot()
+    query = fake_callback(bot, "rwnext:1")
 
     await _cycle_rewrite(query, post.id, 1)
 
@@ -132,8 +139,8 @@ async def test_cycle_rewrite_updates_db_and_edits_text_message():
         updated = session.get(Post, post.id)
         assert updated.rewritten_text == "v1"
         assert updated.active_rewrite_variant_index == 1
-    query.edit_message_text.assert_called_once()
-    query.edit_message_caption.assert_not_called()
+    assert _method_names(bot).count("EditMessageText") == 1
+    assert "EditMessageCaption" not in _method_names(bot)
     _clean(post.id)
 
 
@@ -143,13 +150,13 @@ async def test_cycle_rewrite_uses_caption_when_message_has_photo():
         session.add(PostRewriteVariant(post_id=post.id, variant_index=0, text="v0", tokens=1))
         session.add(PostRewriteVariant(post_id=post.id, variant_index=1, text="v1", tokens=1))
 
-    query = AsyncMock()
-    query.message = SimpleNamespace(photo=[object()])
+    bot = fake_bot()
+    query = fake_callback(bot, "rwnext:1", with_photo=True)
 
     await _cycle_rewrite(query, post.id, 1)
 
-    query.edit_message_caption.assert_called_once()
-    query.edit_message_text.assert_not_called()
+    assert _method_names(bot).count("EditMessageCaption") == 1
+    assert "EditMessageText" not in _method_names(bot)
     _clean(post.id)
 
 
@@ -158,12 +165,12 @@ async def test_cycle_rewrite_noop_with_single_variant():
     with session_scope() as session:
         session.add(PostRewriteVariant(post_id=post.id, variant_index=0, text="v0", tokens=1))
 
-    query = AsyncMock()
-    query.message = SimpleNamespace(photo=None)
+    bot = fake_bot()
+    query = fake_callback(bot, "rwnext:1")
 
     await _cycle_rewrite(query, post.id, 1)
 
-    query.edit_message_text.assert_not_called()
+    assert "EditMessageText" not in _method_names(bot)
     _clean(post.id)
 
 
@@ -173,8 +180,8 @@ async def test_cycle_rewrite_wraps_around():
         session.add(PostRewriteVariant(post_id=post.id, variant_index=0, text="v0", tokens=1))
         session.add(PostRewriteVariant(post_id=post.id, variant_index=1, text="v1", tokens=1))
 
-    query = AsyncMock()
-    query.message = SimpleNamespace(photo=None)
+    bot = fake_bot()
+    query = fake_callback(bot, "rwnext:1")
 
     await _cycle_rewrite(query, post.id, 1)  # (1 + 1) % 2 == 0
 
@@ -198,7 +205,8 @@ async def test_cycle_cover_updates_db_and_edits_media(tmp_path):
         session.add(PostCoverVariant(post_id=post.id, variant_index=0, media_path=str(img0)))
         session.add(PostCoverVariant(post_id=post.id, variant_index=1, media_path=str(img1)))
 
-    query = AsyncMock()
+    bot = fake_bot()
+    query = fake_callback(bot, "cvnext:1", with_photo=True)
 
     await _cycle_cover(query, post.id, 1)
 
@@ -206,7 +214,7 @@ async def test_cycle_cover_updates_db_and_edits_media(tmp_path):
         updated = session.get(Post, post.id)
         assert updated.media_path == str(img1)
         assert updated.active_cover_variant_index == 1
-    query.edit_message_media.assert_called_once()
+    assert _method_names(bot).count("EditMessageMedia") == 1
     _clean(post.id)
 
 
@@ -215,9 +223,10 @@ async def test_cycle_cover_noop_with_single_variant():
     with session_scope() as session:
         session.add(PostCoverVariant(post_id=post.id, variant_index=0, media_path="x.jpg"))
 
-    query = AsyncMock()
+    bot = fake_bot()
+    query = fake_callback(bot, "cvnext:1", with_photo=True)
     await _cycle_cover(query, post.id, 1)
-    query.edit_message_media.assert_not_called()
+    assert "EditMessageMedia" not in _method_names(bot)
     _clean(post.id)
 
 
@@ -229,10 +238,11 @@ async def test_cycle_cover_missing_file_logs_and_does_not_edit(tmp_path):
         session.add(PostCoverVariant(post_id=post.id, variant_index=0, media_path="v0.jpg"))
         session.add(PostCoverVariant(post_id=post.id, variant_index=1, media_path=str(missing)))
 
-    query = AsyncMock()
+    bot = fake_bot()
+    query = fake_callback(bot, "cvnext:1", with_photo=True)
     await _cycle_cover(query, post.id, 1)
 
-    query.edit_message_media.assert_not_called()
+    assert "EditMessageMedia" not in _method_names(bot)
     _clean(post.id)
 
 
@@ -245,24 +255,30 @@ async def test_stale_query_ack_does_not_cancel_the_action():
     Исключение выносило ВЕСЬ обработчик — кнопка выглядела нерабочей, хотя
     нажатие дошло. Подтверждение — косметика (гасит «часики»), действие
     обязано выполниться в любом случае."""
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
-    from telegram.error import BadRequest
+    from aiogram.exceptions import TelegramBadRequest
 
     from tg_repost.telegram import moderation_bot
 
     post = _make_post(rewritten_text="текст")
-    query = AsyncMock()
-    query.data = f"reject:{post.id}"
-    query.answer.side_effect = BadRequest("Query is too old")
-    query.message = SimpleNamespace(photo=None)
+    bot = fake_bot()
+    query = fake_callback(bot, f"reject:{post.id}")
 
-    update = SimpleNamespace(
-        callback_query=query,
-        effective_user=SimpleNamespace(id=get_settings().tg_owner_user_id),
-    )
-    await moderation_bot._on_callback(update, AsyncMock())
+    def _only_ack_fails(method, *args, **kwargs):
+        """Падает ТОЛЬКО подтверждение нажатия.
+
+        У aiogram и подтверждение, и правка сообщения идут через один и тот же
+        вызов бота, поэтому глухая заглушка сломала бы заодно и показ
+        результата — то есть проверяла бы не то, ради чего тест написан.
+        """
+        del args, kwargs
+        if type(method).__name__ == "AnswerCallbackQuery":
+            raise TelegramBadRequest(method=method, message="Query is too old")
+        return None
+
+    bot.side_effect = _only_ack_fails
+
+    await moderation_bot._on_callback(query, bot, AsyncMock())
 
     with session_scope() as session:
         assert session.get(Post, post.id).status == PostStatus.REJECTED, (
@@ -274,17 +290,12 @@ async def test_stale_query_ack_does_not_cancel_the_action():
 async def test_unparseable_callback_data_is_logged_not_swallowed(caplog):
     """Кнопка с битым callback_data раньше уходила в тишину — жалобу «не
     работает» было нечем проверить."""
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
     from tg_repost.telegram import moderation_bot
 
-    query = AsyncMock()
-    query.data = "approve:мусор"
-    update = SimpleNamespace(
-        callback_query=query,
-        effective_user=SimpleNamespace(id=get_settings().tg_owner_user_id),
-    )
+    bot = fake_bot()
+    query = fake_callback(bot, "approve:мусор")
+
     with caplog.at_level("WARNING"):
-        await moderation_bot._on_callback(update, AsyncMock())
+        await moderation_bot._on_callback(query, bot, AsyncMock())
     assert any("нечитаемым callback_data" in r.message for r in caplog.records)

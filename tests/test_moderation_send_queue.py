@@ -47,31 +47,31 @@ def _status(post_id: int) -> PostStatus:
         return session.get(Post, post_id).status
 
 
-def _app(send_effect=None) -> SimpleNamespace:
+def _bot(send_effect=None) -> AsyncMock:
     bot = AsyncMock()
     if send_effect is not None:
         bot.send_message.side_effect = send_effect
     else:
         bot.send_message.return_value = SimpleNamespace(message_id=777)
-    return SimpleNamespace(bot=bot)
+    return bot
 
 
 async def test_successful_send_moves_post_to_pending_approval():
     post_id = _make_post()
-    await moderation_bot.send_pending_for_approval(_app())
+    await moderation_bot.send_pending_for_approval(_bot())
     assert _status(post_id) == PostStatus.PENDING_APPROVAL
 
 
 async def test_post_telegram_keeps_rejecting_is_failed_not_retried_forever():
     """Иначе он вечно занимает место в пачке и загораживает очередь."""
     post_id = _make_post()
-    app = _app(send_effect=RuntimeError("Message caption is too long"))
+    bot = _bot(send_effect=RuntimeError("Message caption is too long"))
 
     for _ in range(moderation_bot._MAX_SEND_ATTEMPTS - 1):
-        await moderation_bot.send_pending_for_approval(app)
+        await moderation_bot.send_pending_for_approval(bot)
         assert _status(post_id) == PostStatus.REWRITTEN, "рано сдаваться — сбой может быть разовым"
 
-    await moderation_bot.send_pending_for_approval(app)
+    await moderation_bot.send_pending_for_approval(bot)
     assert _status(post_id) == PostStatus.FAILED
 
     with session_scope() as session:
@@ -91,10 +91,10 @@ async def test_temporary_failure_does_not_burn_the_attempt_budget():
             raise TimeoutError("Timed out")
         return SimpleNamespace(message_id=1)
 
-    app = _app(send_effect=_flaky)
-    await moderation_bot.send_pending_for_approval(app)
+    bot = _bot(send_effect=_flaky)
+    await moderation_bot.send_pending_for_approval(bot)
     assert _status(post_id) == PostStatus.REWRITTEN
-    await moderation_bot.send_pending_for_approval(app)
+    await moderation_bot.send_pending_for_approval(bot)
     assert _status(post_id) == PostStatus.PENDING_APPROVAL
     assert post_id not in moderation_bot._send_failures
 
@@ -110,9 +110,9 @@ async def test_broken_post_stops_blocking_the_ones_behind_it():
             raise RuntimeError("Message caption is too long")
         return SimpleNamespace(message_id=1)
 
-    app = _app(send_effect=_send)
+    bot = _bot(send_effect=_send)
     for _ in range(moderation_bot._MAX_SEND_ATTEMPTS):
-        await moderation_bot.send_pending_for_approval(app)
+        await moderation_bot.send_pending_for_approval(bot)
 
     assert _status(broken_id) == PostStatus.FAILED
     assert _status(good_id) == PostStatus.PENDING_APPROVAL
@@ -123,9 +123,9 @@ async def test_manual_retry_gives_the_post_a_full_attempt_budget():
     сбрасывался ручным ретраем — пост, потративший часть попыток, уходил в
     failed с первой же неудачи после возврата в очередь."""
     post_id = _make_post()
-    app = _app(send_effect=RuntimeError("Message caption is too long"))
+    bot = _bot(send_effect=RuntimeError("Message caption is too long"))
 
-    await moderation_bot.send_pending_for_approval(app)
+    await moderation_bot.send_pending_for_approval(bot)
     assert moderation_bot._send_failures.get(post_id) == 1
 
     moderation_bot.forget_send_failures(post_id)
@@ -137,23 +137,37 @@ async def test_network_timeout_never_kills_a_healthy_post():
     71 совершенно здоровый пост с причиной «Отправка на модерацию: Timed out».
     Таймаут — не отказ по посту: при обрыве связи не проходит ВООБЩЕ ничего,
     значит очередь никто не загораживает и списывать посты не за что."""
-    from telegram.error import TimedOut
+    from aiogram.exceptions import TelegramNetworkError
 
     post_id = _make_post()
-    app = _app(send_effect=TimedOut())
+    # У aiogram обрыв связи и таймаут — один тип: TelegramNetworkError.
+    bot = _bot(send_effect=TelegramNetworkError(method=None, message="timed out"))
 
     for _ in range(moderation_bot._MAX_SEND_ATTEMPTS * 3):
-        await moderation_bot.send_pending_for_approval(app)
+        await moderation_bot.send_pending_for_approval(bot)
 
     assert _status(post_id) == PostStatus.REWRITTEN, "пост обязан дождаться сети"
     assert post_id not in moderation_bot._send_failures, "бюджет попыток не тратится"
 
 
 async def test_network_error_and_flood_wait_are_also_transient():
-    from telegram.error import NetworkError, RetryAfter
+    from aiogram.exceptions import (
+        TelegramNetworkError,
+        TelegramRetryAfter,
+        TelegramServerError,
+    )
 
-    assert moderation_bot.is_transient_send_error(NetworkError("боль"))
-    assert moderation_bot.is_transient_send_error(RetryAfter(30))
+    assert moderation_bot.is_transient_send_error(
+        TelegramNetworkError(method=None, message="боль"),
+    )
+    assert moderation_bot.is_transient_send_error(
+        TelegramRetryAfter(method=None, message="flood", retry_after=30),
+    )
+    # 5xx на стороне Telegram — тоже не вина поста. Добавлено при переводе на
+    # aiogram: у PTB такого отдельного типа не было вовсе.
+    assert moderation_bot.is_transient_send_error(
+        TelegramServerError(method=None, message="Bad Gateway"),
+    )
     assert not moderation_bot.is_transient_send_error(
         RuntimeError("Message caption is too long"),
     ), "отказ по самому посту обязан считаться в бюджет — иначе очередь встанет"

@@ -18,11 +18,11 @@ from tg_repost.webui import supervisor
 @pytest.fixture(autouse=True)
 def _live_components():
     components = supervisor.get_components()
-    before = (components.tele_client, components.application)
+    before = (components.tele_client, components.moderation_bot)
     components.tele_client = object()
-    components.application = object()
+    components.moderation_bot = object()
     yield
-    components.tele_client, components.application = before
+    components.tele_client, components.moderation_bot = before
 
 
 def _scheduler_with(settings):
@@ -57,7 +57,7 @@ def test_backup_job_does_not_depend_on_telegram():
     Telegram не повод перестать беречь базу."""
     components = supervisor.get_components()
     components.tele_client = None
-    components.application = None
+    components.moderation_bot = None
     settings = supervisor.get_settings()
 
     scheduler = _scheduler_with(settings)

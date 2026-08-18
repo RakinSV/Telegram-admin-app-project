@@ -180,71 +180,54 @@ def test_direct_joins_sort_last():
 
 
 async def test_chat_member_handler_records_join_with_link():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
+    from tests.aiogram_fakes import fake_membership
     from tg_repost.telegram.moderation_bot import _on_chat_member
 
-    update = SimpleNamespace(chat_member=SimpleNamespace(
-        chat=SimpleNamespace(id=CHAT),
-        old_chat_member=SimpleNamespace(status="left", user=SimpleNamespace(id=42)),
-        new_chat_member=SimpleNamespace(status="member", user=SimpleNamespace(id=42)),
-        invite_link=SimpleNamespace(invite_link="https://t.me/+camp", name="Кампания"),
+    await _on_chat_member(fake_membership(
+        chat_id=CHAT, chat_type="supergroup", user_id=42,
+        old_status="left", new_status="member",
+        invite_link="https://t.me/+camp",
     ))
-    await _on_chat_member(update, SimpleNamespace(bot=AsyncMock()))
 
     stats = member_origins_repo.origin_stats(CHAT)
     assert stats[0].invite_link == "https://t.me/+camp"
-    assert stats[0].invite_name == "Кампания"
+    assert stats[0].invite_name == "кампания"
     assert stats[0].still_here == 1
 
 
 async def test_chat_member_handler_records_leave():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
+    from tests.aiogram_fakes import fake_membership
     from tg_repost.telegram.moderation_bot import _on_chat_member
 
     member_origins_repo.record_join(CHAT, 42, invite_link="https://t.me/+camp")
-    update = SimpleNamespace(chat_member=SimpleNamespace(
-        chat=SimpleNamespace(id=CHAT),
-        old_chat_member=SimpleNamespace(status="member", user=SimpleNamespace(id=42)),
-        new_chat_member=SimpleNamespace(status="left", user=SimpleNamespace(id=42)),
-        invite_link=None,
+
+    await _on_chat_member(fake_membership(
+        chat_id=CHAT, chat_type="supergroup", user_id=42,
+        old_status="member", new_status="left",
     ))
-    await _on_chat_member(update, SimpleNamespace(bot=AsyncMock()))
 
     assert member_origins_repo.origin_stats(CHAT)[0].still_here == 0
 
 
 async def test_chat_member_handler_ignores_role_change_inside_chat():
     """Выдали админку участнику — он никуда не приходил и не уходил."""
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
+    from tests.aiogram_fakes import fake_membership
     from tg_repost.telegram.moderation_bot import _on_chat_member
 
-    update = SimpleNamespace(chat_member=SimpleNamespace(
-        chat=SimpleNamespace(id=CHAT),
-        old_chat_member=SimpleNamespace(status="member", user=SimpleNamespace(id=42)),
-        new_chat_member=SimpleNamespace(status="administrator", user=SimpleNamespace(id=42)),
-        invite_link=None,
+    await _on_chat_member(fake_membership(
+        chat_id=CHAT, chat_type="supergroup", user_id=42,
+        old_status="member", new_status="administrator",
     ))
-    await _on_chat_member(update, SimpleNamespace(bot=AsyncMock()))
     assert member_origins_repo.origin_stats(CHAT) == []
 
 
 async def test_chat_member_handler_join_without_link():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
+    from tests.aiogram_fakes import fake_membership
     from tg_repost.telegram.moderation_bot import _on_chat_member
 
-    update = SimpleNamespace(chat_member=SimpleNamespace(
-        chat=SimpleNamespace(id=CHAT),
-        old_chat_member=SimpleNamespace(status="left", user=SimpleNamespace(id=43)),
-        new_chat_member=SimpleNamespace(status="member", user=SimpleNamespace(id=43)),
-        invite_link=None,  # нашёл поиском / добавил админ
+    # Без ссылки: нашёл поиском или добавил админ.
+    await _on_chat_member(fake_membership(
+        chat_id=CHAT, chat_type="supergroup", user_id=43,
+        old_status="left", new_status="member",
     ))
-    await _on_chat_member(update, SimpleNamespace(bot=AsyncMock()))
     assert member_origins_repo.origin_stats(CHAT)[0].invite_link is None

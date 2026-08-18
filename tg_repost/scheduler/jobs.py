@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from telegram.ext import Application
+from aiogram import Bot
 
 from tg_repost import clusters_repo, languages
 from tg_repost.ads.injector import inject_native_ad
@@ -92,11 +92,11 @@ def effective_source_chars(original: str, link_text: str) -> int:
 
 async def rewrite_new_posts(
     rewriter: RewriterClient, batch: int = 5,
-    application: Application | None = None,
+    bot: Bot | None = None,
 ) -> None:
     """Рерайтнуть посты со статусом `new` (F06).
 
-    `application` нужен ТОЛЬКО для трансляции хода редакции в чат «кухни»
+    `bot` нужен ТОЛЬКО для трансляции хода редакции в чат «кухни»
     (F50) — без него рерайт работает ровно как раньше, поэтому параметр
     необязательный (его нет у существующих вызовов в тестах).
     """
@@ -255,8 +255,8 @@ async def rewrite_new_posts(
                         # выключено или бота нет — тогда editorial не тратит
                         # вызовов на callback вовсе.
                         on_step = (
-                            build_newsroom_callback(application, post_id)
-                            if application is not None else None
+                            build_newsroom_callback(bot, post_id)
+                            if bot is not None else None
                         )
                         ed = await editorial_rewrite(
                             rewriter, original=original, link_content=link_text,
@@ -384,7 +384,7 @@ async def rewrite_new_posts(
         )
 
 
-async def _auto_publish_rewritten(application: Application) -> None:
+async def _auto_publish_rewritten(bot: Bot) -> None:
     """Режим без модерации: rewritten → approved (→ posted, если без слотов).
 
     Если включено расписание по слотам (F11), посты остаются `approved` в
@@ -407,18 +407,18 @@ async def _auto_publish_rewritten(application: Application) -> None:
                 continue
             post.set_status(PostStatus.APPROVED)
         if not settings.scheduled_posting_enabled:
-            await publish_post(application.bot, post_id)
+            await publish_post(bot, post_id)
 
 
-async def pipeline_tick(rewriter: RewriterClient, application: Application) -> None:
+async def pipeline_tick(rewriter: RewriterClient, bot: Bot) -> None:
     """Один проход пайплайна: рерайт + реклама (F21) + (модерация | авто-постинг)."""
     settings = get_settings()
     try:
-        await rewrite_new_posts(rewriter, application=application)
+        await rewrite_new_posts(rewriter, bot=bot)
         await inject_native_ad(rewriter)
         if settings.auto_post_enabled:
-            await _auto_publish_rewritten(application)
+            await _auto_publish_rewritten(bot)
         else:
-            await send_pending_for_approval(application)
+            await send_pending_for_approval(bot)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Ошибка в pipeline_tick: %s", exc)

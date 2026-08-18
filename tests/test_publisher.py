@@ -8,7 +8,7 @@ import json
 import time
 from unittest.mock import AsyncMock
 
-from telegram.error import RetryAfter, TimedOut
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 
 from tg_repost import post_targets_repo, sources_repo, targets_repo
 from tg_repost.db.models import Post, PostKind, PostStatus, PostTarget, Source, TargetGroup
@@ -22,12 +22,12 @@ from tg_repost.telegram.publisher import (
 
 
 def test_retry_after_delay_extracts_retry_after_seconds():
-    exc = RetryAfter(retry_after=30)
+    exc = TelegramRetryAfter(method=None, message="Flood control", retry_after=30)
     assert _retry_after_delay(exc) == 30
 
 
 def test_retry_after_delay_returns_none_for_unrelated_exceptions():
-    assert _retry_after_delay(TimedOut()) is None
+    assert _retry_after_delay(TelegramNetworkError(method=None, message="timed out")) is None
     assert _retry_after_delay(ValueError("network error")) is None
 
 
@@ -126,7 +126,7 @@ def _fake_bot(*, fail_chat_ids: frozenset[int] = frozenset()) -> AsyncMock:
 
     async def _send_message(chat_id, text, **kwargs):  # noqa: ARG001
         if chat_id in fail_chat_ids:
-            raise TimedOut()
+            raise TelegramNetworkError(method=None, message="timed out")
         msg = AsyncMock()
         msg.message_id = 1000
         return msg
@@ -470,7 +470,9 @@ async def test_publish_post_with_media_sends_photo_with_caption(monkeypatch, tmp
     kwargs = bot.send_photo.call_args.kwargs
     assert kwargs["chat_id"] == -100111
     assert kwargs["caption"] == "короткая подпись"
-    assert kwargs["photo"] == b"fake-jpeg-bytes"
+    # aiogram отправляет файл обёрткой, а не сырыми байтами — проверяем
+    # содержимое обёртки, иначе тест сверял бы типы, а не картинку.
+    assert kwargs["photo"].data == b"fake-jpeg-bytes"
     bot.send_message.assert_not_awaited()  # текст короче лимита подписи — хвоста нет
     with session_scope() as session:
         updated = session.get(Post, post.id)
