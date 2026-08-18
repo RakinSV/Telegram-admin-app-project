@@ -312,7 +312,7 @@ class Post(Base):
 
     # NULL для AD/DIGEST постов — у них нет канала-источника.
     source_id: Mapped[int | None] = mapped_column(
-        ForeignKey("sources.id"), nullable=True, index=True
+        ForeignKey("sources.id"), nullable=True
     )
     source: Mapped["Source | None"] = relationship(back_populates="posts")
 
@@ -809,7 +809,7 @@ class FunnelRun(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     funnel_id: Mapped[int] = mapped_column(
-        ForeignKey("funnels.id", ondelete="CASCADE"), index=True
+        ForeignKey("funnels.id", ondelete="CASCADE")
     )
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     # Индекс СЛЕДУЮЩЕГО шага. Хранить пройденный значило бы каждый раз
@@ -1188,7 +1188,7 @@ class JoinRequestRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
     user_id: Mapped[int] = mapped_column(BigInteger)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -1380,7 +1380,7 @@ class QuizAnswer(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"), index=True)
+    quiz_id: Mapped[int] = mapped_column(ForeignKey("quizzes.id"))
     user_id: Mapped[int] = mapped_column(BigInteger)
     option_index: Mapped[int] = mapped_column(Integer)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -1508,7 +1508,7 @@ class ContestEntry(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    contest_id: Mapped[int] = mapped_column(ForeignKey("contests.id"), index=True)
+    contest_id: Mapped[int] = mapped_column(ForeignKey("contests.id"))
     user_id: Mapped[int] = mapped_column(BigInteger)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -1552,7 +1552,7 @@ class PaymentEvent(Base):
         Integer, nullable=False, default=1, server_default="1"
     )
     # payment | refund | canceled
-    kind: Mapped[str] = mapped_column(String(16), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
     charge_id: Mapped[str] = mapped_column(String(128), index=True)
     user_id: Mapped[int] = mapped_column(BigInteger)
     chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -1856,7 +1856,7 @@ class ChannelSubscription(Base):
     tenant_id: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
-    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     # active | expired | canceled | refunded
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)
@@ -1958,7 +1958,6 @@ class FlowNode(Base):
     __tablename__ = "flow_nodes"
     __table_args__ = (
         UniqueConstraint("flow_id", "version", "node_key", name="uq_flow_node_key"),
-        Index("ix_flow_nodes_version", "flow_id", "version"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -2034,7 +2033,7 @@ class FlowRun(Base):
     tenant_id: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
-    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"))
     flow_version: Mapped[int] = mapped_column(Integer, nullable=False)
     bot_id: Mapped[int] = mapped_column(Integer, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)

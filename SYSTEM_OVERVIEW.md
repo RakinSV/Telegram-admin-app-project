@@ -25,7 +25,7 @@
 Это уже не скрипт, а полноценный продукт: **~43 000 строк Python (плюс
 ~33 700 строк тестов), 2700 тестов, двуязычная веб-админка (RU/EN),
 три собственных Telegram-бота плюс боты конструктора (F75),
-55 миграций БД.**
+56 миграций БД.**
 
 ---
 
@@ -217,7 +217,7 @@ FastAPI + Jinja2, двуязычная (RU/EN, переключатель в ш�
 
 ---
 
-## 6. Данные (SQLite, 52 миграции tg_repost + 3 guardian)
+## 6. Данные (SQLite, 53 миграции tg_repost + 3 guardian)
 
 **Таблицы репост-системы:** Source, TargetGroup, DiscoveredChat, Post,
 PostStat, PostTarget, PostRewriteVariant (+ `editorial_notes`), PostCoverVariant,

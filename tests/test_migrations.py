@@ -31,14 +31,6 @@ from sqlalchemy import create_engine, inspect
 
 from guardian.config import invalidate_settings_cache as invalidate_guardian_cache
 from tg_repost.config import invalidate_settings_cache
-from tg_repost.db.models import Base
-
-# Таблицы, которых в моделях нет намеренно.
-_ALEMBIC_OWN = {"alembic_version"}
-# Таблицы старого движка воронок: удалён 2026-08-18, а таблицы оставлены в базе
-# пустыми намеренно — данные никто не терял, миграции не переписывались.
-_RETIRED = {"funnels", "funnel_steps", "funnel_runs"}
-
 
 def _invalidate_caches() -> None:
     """Сбросить ОБА кэша настроек.
@@ -134,22 +126,40 @@ def test_guardian_migration_chain_applies(guardian_migrated_db):
 
 
 
-def test_redundant_indexes_are_gone_after_migration(migrated_schema):
-    """Миграция 0052 действительно снимает дубли, а не только модели их не
-    объявляют. Проверять надо именно миграцию: на стенде схема получена ею, а
-    не `create_all`, и «в моделях чисто» там ничего не значит."""
+def test_redundant_indexes_are_gone_after_migration(migrated_db):
+    """Миграции 0052 и 0053 действительно снимают дубли, а не только модели их
+    больше не объявляют. Проверять надо именно миграцию: на стенде схема
+    получена ею, а не `create_all`, и «в моделях чисто» там ничего не значит.
+
+    Спрашиваем через PRAGMA, а не через SQLAlchemy: неявные индексы уникальных
+    ограничений тот в списке не показывает, и вторая волна дублей — девять
+    штук — из-за этого нашлась только на живой базе стенда.
+    """
+    conn = sqlite3.connect(migrated_db)
     problems = []
-    for table in sorted(Base.metadata.tables):
-        indexes = [
-            (index["name"], tuple(index["column_names"]))
-            for index in migrated_schema.get_indexes(table)
-        ]
+    tables = [
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%'"
+        )
+    ]
+    for table in sorted(tables):
+        indexes = []
+        for row in conn.execute(f"PRAGMA index_list('{table}')"):
+            name = row[1]
+            columns = tuple(
+                info[2] for info in conn.execute(f"PRAGMA index_info('{name}')")
+            )
+            indexes.append((name, columns))
         for name, columns in indexes:
+            if name.startswith("sqlite_autoindex"):
+                continue
             for other, other_columns in indexes:
                 if name == other or len(other_columns) <= len(columns):
                     continue
                 if other_columns[: len(columns)] == columns:
-                    problems.append(f"{table}: {name} ⊂ {other}")
+                    problems.append(f"{table}: {name} в {other}")
+    conn.close()
 
     assert not problems, "в миграциях остались индексы-дубли: " + "; ".join(problems)
 
