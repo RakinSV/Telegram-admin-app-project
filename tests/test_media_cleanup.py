@@ -247,3 +247,78 @@ def test_missing_file_does_not_break_cleanup():
     assert result.files_deleted == 1  # остался только вариант
     with session_scope() as session:
         assert session.get(Post, post_id).media_path is None
+
+
+# --- один файл на два поста (F55) ---
+
+
+def test_shared_file_survives_while_a_live_post_needs_it():
+    """НАЙДЕНО НА ЖИВЫХ ДАННЫХ СТЕНДА: 712 путей из 1661 делят по две записи.
+
+    Повтор выстрелившего поста (F55) копирует `media_path` оригинала, а не
+    саму картинку. Оригинал к моменту уборки уже `posted` и старый, а повтор
+    ждёт модерации — удаление «по статусу оригинала» вынуло бы обложку
+    из-под поста, который прямо сейчас в очереди у владельца.
+    """
+    original_id, paths = _make_post(PostStatus.POSTED, age_days=60)
+    shared = paths[0]
+
+    with session_scope() as session:
+        repeat = Post(
+            kind=PostKind.RECYCLE, original_text="повтор",
+            status=PostStatus.REWRITTEN, media_path=shared,
+            recycled_from_id=original_id,
+        )
+        session.add(repeat)
+        session.flush()
+        repeat_id = repeat.id
+
+    cleanup_media(RETENTION)
+
+    assert _exists(shared), "обложку вынули из-под поста в очереди модерации"
+    with session_scope() as session:
+        assert session.get(Post, repeat_id).media_path == shared
+        # У самого оригинала ссылку всё равно чистим: он отработан, и держать
+        # её незачем — файл живёт по ссылке повтора.
+        assert session.get(Post, original_id).media_path is None
+
+
+def test_shared_file_goes_when_both_owners_are_done():
+    """Когда и оригинал, и повтор отработаны и выслужили срок — файл уходит.
+
+    Обратная проверка к предыдущей: защита общих файлов не должна превратиться
+    в «общие файлы не удаляются никогда», иначе 2,3 ГБ так и останутся.
+    """
+    _original_id, paths = _make_post(PostStatus.POSTED, age_days=60)
+    shared = paths[0]
+
+    with session_scope() as session:
+        session.add(Post(
+            kind=PostKind.RECYCLE, original_text="повтор",
+            status=PostStatus.REJECTED, media_path=shared,
+            created_at=datetime.now(timezone.utc) - timedelta(days=60),
+        ))
+
+    result = cleanup_media(RETENTION)
+
+    assert not _exists(shared)
+    assert result.files_deleted == 1, "один файл — один раз, а не дважды"
+
+
+def test_shared_path_is_matched_regardless_of_slashes():
+    """Один и тот же файл в базе записан по-разному: у одного поста со слэшем,
+    у другого — с обратным. Сравнение «как есть» не увидело бы, что это один
+    файл, и защита общих файлов молча не сработала бы."""
+    _original_id, paths = _make_post(PostStatus.REJECTED, age_days=60)
+    shared = paths[0]
+    other_form = shared.replace("\\", "/") if "\\" in shared else shared.replace("/", "\\")
+
+    with session_scope() as session:
+        session.add(Post(
+            kind=PostKind.SOURCE, original_text="в работе",
+            status=PostStatus.PENDING_APPROVAL, media_path=other_form,
+        ))
+
+    cleanup_media(RETENTION)
+
+    assert _exists(shared), "разная запись пути обошла защиту общих файлов"

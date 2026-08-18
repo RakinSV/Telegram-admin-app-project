@@ -17,6 +17,14 @@
 Всё остальное — новое, в рерайте, на модерации, одобренное — не трогается
 вовсе, независимо от возраста.
 
+ОДИН ФАЙЛ МОГУТ ДЕЛИТЬ ДВА ПОСТА. Повтор выстрелившего поста (F55) копирует
+`media_path` оригинала, а не саму картинку: `scheduler/recycle.py` создаёт
+новый пост с тем же путём. Оригинал при этом `posted` и старый, а повтор ждёт
+модерации — то есть удаление «по статусу оригинала» вынуло бы обложку
+из-под поста, который прямо сейчас в очереди у владельца. Замер на стенде:
+712 путей из 1661 делят по две записи. Поэтому файл удаляется, только если
+ВСЕ ссылающиеся на него записи сами идут под уборку.
+
 ССЫЛКИ В БАЗЕ ЧИСТЯТСЯ ВМЕСТЕ С ФАЙЛАМИ. Оставить путь на удалённый файл
 значило бы сломать страницу модерации битой картинкой и заставить публикацию
 падать на чтении несуществующего файла.
@@ -76,6 +84,44 @@ def _drop_file(path_text: str | None) -> int:
         return 0
 
 
+def _normalized(path_text: str) -> str:
+    """Один и тот же файл в базе может быть записан по-разному: со слэшем и с
+    обратным слэшем, относительно и абсолютно. Сравнивать надо приведённое."""
+    return os.path.normcase(os.path.abspath(str(path_text)))
+
+
+def _paths_held_by_others(session, doomed_ids: set[int]) -> set[str]:
+    """Пути, которые держат записи, НЕ идущие под уборку в этот проход.
+
+    Сюда попадают и посты в работе, и отработанные, но ещё не выслужившие
+    срок. Такой файл трогать нельзя, даже если на него ссылается уборяемый
+    пост: файл один, а хозяев у него два.
+    """
+    held: set[str] = set()
+    for (post_id, path) in session.query(Post.id, Post.media_path).filter(
+        Post.media_path.isnot(None)
+    ):
+        if post_id not in doomed_ids:
+            held.add(_normalized(path))
+    for (post_id, path) in session.query(
+        PostCoverVariant.post_id, PostCoverVariant.media_path
+    ).filter(PostCoverVariant.media_path.isnot(None)):
+        if post_id not in doomed_ids:
+            held.add(_normalized(path))
+    return held
+
+
+def _drop_shared_aware(path_text: str | None, protected: set[str]) -> int:
+    """Удалить файл, если его не держит кто-то ещё."""
+    if not path_text:
+        return 0
+    if _normalized(path_text) in protected:
+        logger.info("Уборка медиа: %s оставлен — на него ссылается живой пост",
+                    path_text)
+        return 0
+    return _drop_file(path_text)
+
+
 def cleanup_media(retention_days: int) -> CleanupResult:
     """Убрать медиа отработанных постов старше срока хранения."""
     if retention_days <= 0:
@@ -100,8 +146,14 @@ def cleanup_media(retention_days: int) -> CleanupResult:
             )
             .all()
         )
+        doomed_ids = {post.id for post in candidates}
+        protected = _paths_held_by_others(session, doomed_ids)
+
         for post in candidates:
-            freed = _drop_file(post.media_path)
+            # Ссылку чистим всегда, файл — только если его больше никто не
+            # держит. Иначе повтор в очереди модерации остался бы с битой
+            # картинкой, а публикация упала бы на чтении удалённого файла.
+            freed = _drop_shared_aware(post.media_path, protected)
             if freed:
                 files_deleted += 1
                 bytes_freed += freed
@@ -113,7 +165,7 @@ def cleanup_media(retention_days: int) -> CleanupResult:
                 .all()
             )
             for variant in variants:
-                freed = _drop_file(variant.media_path)
+                freed = _drop_shared_aware(variant.media_path, protected)
                 if freed:
                     files_deleted += 1
                     bytes_freed += freed
@@ -144,13 +196,13 @@ def _drop_orphans(now: datetime) -> tuple[int, int]:
 
     with session_scope() as session:
         referenced = {
-            os.path.normcase(os.path.abspath(str(path)))
+            _normalized(path)
             for (path,) in session.query(Post.media_path).filter(
                 Post.media_path.isnot(None)
             )
         }
         referenced |= {
-            os.path.normcase(os.path.abspath(str(path)))
+            _normalized(path)
             for (path,) in session.query(PostCoverVariant.media_path).filter(
                 PostCoverVariant.media_path.isnot(None)
             )
@@ -162,7 +214,7 @@ def _drop_orphans(now: datetime) -> tuple[int, int]:
     for path in _MEDIA_DIR.rglob("*"):
         if not path.is_file():
             continue
-        if os.path.normcase(os.path.abspath(str(path))) in referenced:
+        if _normalized(str(path)) in referenced:
             continue
         try:
             changed = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
