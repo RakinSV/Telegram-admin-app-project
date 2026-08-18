@@ -22,17 +22,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      # engage добавлен 2026-08-19: третий бот системы не проверялся в CI
+      # НИ ОДНОЙ проверкой — ни ruff, ни mypy, ни bandit. Он делит базу с
+      # tg_repost и трогает деньги (магазин, подписки), то есть цена
+      # незамеченной ошибки там ровно та же.
       - name: ruff check
-        run: ruff check tg_repost guardian
+        run: ruff check tg_repost guardian engage tests
 
       - name: mypy
-        run: mypy tg_repost guardian
+        run: mypy tg_repost guardian engage
 
       - name: pytest
         run: pytest
 
       - name: bandit (baseline в pyproject.toml)
-        run: bandit -r tg_repost guardian -c pyproject.toml
+        run: bandit -r tg_repost guardian engage -c pyproject.toml
 
       - name: pip-audit
         run: pip-audit -r requirements.txt
