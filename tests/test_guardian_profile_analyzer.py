@@ -79,9 +79,17 @@ def _premium_on(monkeypatch):
     """Включить смягчение. По умолчанию оно ВЫКЛЮЧЕНО, поэтому каждый тест,
     который его проверяет, обязан включать явно — иначе тест зелёный по
     случайности, а не по существу."""
-    settings = get_guardian_settings()
-    monkeypatch.setattr(settings, "premium_trust_enabled", True, raising=False)
-    monkeypatch.setattr(settings, "premium_trust_bonus", 2, raising=False)
+    # ПАТЧИМ ФУНКЦИЮ В МОДУЛЕ, А НЕ ОБЪЕКТ. `get_guardian_settings()` отдаёт
+    # один и тот же объект только пока таблица `bot_config` пуста; стоит там
+    # появиться строке — и каждый вызов возвращает свежую копию, а патч,
+    # поставленный на прежний объект, исчезает вместе с ним. Найдено прогоном
+    # с перемешанным порядком файлов: тест падал из-за соседа, а не из-за кода.
+    from guardian.services import profile_analyzer
+
+    settings = get_guardian_settings().model_copy(
+        update={"premium_trust_enabled": True, "premium_trust_bonus": 2},
+    )
+    monkeypatch.setattr(profile_analyzer, "get_guardian_settings", lambda: settings)
     return settings
 
 
