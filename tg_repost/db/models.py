@@ -570,7 +570,7 @@ class PostRewriteVariant(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"), index=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("posts.id"))
     variant_index: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
     tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -660,7 +660,7 @@ class AdRequest(Base):
     tenant_id: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
-    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
     # Как связаться с рекламодателем: @username, почта, что угодно. Свободный
     # текст намеренно — заявки приходят разными путями, и загонять их в
     # формат означало бы терять те, что не подошли.
@@ -1059,7 +1059,7 @@ class QueuedTask(Base):
     total_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # pending | running | done | failed | canceled
-    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Не раньше этого момента. Отложенные шаги воронок (F71) — это оно.
@@ -1554,7 +1554,7 @@ class PaymentEvent(Base):
     # payment | refund | canceled
     kind: Mapped[str] = mapped_column(String(16), index=True)
     charge_id: Mapped[str] = mapped_column(String(128), index=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
     chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Сумма в звёздах (XTR не имеет дробной части, поэтому целое).
     amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -1822,7 +1822,7 @@ class AffiliateReward(Base):
     )
     # accrual | reversal | payout
     kind: Mapped[str] = mapped_column(String(16), index=True)
-    partner_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    partner_user_id: Mapped[int] = mapped_column(BigInteger)
     # Кто заплатил. Нужен не для отчёта, а для разбора спорных случаев:
     # «за кого мне начислили» партнёр спросит первым.
     payer_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -1962,7 +1962,7 @@ class FlowNode(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"))
     # 0 — черновик, 1..N — опубликованные снимки.
     version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     node_key: Mapped[str] = mapped_column(String(32))
@@ -1987,13 +1987,17 @@ class FlowEdge(Base):
     """
 
     __tablename__ = "flow_edges"
+    # Один индекс, а не три: `ix_flow_edges_from` начинается с той же пары
+    # (flow_id, version), и поиск «все рёбра версии» идёт по его префиксу.
+    # Отдельные индексы на flow_id и на (flow_id, version) были полными
+    # дублями — платили за них каждой вставкой ребра, а планировщик из-за них
+    # выбирал индекс неустойчиво (см. миграцию 0052).
     __table_args__ = (
-        Index("ix_flow_edges_version", "flow_id", "version"),
         Index("ix_flow_edges_from", "flow_id", "version", "from_key"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"), index=True)
+    flow_id: Mapped[int] = mapped_column(ForeignKey("flows.id"))
     version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     from_key: Mapped[str] = mapped_column(String(32))
     to_key: Mapped[str] = mapped_column(String(32))
@@ -2036,7 +2040,7 @@ class FlowRun(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     current_node_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # running | done | stopped
-    status: Mapped[str] = mapped_column(String(16), default="running", index=True)
+    status: Mapped[str] = mapped_column(String(16), default="running")
     # Чего ждём: buttons | quiz | text. NULL — не ждём, идём дальше сами.
     waiting_for: Mapped[str | None] = mapped_column(String(16), nullable=True)
     wait_until: Mapped[datetime | None] = mapped_column(

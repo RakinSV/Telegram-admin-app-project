@@ -23,9 +23,9 @@
 проверяемым розыгрышем.
 
 Это уже не скрипт, а полноценный продукт: **~43 000 строк Python (плюс
-~33 700 строк тестов), 2638 тестов, двуязычная веб-админка (RU/EN),
+~33 700 строк тестов), 2700 тестов, двуязычная веб-админка (RU/EN),
 три собственных Telegram-бота плюс боты конструктора (F75),
-54 миграции БД.**
+55 миграций БД.**
 
 ---
 
@@ -217,7 +217,7 @@ FastAPI + Jinja2, двуязычная (RU/EN, переключатель в ш�
 
 ---
 
-## 6. Данные (SQLite, 51 миграция tg_repost + 3 guardian)
+## 6. Данные (SQLite, 52 миграции tg_repost + 3 guardian)
 
 **Таблицы репост-системы:** Source, TargetGroup, DiscoveredChat, Post,
 PostStat, PostTarget, PostRewriteVariant (+ `editorial_notes`), PostCoverVariant,
@@ -281,7 +281,7 @@ ModerationLog, BotConfig, DailyStats.
 - Type hints везде, async для Telethon/aiogram/HTTP, pydantic BaseSettings,
   структурное логирование, промпты в файлах (не хардкод).
 - Перед сдачей: `pytest` + `ruff` + `mypy` + `bandit` зелёные. Сейчас
-  **2638 тестов**.
+  **2700 тестов**.
 
 ---
 

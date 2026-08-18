@@ -16,7 +16,14 @@ config = context.config
 config.set_main_option("sqlalchemy.url", get_guardian_settings().guardian_database_url)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` ОБЯЗАТЕЛЕН. По умолчанию `fileConfig`
+    # выключает ВСЕ уже созданные логгеры, а не только настраивает свои. Если
+    # миграции когда-нибудь запустятся внутри процесса приложения (а в тестах
+    # они запускаются именно так), система после этого молчит: логгеры живы,
+    # но обесточены, и поломку видно только по отсутствию строк в логе.
+    # Найдено прогоном всех тестов: после тестов миграций четыре проверки,
+    # ловящие сообщения в лог, переставали видеть хоть что-то.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

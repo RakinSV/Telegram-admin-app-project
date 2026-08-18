@@ -87,13 +87,22 @@ async def _run_backup_job(keep: int) -> None:
     logger.info("Резервная копия готова: %s", archive.name)
 
 
-async def _run_media_cleanup(retention_days: int) -> None:
-    """Уборка медиа по расписанию.
+async def _run_media_cleanup(
+    retention_days: int, queue_days: int, audit_days: int,
+) -> None:
+    """Уборка старых данных по расписанию: медиа, очередь, журнал.
 
-    В отдельном потоке: обход каталога с тысячей файлов и их удаление —
+    Один проход на три вида уборки намеренно: все три — про «отработанное
+    больше не нужно», все три ночные, и три отдельные джобы означали бы три
+    места, где можно забыть про одну из них.
+
+    В отдельном потоке: обход каталога с тысячей файлов и удаление строк —
     блокирующая работа, в общем цикле она задержала бы и админку, и ботов.
+    Каждый вид в своём `try`: сбой уборки медиа не должен отменять уборку
+    очереди, и наоборот.
     """
     from tg_repost.tools.media_cleanup import cleanup_media
+    from tg_repost.webui import audit as audit_log
 
     try:
         await asyncio.to_thread(cleanup_media, retention_days)
@@ -101,6 +110,16 @@ async def _run_media_cleanup(retention_days: int) -> None:
         # Сбой уборки не должен ронять планировщик: место на диске — не повод
         # останавливать рассылки и сценарии.
         logger.exception("Уборка медиа не выполнена")
+
+    try:
+        await asyncio.to_thread(task_queue.purge_finished, queue_days)
+    except Exception:
+        logger.exception("Уборка завершённых задач не выполнена")
+
+    try:
+        await asyncio.to_thread(audit_log.purge_older_than, audit_days)
+    except Exception:
+        logger.exception("Уборка журнала действий не выполнена")
 
 
 @dataclass
@@ -321,7 +340,9 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     # них 2,3 ГБ — у отклонённых постов.
     _resync_optional_job(
         scheduler, "media_cleanup", settings.media_cleanup_enabled,
-        _run_media_cleanup, [settings.media_retention_days],
+        _run_media_cleanup, [settings.media_retention_days,
+                             settings.queue_retention_days,
+                             settings.audit_retention_days],
         CronTrigger(hour=4, minute=30),
     )
     _resync_optional_job(

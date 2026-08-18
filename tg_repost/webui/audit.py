@@ -14,6 +14,8 @@ repo-модулей (`sources_repo.py` и т.д.) — те же функции �
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from tg_repost.db.models import AuditLog
 from tg_repost.db.session import session_scope
 from tg_repost.logging_conf import get_logger
@@ -70,3 +72,29 @@ def count_audit_log() -> int:
     """Общее число записей журнала (для пагинации в `/audit`)."""
     with session_scope() as session:
         return session.query(AuditLog).count()
+
+
+def purge_older_than(days: int) -> int:
+    """Удалить записи журнала старше `days` дней. Возвращает число удалённых.
+
+    ГОРИЗОНТ, А НЕ УБОРКА ПО МЕСТУ. Замер на стенде: 47 записей за месяц —
+    журнал не создаёт никакого давления на диск, и удалять его ради места
+    незачем. Ограничение нужно для другого: система работает без присмотра
+    годами, и таблица, которая не ограничена НИЧЕМ, однажды становится
+    проблемой в самый неудобный момент.
+
+    Поэтому срок по умолчанию большой (см. `audit_retention_days`): журнал
+    подотчётности ценен именно тем, что помнит давнее. Ноль — «не чистить».
+    """
+    if days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    with session_scope() as session:
+        removed = (
+            session.query(AuditLog)
+            .filter(AuditLog.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+    if removed:
+        logger.info("Журнал действий: удалено %d записей старше %d дней", removed, days)
+    return int(removed)

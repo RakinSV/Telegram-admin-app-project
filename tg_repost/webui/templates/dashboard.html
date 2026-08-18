@@ -76,6 +76,37 @@
   </div>
 </div>
 
+{% if failed_tasks %}
+<h2>{{ t('dashboard.failed_tasks_title', count=failed_tasks_total) }}</h2>
+<p class="muted">{{ t('dashboard.failed_tasks_desc') }}</p>
+<div class="card">
+  <table>
+    <tr>
+      <th>{{ t('dashboard.col_id') }}</th>
+      <th>{{ t('dashboard.task_col_kind') }}</th>
+      <th>{{ t('dashboard.task_col_progress') }}</th>
+      <th>{{ t('dashboard.task_col_error') }}</th>
+      <th>{{ t('dashboard.task_col_when') }}</th>
+      <th></th>
+    </tr>
+    {% for task in failed_tasks %}
+    <tr>
+      <td>{{ task.id }}</td>
+      <td>{{ task.kind }}</td>
+      <td>{{ task.done_count }}{% if task.total_count %} / {{ task.total_count }}{% endif %}</td>
+      <td>{{ task.last_error[:160] }}</td>
+      <td>{{ task.updated_at.strftime("%Y-%m-%d %H:%M") if task.updated_at else "" }}</td>
+      <td>
+        <form method="post" action="/tasks/{{ task.id }}/retry">
+          <button type="submit" class="secondary">{{ t('dashboard.task_retry') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
 <h2>{{ t('dashboard.recent_posts_title') }}</h2>
 <div class="card">
   <table>

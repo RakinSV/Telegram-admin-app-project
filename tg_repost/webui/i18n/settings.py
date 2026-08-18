@@ -315,20 +315,25 @@ STRINGS: dict[str, dict[str, str]] = {
         "Requires ADMIN rights in the channel.",
     },
     "settings.group.media_cleanup.title": {
-        "ru": "Уборка медиа", "en": "Media cleanup",
+        "ru": "Уборка старых данных", "en": "Cleanup of old data",
     },
     "settings.group.media_cleanup.desc": {
         "ru": "Обложки постов, которые уже отработаны — отклонённых, "
               "опубликованных и упавших, — удаляются вместе со ссылками в "
               "базе. Остальные не трогаются вовсе. У упавших срок двойной: их "
               "можно повторить из админки, и повтор без картинки был бы "
-              "потерей, а не уборкой.",
+              "потерей, а не уборкой. Тем же проходом уходят завершённые "
+              "задачи очереди (ждущие и работающие — никогда) и записи "
+              "журнала действий старше своего срока. Ноль в любом поле — не "
+              "убирать вовсе.",
         "en": "Covers of posts that are already done — rejected, published and "
               "failed ones — are deleted together with their references in the "
               "database. Everything else is left alone entirely. Failed posts "
               "keep theirs twice as long: they can be retried from the admin "
               "panel, and a retry without the picture would be a loss, not "
-              "cleanup.",
+              "cleanup. The same pass removes finished queue tasks (waiting "
+              "and running ones — never) and audit log records past their own "
+              "horizon. Zero in any field means no cleanup at all.",
     },
     "settings.group.backup.title": {
         "ru": "Резервные копии", "en": "Backups",
@@ -1005,7 +1010,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Убирать по расписанию", "en": "Scheduled cleanup",
     },
     "settings.field.media_retention_days.label": {
-        "ru": "Хранить, дней", "en": "Keep for, days",
+        "ru": "Хранить медиа, дней", "en": "Keep media for, days",
+    },
+    "settings.field.queue_retention_days.label": {
+        "ru": "Хранить завершённые задачи, дней",
+        "en": "Keep finished tasks for, days",
+    },
+    "settings.field.audit_retention_days.label": {
+        "ru": "Хранить журнал действий, дней",
+        "en": "Keep the audit log for, days",
     },
     "settings.field.backup_enabled.label": {
         "ru": "Делать копии по расписанию", "en": "Scheduled backups",

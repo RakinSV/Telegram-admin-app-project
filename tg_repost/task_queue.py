@@ -277,3 +277,108 @@ def cancel(task_id: int) -> bool:
         task.status = STATUS_CANCELED
         task.updated_at = _utcnow()
         return True
+
+
+class FailedTaskView:
+    """Провалившаяся задача — для показа владельцу.
+
+    Отдельный тип, а не строка ORM: страница дашборда не должна держать
+    живую сессию, а обработчикам этот вид не нужен вовсе.
+    """
+
+    def __init__(self, task: QueuedTask) -> None:
+        self.id = task.id
+        self.kind = task.kind
+        self.attempts = task.attempts
+        self.done_count = task.done_count
+        self.total_count = task.total_count
+        self.last_error = task.last_error or ""
+        self.updated_at = task.updated_at
+        self.created_at = task.created_at
+
+
+def failed_tasks(limit: int = 20) -> list[FailedTaskView]:
+    """Последние провалившиеся задачи, свежие сверху.
+
+    ЗАЧЕМ ЭТО ВООБЩЕ ЕСТЬ. До 2026-08-18 на `failed` не смотрел НИКТО за
+    пределами самой очереди: ни страницы, ни уведомления, ни счётчика.
+    Через очередь идут рассылки, доставка вебхуков, ОПРОС ПЛАТЕЖЕЙ и шаги
+    сценариев — то есть молча умирала и рассылка на половине получателей, и
+    подтверждение оплаты. Снаружи это выглядело как «ничего не произошло»,
+    а это худший вид поломки: искать нечего, потому что никто не знает, что
+    что-то сломалось.
+    """
+    with session_scope() as session:
+        rows = (
+            session.query(QueuedTask)
+            .filter(QueuedTask.status == STATUS_FAILED)
+            .order_by(QueuedTask.updated_at.desc(), QueuedTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [FailedTaskView(row) for row in rows]
+
+
+def count_failed() -> int:
+    """Сколько задач лежит в `failed`."""
+    with session_scope() as session:
+        return (
+            session.query(QueuedTask)
+            .filter(QueuedTask.status == STATUS_FAILED)
+            .count()
+        )
+
+
+def retry(task_id: int) -> bool:
+    """Вернуть провалившуюся задачу в очередь с нуля попыток.
+
+    КУРСОР СОХРАНЯЕТСЯ. Рассылка, упавшая на 4312-м получателе, продолжится
+    с 4313-го: повтор с начала разослал бы сообщение первым четырём тысячам
+    во второй раз. Именно для этого курсор и живёт в строке задачи.
+
+    Повторяем только `failed`: у `done` повторять нечего, а `running` держит
+    живой воркер, и сброс попыток отдал бы её второму — получатели увидели
+    бы сообщение дважды.
+    """
+    with session_scope() as session:
+        task = session.get(QueuedTask, task_id)
+        if task is None or task.status != STATUS_FAILED:
+            return False
+        task.status = STATUS_PENDING
+        task.attempts = 0
+        task.last_error = None
+        task.run_after = _utcnow()
+        task.updated_at = _utcnow()
+        logger.info("Очередь: задача #%d (%s) возвращена в очередь вручную",
+                    task.id, task.kind)
+        return True
+
+
+def purge_finished(older_than_days: int) -> int:
+    """Удалить завершённые задачи старше срока. Возвращает число удалённых.
+
+    Удаляются ТОЛЬКО `done`, `failed` и `canceled`: у них работа кончилась.
+    `pending` и `running` не трогаются никогда, каким бы старым ни было
+    `created_at` — отложенный шаг сценария «напомнить через месяц» именно так
+    и выглядит, и удалить его значило бы потерять напоминание.
+
+    Провалившиеся тоже уходят по сроку, но только ПОСЛЕ того, как их стало
+    видно на дашборде: удалять то, чего владелец не имел возможности увидеть,
+    — это не уборка, а сокрытие.
+    """
+    if older_than_days <= 0:
+        return 0
+    cutoff = _utcnow() - timedelta(days=older_than_days)
+    with session_scope() as session:
+        removed = (
+            session.query(QueuedTask)
+            .filter(
+                QueuedTask.status.in_((STATUS_DONE, STATUS_FAILED, STATUS_CANCELED)),
+                QueuedTask.updated_at < cutoff,
+            )
+            .delete(synchronize_session=False)
+        )
+    if removed:
+        logger.info("Очередь: удалено %d завершённых задач старше %d дней",
+                    removed, older_than_days)
+    return int(removed)

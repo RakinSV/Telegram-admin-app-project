@@ -15,13 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from tg_repost import crypto
+from tg_repost import crypto, task_queue
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
     access,
     audit,
     dashboard,
+    flash,
     i18n,
     onboarding,
     runtime_state,
@@ -577,8 +578,33 @@ def _protected_router() -> APIRouter:
             # список, написанный руками, разойдётся с системой на первой же
             # фиче, а врущий чеклист хуже отсутствующего.
             "onboarding": onboarding.summary(),
+            # Упавшие задачи очереди. До 2026-08-18 на них не смотрел никто:
+            # через очередь идут рассылки, вебхуки, ОПРОС ПЛАТЕЖЕЙ и шаги
+            # сценариев, и любая из них умирала молча.
+            "failed_tasks": task_queue.failed_tasks(limit=10),
+            "failed_tasks_total": task_queue.count_failed(),
         }
         return _templates.TemplateResponse(request, "dashboard.html", context)
+
+    @router.post("/tasks/{task_id}/retry")
+    async def retry_failed_task(request: Request, task_id: int) -> Response:
+        """Вернуть упавшую задачу в очередь.
+
+        Курсор сохраняется: рассылка продолжится с места обрыва, а не разошлёт
+        сообщение первым четырём тысячам получателей во второй раз.
+        """
+        if task_queue.retry(task_id):
+            audit.record_audit("queue_task_retry", target=str(task_id))
+            flash.set_flash(
+                request, i18n.t("dashboard.task_retry_done", id=task_id), "ok",
+            )
+        else:
+            # Вид «warn», а не «ok»: у флеша всего два вида, и отказ должен
+            # выглядеть отказом.
+            flash.set_flash(
+                request, i18n.t("dashboard.task_retry_failed", id=task_id), "warn",
+            )
+        return RedirectResponse(url="/", status_code=303)
 
     @router.get("/settings", response_class=HTMLResponse)
     async def settings_page(request: Request) -> Response:

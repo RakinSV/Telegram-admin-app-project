@@ -346,6 +346,32 @@ STRINGS: dict[str, dict[str, str]] = {
     "export.error_invalid_date": {
         "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
     },
+    "dashboard.failed_tasks_title": {
+        "ru": "Упавшие задачи ({count})", "en": "Failed tasks ({count})",
+    },
+    "dashboard.failed_tasks_desc": {
+        "ru": "Через очередь идут рассылки, доставка вебхуков, опрос платежей "
+              "и шаги сценариев. Задача, исчерпавшая попытки, останавливается "
+              "здесь и ждёт решения. Повтор продолжает работу С МЕСТА ОБРЫВА, "
+              "а не с начала.",
+        "en": "The queue carries broadcasts, webhook delivery, payment polling "
+              "and scenario steps. A task that ran out of attempts stops here "
+              "and waits for a decision. Retry continues FROM WHERE IT STOPPED, "
+              "not from the beginning.",
+    },
+    "dashboard.task_col_kind": {"ru": "Вид", "en": "Kind"},
+    "dashboard.task_col_progress": {"ru": "Сделано", "en": "Done"},
+    "dashboard.task_col_error": {"ru": "Ошибка", "en": "Error"},
+    "dashboard.task_col_when": {"ru": "Когда", "en": "When"},
+    "dashboard.task_retry": {"ru": "Повторить", "en": "Retry"},
+    "dashboard.task_retry_done": {
+        "ru": "Задача #{id} возвращена в очередь — продолжит с места обрыва.",
+        "en": "Task #{id} is back in the queue — it will continue where it stopped.",
+    },
+    "dashboard.task_retry_failed": {
+        "ru": "Задачу #{id} повторить нельзя: она уже не в состоянии «упала».",
+        "en": "Task #{id} cannot be retried: it is no longer in the failed state.",
+    },
     "export.media_section_title": {
         "ru": "Уборка медиа", "en": "Media cleanup",
     },

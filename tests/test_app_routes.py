@@ -1544,6 +1544,50 @@ def test_reject_all_leaves_non_pending_posts_alone():
         assert session.get(Post, posted_id).status == PostStatus.POSTED
 
 
+def test_failed_task_is_visible_on_the_dashboard_and_retryable():
+    """Поломка, которую не видно, — это не поломка, а сюрприз. Через очередь
+    идут рассылки, вебхуки, опрос платежей и шаги сценариев; до 2026-08-18 на
+    статус failed не смотрел никто за пределами самой очереди."""
+    from tg_repost import task_queue
+    from tg_repost.db.models import QueuedTask
+
+    client = _client()
+    _bootstrap(client)
+    with session_scope() as session:
+        task = QueuedTask(
+            kind="broadcast", payload="{}", status=task_queue.STATUS_FAILED,
+            cursor="4312", done_count=4312, attempts=3,
+            last_error="Telegram: chat not found",
+        )
+        session.add(task)
+        session.flush()
+        task_id = task.id
+
+    page = client.get("/")
+    assert "Telegram: chat not found" in page.text, "причина падения не видна"
+    assert f"/tasks/{task_id}/retry" in page.text, "нечем перезапустить"
+
+    response = client.post(f"/tasks/{task_id}/retry", follow_redirects=False)
+    assert response.status_code == 303
+
+    with session_scope() as session:
+        again = session.get(QueuedTask, task_id)
+        assert again.status == task_queue.STATUS_PENDING
+        assert again.cursor == "4312", "повтор пошёл бы с начала рассылки"
+        session.delete(again)
+
+
+def test_dashboard_hides_the_failed_block_when_nothing_failed():
+    """Пустой раздел «Упавшие задачи» на каждом заходе учит не смотреть в
+    него вовсе — и в день настоящей поломки его тоже не заметят."""
+    client = _client()
+    _bootstrap(client)
+
+    page = client.get("/")
+
+    assert "/tasks/" not in page.text
+
+
 def test_media_cleanup_button_is_reachable_from_the_page():
     """Кнопка на странице обслуживания, а не только джоба в планировщике:
     место на диске кончается не по расписанию, и ждать до 04:30 UTC ради
