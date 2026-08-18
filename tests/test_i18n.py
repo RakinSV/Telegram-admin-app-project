@@ -162,6 +162,22 @@ def test_lang_switch_rejects_open_redirect_via_next():
     assert r.headers["location"] == "/"  # внешний next отклонён, редирект на "/"
 
 
+def _without_log_output(html: str) -> str:
+    """Убрать со страницы блок с СОДЕРЖИМЫМ ЛОГА.
+
+    `/logs` показывает произвольный текст записей, а `t()` рисует ненайденный
+    ключ как `[dotted.key]`. Любая строка лога с точкой в квадратных скобках —
+    доменное имя, имя файла — выглядит для проверки ровно как забытый перевод.
+    Так и случилось: `[guardiantest.org]` из записи соседнего теста роняло
+    проверку, и падение зависело от порядка тестов, то есть выглядело
+    случайным.
+
+    Вырезается ТОЛЬКО вывод лога: подписи самой страницы остаются под
+    проверкой, иначе сторож потерял бы зубы вместо ложной тревоги.
+    """
+    return re.sub(r'<pre id="log-view".*?</pre>', "", html, flags=re.DOTALL)
+
+
 @pytest.mark.parametrize("lang", ["ru", "en"])
 def test_no_unresolved_translation_keys_across_pages(lang):
     """Смоук: заходим на широкий набор авторизованных страниц на каждом
@@ -183,7 +199,7 @@ def test_no_unresolved_translation_keys_across_pages(lang):
     for path in paths:
         r = client.get(path)
         assert r.status_code == 200, (path, r.status_code)
-        found = _MISSING_KEY_RE.findall(r.text)
+        found = _MISSING_KEY_RE.findall(_without_log_output(r.text))
         assert not found, f"{path} ({lang}) has unresolved translation keys: {found}"
 
 
