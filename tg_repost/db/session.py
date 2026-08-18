@@ -76,7 +76,7 @@ if _database_url.startswith("sqlite") and ":memory:" not in _database_url:
     )
 
 
-def apply_sqlite_pragmas(dbapi_connection) -> None:  # noqa: ANN001
+def apply_sqlite_pragmas(dbapi_connection) -> None:
     """WAL и разумные ожидания блокировки — на каждое соединение.
 
     ЗАЧЕМ WAL. Файл базы пишут ДВА независимых процесса: `tg_repost` и

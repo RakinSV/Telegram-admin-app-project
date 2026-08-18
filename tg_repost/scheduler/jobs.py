@@ -420,5 +420,5 @@ async def pipeline_tick(rewriter: RewriterClient, bot: Bot) -> None:
             await _auto_publish_rewritten(bot)
         else:
             await send_pending_for_approval(bot)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Ошибка в pipeline_tick: %s", exc)

@@ -51,7 +51,7 @@ def schedule(order_id: int, *, delay_seconds: int = INTERVAL_SECONDS) -> int:
     )
 
 
-async def handle_check(view) -> str | None:  # noqa: ANN001 — task_queue.TaskView
+async def handle_check(view) -> str | None:  # task_queue.TaskView
     """Один проход опроса по одному заказу."""
     from datetime import datetime, timezone
 

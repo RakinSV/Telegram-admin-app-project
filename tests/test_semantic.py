@@ -13,7 +13,7 @@ def test_pack_unpack_roundtrip():
     vec = [0.1, -0.5, 3.14, 0.0]
     restored = unpack_embedding(pack_embedding(vec))
     assert len(restored) == len(vec)
-    for a, b in zip(vec, restored):
+    for a, b in zip(vec, restored, strict=True):
         assert math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
 
 

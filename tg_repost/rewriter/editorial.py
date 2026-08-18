@@ -118,7 +118,10 @@ def _extract_claims(text: str) -> list[str]:
             capturing = True
             continue
         if capturing:
-            item = line.strip(" -•\t•")
+            # Набор СИМВОЛОВ, а не строка: снимаем пробелы, дефисы, буллеты
+            # и табы в любом порядке. ruff предупреждает про многосимвольный
+            # strip как про частую путаницу — здесь это ровно то, что нужно.
+            item = line.strip(" -•\t•")  # noqa: B005
             if not item:
                 break
             claims.append(item)
@@ -189,7 +192,7 @@ async def editorial_rewrite(
                 editor_prompt, temperature=_EDITOR_TEMPERATURE,
             )
             total_tokens += review.total_tokens
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if is_billing_error(exc):
                 raise
             logger.warning("Рецензия редактора не удалась (%s) — оставляю черновик", exc)
@@ -218,7 +221,7 @@ async def editorial_rewrite(
             )
             revised = await client.rewrite_with_prompt(revise_prompt)
             total_tokens += revised.total_tokens
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if is_billing_error(exc):
                 raise
             logger.warning("Правка по замечаниям не удалась (%s) — оставляю прошлый вариант", exc)

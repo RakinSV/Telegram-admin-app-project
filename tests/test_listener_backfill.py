@@ -41,7 +41,7 @@ def _fake_client(chat: _FakeChat, messages: list[_FakeMessage]) -> AsyncMock:
     client = AsyncMock()
     client.get_entity = AsyncMock(return_value=chat)
 
-    async def _iter_messages(entity, limit):  # noqa: ARG001
+    async def _iter_messages(entity, limit):
         for m in messages:
             yield m
 

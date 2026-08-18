@@ -42,7 +42,7 @@ STOPPED = "Хорошо, остановил. Напишите /start, когда
 STALE_BUTTON = "Этот шаг уже пройден"
 
 
-def _bot_id(bot) -> int | None:  # noqa: ANN001 — aiogram Bot
+def _bot_id(bot) -> int | None:  # aiogram Bot
     bot_id = flow_bots.bot_id_of(bot)
     if bot_id is None:
         # Экземпляр не из реестра: опрос запущен помимо `flow_bots`, и связать
@@ -57,7 +57,7 @@ def _user_id(message: Message) -> int | None:
     return message.from_user.id if message.from_user is not None else None
 
 
-async def _launch(message: Message, bot, flow_id: int, user_id: int) -> None:  # noqa: ANN001
+async def _launch(message: Message, bot, flow_id: int, user_id: int) -> None:
     run_id = flow_engine.start(flow_id, user_id)
     if run_id is None:
         await message.answer(ALREADY_INSIDE)
@@ -66,7 +66,7 @@ async def _launch(message: Message, bot, flow_id: int, user_id: int) -> None:  #
 
 
 @router.callback_query(F.data.startswith(f"{flow_engine.CALLBACK_PREFIX}:"))
-async def on_button(callback: CallbackQuery, bot) -> None:  # noqa: ANN001
+async def on_button(callback: CallbackQuery, bot) -> None:
     """Нажатие кнопки сценария.
 
     Кнопка ГАСИТСЯ ВСЕГДА, чем бы дело ни кончилось: непогашенная оставляет у
@@ -84,7 +84,7 @@ async def on_button(callback: CallbackQuery, bot) -> None:  # noqa: ANN001
 
 
 @router.message(CommandStart())
-async def on_start(message: Message, bot) -> None:  # noqa: ANN001
+async def on_start(message: Message, bot) -> None:
     bot_id = _bot_id(bot)
     user_id = _user_id(message)
     if bot_id is None or user_id is None:
@@ -98,7 +98,7 @@ async def on_start(message: Message, bot) -> None:  # noqa: ANN001
 
 
 @router.message(F.text)
-async def on_text(message: Message, bot) -> None:  # noqa: ANN001
+async def on_text(message: Message, bot) -> None:
     """Текст: сначала как ОТВЕТ на вопрос, потом как повод начать.
 
     Порядок именно такой. Человек, которого спросили «как вас зовут», может

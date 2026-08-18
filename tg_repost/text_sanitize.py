@@ -20,7 +20,7 @@ _ZERO_WIDTH_RANGE = range(0x200B, 0x200F + 1)  # zero-width space/joiners, LTR/R
 _BIDI_OVERRIDE_RANGE = range(0x202A, 0x202E + 1)  # LRE/RLE/PDF/LRO/RLO
 _BIDI_ISOLATE_RANGE = range(0x2066, 0x2069 + 1)  # LRI/RLI/FSI/PDI
 _ASCII_CONTROL_RANGE = [
-    c for c in range(0x00, 0x20) if c not in (0x09, 0x0A, 0x0D)  # оставляем tab/LF/CR
+    c for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)  # оставляем tab/LF/CR
 ]
 
 _DANGEROUS_CHARS = frozenset(

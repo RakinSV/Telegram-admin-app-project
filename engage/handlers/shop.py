@@ -46,7 +46,7 @@ def _provider_token() -> str:
     return get_engage_settings().shop_provider_token
 
 
-def format_shipping(payment) -> str | None:  # noqa: ANN001 — SuccessfulPayment
+def format_shipping(payment) -> str | None:  # SuccessfulPayment
     """Адрес доставки одной строкой для карточки заказа.
 
     Хранится текстом, а не разобранным на поля: сортировать по индексу нам
@@ -94,7 +94,7 @@ async def on_shop(message: Message) -> None:
 
 
 @router.callback_query(F.data.startswith("buy:"))
-async def on_buy(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
+async def on_buy(callback, bot: Bot) -> None:  # CallbackQuery
     """Показать способы оплаты. Счёт выставляется следующим шагом.
 
     ДВА СПОСОБА ПРЕДЛАГАЮТСЯ, КОГДА ОБА НАСТРОЕНЫ. Выбирать за человека
@@ -135,7 +135,7 @@ async def on_buy(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
 
 
 @router.callback_query(F.data.startswith("pay:card:"))
-async def on_pay_card(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQuery
+async def on_pay_card(callback, bot: Bot) -> None:  # CallbackQuery
     await callback.answer()
     try:
         product_id = int(callback.data.rsplit(":", 1)[1])
@@ -145,7 +145,7 @@ async def on_pay_card(callback, bot: Bot) -> None:  # noqa: ANN001 — CallbackQ
 
 
 @router.callback_query(F.data.startswith("pay:crypto:"))
-async def on_pay_crypto(callback) -> None:  # noqa: ANN001 — CallbackQuery
+async def on_pay_crypto(callback) -> None:  # CallbackQuery
     await callback.answer()
     try:
         product_id = int(callback.data.rsplit(":", 1)[1])
@@ -154,7 +154,7 @@ async def on_pay_crypto(callback) -> None:  # noqa: ANN001 — CallbackQuery
     await _send_crypto_invoice(callback, product_id)
 
 
-async def _send_crypto_invoice(callback, product_id: int) -> None:  # noqa: ANN001
+async def _send_crypto_invoice(callback, product_id: int) -> None:
     """Выставить криптосчёт и завести неоплаченный заказ.
 
     ЗАКАЗ СОЗДАЁТСЯ ПОСЛЕ УСПЕШНОГО СЧЁТА, а не до: заказ без счёта — это
@@ -210,7 +210,7 @@ async def _send_crypto_invoice(callback, product_id: int) -> None:  # noqa: ANN0
     )
 
 
-async def _send_card_invoice(callback, bot: Bot, product_id: int) -> None:  # noqa: ANN001
+async def _send_card_invoice(callback, bot: Bot, product_id: int) -> None:
     product = shop.get_product(product_id)
     if product is None or not product.is_active or not product.in_stock:
         await callback.message.answer("Этого товара уже нет.")

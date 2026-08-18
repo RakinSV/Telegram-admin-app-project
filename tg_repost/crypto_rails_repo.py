@@ -182,7 +182,7 @@ def rail_for_product(product_id: int) -> RailView | None:
         return _view(row) if row is not None else None
 
 
-def build(rail_id: int):  # noqa: ANN201 — тип адаптера объявлен протоколом
+def build(rail_id: int):  # тип адаптера объявлен протоколом
     """Собрать рабочий адаптер: расшифровать ключ и отдать объект."""
     from tg_repost.crypto_rails.adapters import build_rail
 
@@ -194,7 +194,7 @@ def build(rail_id: int):  # noqa: ANN201 — тип адаптера объяв�
 
     try:
         credential = crypto.decrypt(encrypted, _master_key())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Не только `InvalidToken`: повреждённая на уровне байт запись даёт
         # `binascii.Error`/`UnicodeEncodeError`, а вызывающий код ждёт
         # `InvalidRail` — иначе владелец получает 500 вместо объяснения на

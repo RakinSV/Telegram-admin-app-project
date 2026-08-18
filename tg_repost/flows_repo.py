@@ -76,8 +76,8 @@ ALL_CONDITIONS = (
 # переход «по верному ответу» из узла с картинкой — это не опечатка, а
 # ветка, которая никогда не сработает, и человек застрянет.
 _ALLOWED: dict[str, tuple[str, ...]] = {
-    **{kind: (ALWAYS,) for kind in SHOW_KINDS},
-    **{kind: (ALWAYS,) for kind in DO_KINDS},
+    **dict.fromkeys(SHOW_KINDS, (ALWAYS,)),
+    **dict.fromkeys(DO_KINDS, (ALWAYS,)),
     WAIT_TIMER: (ALWAYS,),
     ASK_BUTTONS: (ON_BUTTON, ON_TIMEOUT),
     ASK_QUIZ: (ON_CORRECT, ON_WRONG, ON_TIMEOUT),

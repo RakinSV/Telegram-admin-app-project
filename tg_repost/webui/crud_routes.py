@@ -1193,7 +1193,10 @@ def build_crud_router() -> APIRouter:
                 status_code=400,
             )
         finally:
-            tmp_path.unlink(missing_ok=True)
+            # Удаление ОДНОГО временного файла: микросекунды, выносить его в
+            # отдельный поток дороже самого действия. Настоящая долгая работа
+            # (распаковка архива) уже уехала в asyncio.to_thread выше.
+            tmp_path.unlink(missing_ok=True)  # noqa: ASYNC240
         audit.record_audit("full_backup_restore", detail=f"{len(restored)} файлов")
         return _templates.TemplateResponse(
             request, "export.html",

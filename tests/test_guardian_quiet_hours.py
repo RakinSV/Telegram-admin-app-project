@@ -95,10 +95,16 @@ def test_schedule_handles_window_crossing_midnight():
 
     for hour, expected in ((23, True), (2, True), (7, True), (8, False), (12, False), (21, False)):
 
+        # Час привязан ЯВНО, а не взят из области цикла: замыкание на
+        # переменной цикла работает здесь по случайности — класс используется
+        # в той же итерации. Стоит кому-то отложить вызов, и все шесть
+        # проверок молча начнут проверять последний час.
         class _FixedDatetime(original):
+            fixed_hour = hour
+
             @classmethod
             def now(cls, tz=None):
-                return datetime.now(timezone.utc).replace(hour=hour)
+                return datetime.now(timezone.utc).replace(hour=cls.fixed_hour)
 
         bot_module.datetime = _FixedDatetime
         try:

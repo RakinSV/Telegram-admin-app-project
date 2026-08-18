@@ -124,7 +124,7 @@ def test_resolve_target_labels_empty_when_nowhere_to_post():
 def _fake_bot(*, fail_chat_ids: frozenset[int] = frozenset()) -> AsyncMock:
     bot = AsyncMock()
 
-    async def _send_message(chat_id, text, **kwargs):  # noqa: ARG001
+    async def _send_message(chat_id, text, **kwargs):
         if chat_id in fail_chat_ids:
             raise TelegramNetworkError(method=None, message="timed out")
         msg = AsyncMock()
@@ -265,7 +265,7 @@ async def test_publish_post_sends_to_multiple_targets_concurrently():
 
     bot = AsyncMock()
 
-    async def _slow_send(chat_id, text, **kwargs):  # noqa: ARG001
+    async def _slow_send(chat_id, text, **kwargs):
         await asyncio.sleep(0.2)
         msg = AsyncMock()
         msg.message_id = 1000

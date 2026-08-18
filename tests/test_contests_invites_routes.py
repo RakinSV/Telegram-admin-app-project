@@ -53,13 +53,53 @@ def target_chat() -> int:
         return group.chat_id
 
 
-@pytest.fixture(autouse=True)
-def _clean():
-    yield
+def _wipe() -> None:
+    """Убрать всё, на что смотрят проверки ниже."""
+    from tg_repost.db.models import ContestEntry, JoinRequestRecord
+
     with session_scope() as session:
+        session.query(ContestEntry).delete()
         session.query(Contest).delete()
+        session.query(JoinRequestRecord).delete()
         session.query(InviteLink).delete()
         session.query(TargetGroup).filter(TargetGroup.chat_id == -100777000).delete()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_env(tmp_path, monkeypatch):
+    """Тот же приём изоляции, что в test_app_routes.py и test_i18n.py.
+
+    БЕЗ НЕГО ФАЙЛ ЗАВИСИТ ОТ СОСЕДА. Админ создаётся один раз: если он уже
+    заведён другим файлом с ДРУГИМ паролем, `/setup` ничего не меняет, а вход
+    отдаёт 401 — и падают проверки, которые про вход вообще не про то.
+    Найдено прогоном с перемешанным порядком файлов.
+    """
+    from tg_repost.db.models import AdminUser
+    from tg_repost.webui import auth, setup_token as setup_token_module
+
+    monkeypatch.chdir(tmp_path)
+    with session_scope() as session:
+        session.query(AdminUser).delete()
+    setup_token_module._token = None
+    auth._failed_attempts.clear()
+    yield
+    setup_token_module._token = None
+    auth._failed_attempts.clear()
+
+
+@pytest.fixture(autouse=True)
+def _clean():
+    """Чистим ДО и ПОСЛЕ.
+
+    Только «после» — недостаточно, и это не теория: прогон с перемешанным
+    порядком файлов уронил пять проверок, потому что конкурсы, заведённые
+    другим файлом, никто не убирал, а здесь стоит `list_contests() == []`.
+    Тест, зависящий от соседа, — это тест, который однажды покраснеет без
+    единой правки в коде.
+    """
+    _wipe()
+    yield
+    _wipe()
 
 
 def _form(**overrides) -> dict:
@@ -482,4 +522,3 @@ def test_join_request_decision_goes_to_telegram(action, method, approved, target
     getattr(bot, method).assert_awaited_once()
     with session_scope() as session:
         assert session.get(JoinRequestRecord, request_id).status == approved
-        session.query(JoinRequestRecord).delete()

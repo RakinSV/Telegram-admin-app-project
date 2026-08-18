@@ -199,7 +199,7 @@ def pick_winners(seed: str, participant_ids: list[int], winners_count: int) -> l
     # сам seed: он берётся из `secrets.token_hex` при создании конкурса, до
     # появления участников, и публикуется заранее. Подобрать его под нужного
     # победителя нельзя.
-    return random.Random(seed).sample(ordered, count)  # noqa: S311  # nosec B311
+    return random.Random(seed).sample(ordered, count)  # nosec B311
 
 
 def draw_contest(contest_id: int, eligible_user_ids: list[int] | None = None) -> dict | None:

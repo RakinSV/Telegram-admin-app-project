@@ -267,7 +267,7 @@ def _record_failure(webhook_id: int, error: str) -> None:
             )
 
 
-async def handle_delivery(view) -> str | None:  # noqa: ANN001 — task_queue.TaskView
+async def handle_delivery(view) -> str | None:  # task_queue.TaskView
     """Обработчик очереди: доставить одно событие в одну подписку."""
     import httpx
 

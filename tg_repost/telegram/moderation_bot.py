@@ -72,7 +72,7 @@ logger = get_logger(__name__)
 router = Router(name="moderation")
 
 
-def _is_owner(event) -> bool:  # noqa: ANN001 — Message | CallbackQuery
+def _is_owner(event) -> bool:  # Message | CallbackQuery
     """Только владелец. Проверка ЧИТАЕТ НАСТРОЙКИ НА КАЖДОЕ СОБЫТИЕ, а не при
     сборке роутера: идентификатор владельца меняется в админке, и фильтр,
     запомнивший его при старте, продолжал бы пускать прежнего до перезапуска

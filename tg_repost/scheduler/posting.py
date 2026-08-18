@@ -74,7 +74,7 @@ async def publish_slot(bot: Bot) -> None:
     for post_id in post_ids:
         try:
             await publish_post(bot, post_id)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Изоляция ошибок: publish_post сам ловит сбои самой отправки
             # (Telegram API), но это страхует от неожиданных исключений ДО
             # них (например, в resolve_targets_for_post) — иначе один плохой

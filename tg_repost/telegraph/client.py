@@ -37,7 +37,7 @@ async def _call(method: str, payload: dict) -> dict:
             response = await client.post(f"{_API}/{method}", json=payload)
             response.raise_for_status()
             data = response.json()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise TelegraphError(f"{method}: сеть/протокол — {exc}") from exc
 
     if not data.get("ok"):

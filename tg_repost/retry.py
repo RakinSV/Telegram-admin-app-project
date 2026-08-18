@@ -49,7 +49,7 @@ async def retry_async(
     for attempt in range(1, attempts + 1):
         try:
             return await func()
-        except exceptions as exc:  # noqa: BLE001 — намеренно широкий по умолчанию
+        except exceptions as exc:  # намеренно широкий по умолчанию
             last_exc = exc
             # Ошибка МОЖЕТ быть сбоем подключения через BOT_API_PROXY_URL
             # (socks5://[user:pass@]host:port) — httpx/socksio не гарантируют,

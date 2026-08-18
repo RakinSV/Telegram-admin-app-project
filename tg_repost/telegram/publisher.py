@@ -186,7 +186,11 @@ def resolve_target_labels_for_post(post_id: int) -> list[str]:
             .filter(TargetGroup.chat_id.in_(chat_ids))
             .all()
         )
-        titles: dict[int, str | None] = {chat_id: title for chat_id, title in rows}
+        # Не `dict(rows)`, хотя ruff и предлагает: строки SQLAlchemy —
+        # это `Row`, а не кортеж, и mypy такой вызов не принимает.
+        titles: dict[int, str | None] = {  # noqa: C416
+            chat_id: title for chat_id, title in rows
+        }
     return [titles.get(cid) or str(cid) for cid in chat_ids]
 
 

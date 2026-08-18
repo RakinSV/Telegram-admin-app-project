@@ -49,7 +49,7 @@ if _database_url.startswith("sqlite") and ":memory:" not in _database_url:
     )
 
 
-def apply_sqlite_pragmas(dbapi_connection) -> None:  # noqa: ANN001
+def apply_sqlite_pragmas(dbapi_connection) -> None:
     """WAL — по той же причине, что в `tg_repost/db/session.py`.
 
     Базу Guardian тоже пишут ДВА процесса: сам Guardian и веб-админка

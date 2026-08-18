@@ -121,7 +121,7 @@ def test_guardian_bot_token_saves_and_masks_even_though_not_a_settings_field():
 def test_every_secret_field_belongs_to_exactly_one_settings_group():
     from tg_repost.config import SECRET_FIELD_NAMES
 
-    counts: dict[str, int] = {key: 0 for key in SECRET_FIELD_NAMES}
+    counts: dict[str, int] = dict.fromkeys(SECRET_FIELD_NAMES, 0)
     for group in settings_store.SETTINGS_GROUPS:
         for key in group.secret_keys:
             assert key in counts, f"'{key}' в SETTINGS_GROUPS, но не в SECRET_FIELD_NAMES"

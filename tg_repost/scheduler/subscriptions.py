@@ -23,7 +23,7 @@ from tg_repost.logging_conf import get_logger
 logger = get_logger(__name__)
 
 
-async def revoke_expired_subscriptions(bot) -> int:  # noqa: ANN001 — Bot из aiogram/PTB
+async def revoke_expired_subscriptions(bot) -> int:  # Bot из aiogram/PTB
     """Закрыть доступ всем, у кого подписка кончилась. Возвращает число."""
     due = subs.due_for_revoke()
     if not due:

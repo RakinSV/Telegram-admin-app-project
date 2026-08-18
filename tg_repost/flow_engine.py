@@ -185,7 +185,7 @@ def start(flow_id: int, user_id: int) -> int | None:
 # --- обход ---
 
 
-async def advance(run_id: int, bot) -> None:  # noqa: ANN001 — aiogram Bot
+async def advance(run_id: int, bot) -> None:  # aiogram Bot
     """Пройти по графу до остановки, конца или предохранителя."""
     for _ in range(MAX_STEPS):
         with session_scope() as session:
@@ -260,7 +260,7 @@ def _remember(run_id: int, name: str, value: Any) -> None:
         run.variables_json = json.dumps(data, ensure_ascii=False)
 
 
-async def _send(bot, user_id: int, node: flows.NodeView) -> None:  # noqa: ANN001
+async def _send(bot, user_id: int, node: flows.NodeView) -> None:
     """Отправить содержимое узла «показать».
 
     Медиа уходит по `file_id`: файл загружен один раз, дальше Telegram отдаёт
@@ -282,7 +282,7 @@ async def _send(bot, user_id: int, node: flows.NodeView) -> None:  # noqa: ANN00
             await bot.send_document(
                 user_id, config.get("file_id"), caption=config.get("caption"),
             )
-    except Exception as exc:  # noqa: BLE001 — разбираем по тексту
+    except Exception as exc:  # разбираем по тексту
         if "blocked" in str(exc).lower():
             raise _PersonUnreachable from exc
         raise
@@ -416,7 +416,7 @@ def _award_points(*, user_id: int, chat_id: int, points: int) -> None:
 async def _run_node(
     *,
     run_id: int,
-    bot,  # noqa: ANN001
+    bot,
     user_id: int,
     graph: flows.Graph,
     node: flows.NodeView,
@@ -503,7 +503,7 @@ def _schedule(run_id: int, hours: int) -> None:
 
 
 async def handle_button(
-    run_id: int, node_key: str, value: str, bot, *,  # noqa: ANN001
+    run_id: int, node_key: str, value: str, bot, *,
     by_user_id: int | None = None,
 ) -> bool:
     """Нажатие кнопки. `False` — нажатие не к месту и проигнорировано.
@@ -580,7 +580,7 @@ async def handle_button(
     return True
 
 
-async def handle_text(run_id: int, text: str, bot) -> bool:  # noqa: ANN001
+async def handle_text(run_id: int, text: str, bot) -> bool:
     """Свободный ответ текстом."""
     with session_scope() as session:
         run = session.get(FlowRun, run_id)
@@ -676,7 +676,7 @@ def stop_by_person(run_id: int) -> None:
 # --- просроченное ожидание ---
 
 
-async def sweep_timeouts(bot_for) -> int:  # noqa: ANN001 — callable(bot_id) -> Bot | None
+async def sweep_timeouts(bot_for) -> int:  # callable(bot_id) -> Bot | None
     """Разобрать прохождения, у которых вышел срок ответа.
 
     Возвращает число разобранных. Без этого прохождения зависают навсегда: у
@@ -736,7 +736,7 @@ async def sweep_timeouts(bot_for) -> int:  # noqa: ANN001 — callable(bot_id) -
     return handled
 
 
-async def handle_timer_task(view) -> str | None:  # noqa: ANN001 — task_queue.TaskView
+async def handle_timer_task(view) -> str | None:  # task_queue.TaskView
     """Обработчик очереди: у прохождения истёк таймер.
 
     ЖДЁТ ЛИ ПРОХОЖДЕНИЕ ТАЙМЕРА — проверяется здесь, и это не формальность.
