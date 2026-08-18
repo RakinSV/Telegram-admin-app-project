@@ -56,3 +56,50 @@ def _reset_login_lockout():
     auth._failed_attempts.clear()
     yield
     auth._failed_attempts.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_runtime_singletons():
+    """Живые компоненты и их статусы — на каждый тест свои.
+
+    ПОЧЕМУ ЭТО ЗДЕСЬ. `supervisor._components` и `runtime_state._state` —
+    переменные уровня модуля, одни на весь процесс: система по устройству
+    однопроцессная, и для боя это правильно. Но в тестах это означает, что
+    подставленный бот или поднятый планировщик переживают файл и достаются
+    следующему.
+
+    Найдено прогонами с перемешанным порядком файлов: проверка «без
+    запущенных компонентов кнопка отвечает понятной ошибкой» падала, потому
+    что компоненты были запущены — соседним файлом, десять минут назад.
+    Такое падение выглядит как поломка на ровном месте и ищется дольше всего.
+    """
+    from tg_repost.webui import runtime_state, supervisor
+
+    original_components = supervisor._components
+    original_state = dict(runtime_state._state)
+    supervisor._components = supervisor.RunningComponents()
+    yield
+    supervisor._components = original_components
+    runtime_state._state.clear()
+    runtime_state._state.update(original_state)
+
+
+@pytest.fixture(autouse=True)
+def _clean_audit_log():
+    """Журнал действий — на каждый тест свой.
+
+    ЕГО НИКТО НЕ ЧИСТИЛ, и записи копились через все файлы. Беда не в объёме:
+    `list_audit_log()` отдаёт максимум 200 строк, и как только журнал
+    переполнялся, проверка вида «записей стало больше, чем было» переставала
+    работать — 200 не больше 200.
+
+    Найдено прогонами с перемешанным порядком файлов: проверка записи факта
+    показа секрета падала на двух сидах из трёх, причём в самом коде показа
+    секрета ничего не менялось.
+    """
+    from tg_repost.db.models import AuditLog
+    from tg_repost.db.session import session_scope
+
+    with session_scope() as session:
+        session.query(AuditLog).delete()
+    yield
