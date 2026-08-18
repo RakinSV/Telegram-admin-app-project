@@ -49,3 +49,43 @@ async def test_unconfigured_guardian_does_not_start_polling(_unconfigured):
         await guardian_bot.main()
 
     assert dispatcher.call_count == 0
+
+
+# --- то же самое для Engage ---
+
+
+@pytest.fixture
+def _unconfigured_engage():
+    from engage import bot as engage_bot
+
+    settings = engage_bot.get_engage_settings().model_copy(
+        update={"engage_bot_token": ""},
+    )
+    with patch.object(engage_bot, "get_engage_settings", return_value=settings):
+        yield settings
+
+
+async def test_unconfigured_engage_waits_before_exiting(_unconfigured_engage):
+    """Третий бот — та же политика перезапуска, та же беда с логом.
+
+    Engage вдобавок ДОЛГО не был развёрнут на стенде вовсе, и цикл
+    перезапусков был бы первым, что владелец там увидит.
+    """
+    from engage import bot as engage_bot
+
+    sleeper = AsyncMock()
+    with patch.object(engage_bot.asyncio, "sleep", sleeper):
+        await engage_bot.main()
+
+    assert sleeper.await_count == 1
+    assert sleeper.await_args.args[0] >= 30
+
+
+async def test_unconfigured_engage_does_not_build_a_bot(_unconfigured_engage):
+    from engage import bot as engage_bot
+
+    with patch.object(engage_bot.asyncio, "sleep", AsyncMock()), \
+            patch.object(engage_bot, "_build_bot") as build:
+        await engage_bot.main()
+
+    assert build.call_count == 0

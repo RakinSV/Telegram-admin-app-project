@@ -75,6 +75,12 @@ def build_reply_bot() -> Bot | None:
     return _build_bot(settings.engage_bot_token)
 
 
+# Сколько ждать перед новой попыткой, если Engage не настроен. Минута:
+# достаточно редко, чтобы лог оставался читаемым, и достаточно часто, чтобы
+# введённый в админке токен подхватился сам.
+_UNCONFIGURED_WAIT_SECONDS = 60
+
+
 async def main() -> None:
     setup_logging()
     settings = get_engage_settings()
@@ -84,8 +90,14 @@ async def main() -> None:
         logger.error(
             "ENGAGE_BOT_TOKEN не задан — Engage не может стартовать. Заведи "
             "ОТДЕЛЬНОГО бота у @BotFather (/newbot) и впиши токен в "
-            "/settings, группа «Engage».",
+            "/settings, группа «Engage». Проверю снова через %d секунд.",
+            _UNCONFIGURED_WAIT_SECONDS,
         )
+        # ЖДЁМ, А НЕ ВЫХОДИМ СРАЗУ — ровно по той же причине, что в Guardian:
+        # контейнер поднимается заново по политике `restart: unless-stopped`, и
+        # мгновенный выход превращается в цикл перезапусков раз в десяток
+        # секунд. Лог забивается одной строкой, а настоящие сообщения тонут.
+        await asyncio.sleep(_UNCONFIGURED_WAIT_SECONDS)
         return
 
     bot = _build_bot(settings.engage_bot_token)
