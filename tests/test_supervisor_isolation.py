@@ -134,3 +134,76 @@ async def test_everything_stops_even_if_telethon_never_started(
     assert components.scheduler is None
     assert components.moderation_bot is None
     assert runtime_state.get_component_status()["scheduler"] is False
+
+
+# --- видимость сбоев опроса (найдено на стенде 2026-08-18) ---
+
+
+async def test_polling_failure_marks_the_bot_down():
+    """Задача опроса живёт сама по себе, и исключение внутри неё никто не
+    читает: asyncio промолчит до сборки мусора, а `/health` продолжит
+    показывать бота живым.
+
+    Ровно это и случилось на стенде после перевода на aiogram: опрос
+    остановился через двадцать секунд, а система об этом не узнала.
+    """
+    import asyncio
+
+    runtime_state.set_component_status("bot", True)
+
+    async def _fails():
+        raise RuntimeError("Unauthorized")
+
+    task = asyncio.create_task(_fails())
+    supervisor._watch_polling(task, "bot", "Бот модерации")
+    with pytest.raises(RuntimeError):
+        await task
+    await asyncio.sleep(0)  # даём сработать колбэку
+
+    assert runtime_state.get_component_status()["bot"] is False
+
+
+async def test_polling_stopped_without_error_is_also_noticed():
+    """Опрос, завершившийся молча, — тоже неработающий бот."""
+    import asyncio
+
+    runtime_state.set_component_status("flow_bots", True)
+
+    async def _quiet():
+        return None
+
+    task = asyncio.create_task(_quiet())
+    supervisor._watch_polling(task, "flow_bots", "Боты конструктора")
+    await task
+    await asyncio.sleep(0)
+
+    assert runtime_state.get_component_status()["flow_bots"] is False
+
+
+async def test_cancelled_polling_is_not_reported_as_a_failure(caplog):
+    """Остановка при выключении компонентов — не сбой, и пугать ею не надо.
+
+    Проверяется и СОСТОЯНИЕ, и ЛОГ. Первая версия теста смотрела только на
+    состояние и оказалась беззубой: без проверки на отмену обработчик падает
+    на `.exception()` ещё до записи состояния, и тест этого не замечал —
+    поймано диверсией.
+    """
+    import asyncio
+
+    runtime_state.set_component_status("bot", True)
+
+    async def _long():
+        await asyncio.sleep(60)
+
+    task = asyncio.create_task(_long())
+    supervisor._watch_polling(task, "bot", "Бот модерации")
+    task.cancel()
+    with caplog.at_level("ERROR"):
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(0)
+
+    assert runtime_state.get_component_status()["bot"] is True
+    assert not [r for r in caplog.records if r.levelname == "ERROR"], (
+        "отмена не должна выглядеть как поломка"
+    )

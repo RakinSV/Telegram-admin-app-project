@@ -332,6 +332,30 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     )
 
 
+def _watch_polling(task: asyncio.Task, component: str, title: str) -> None:
+    """Следить за фоновой задачей опроса.
+
+    ЗАЧЕМ. Задача опроса живёт сама по себе, и исключение внутри неё никто не
+    читает: `asyncio` промолчит до сборки мусора, а состояние компонента
+    останется «работает». Поймано на стенде сразу после перевода на aiogram —
+    опрос остановился через двадцать секунд, а `/health` продолжал показывать
+    бота живым. Отвалившийся токен или конфликт двух опросов одного бота
+    выглядели бы точно так же: тишина вместо причины.
+    """
+
+    def _finished(finished: asyncio.Task) -> None:
+        if finished.cancelled():
+            return
+        error = finished.exception()
+        runtime_state.set_component_status(component, False)
+        if error is not None:
+            logger.error("%s: опрос остановлен — %s", title, error)
+        else:
+            logger.warning("%s: опрос завершился сам, без ошибки", title)
+
+    task.add_done_callback(_finished)
+
+
 async def _start_moderation_polling() -> None:
     """Начать опрос бота модерации.
 
@@ -348,7 +372,7 @@ async def _start_moderation_polling() -> None:
     if _components.moderation_dispatcher is None:
         _components.moderation_dispatcher = build_dispatcher()
     dispatcher = _components.moderation_dispatcher
-    _components.moderation_polling = asyncio.create_task(
+    task = asyncio.create_task(
         dispatcher.start_polling(  # type: ignore[attr-defined]
             _components.moderation_bot,
             handle_signals=False,
@@ -359,6 +383,8 @@ async def _start_moderation_polling() -> None:
             ],
         ),
     )
+    _watch_polling(task, "bot", "Бот модерации")
+    _components.moderation_polling = task
 
 
 async def _stop_moderation_polling() -> None:
@@ -562,11 +588,13 @@ async def start_flow_bots() -> None:
         return
 
     dispatcher = _flow_dispatcher()
-    _components.flow_polling = asyncio.create_task(
+    task = asyncio.create_task(
         # handle_signals=False обязательно: обработчики сигналов ставит
         # веб-сервер, и второй претендент на них ломает штатную остановку.
         dispatcher.start_polling(*bots.values(), handle_signals=False),  # type: ignore[attr-defined]
     )
+    _watch_polling(task, "flow_bots", "Боты конструктора")
+    _components.flow_polling = task
     runtime_state.set_component_status("flow_bots", True)
     logger.info("F75: опрос ботов-конструкторов начат (%d шт.)", len(bots))
 
