@@ -71,6 +71,25 @@ async def _run_task_queue() -> None:
     await task_queue.run_pending()
 
 
+async def _run_backup_job(keep: int) -> None:
+    """Резервная копия по расписанию.
+
+    В отдельном потоке: `run_backup` читает файлы базы и жмёт их в архив, а
+    это блокирующая работа на секунды — в общем цикле она задержала бы и
+    веб-админку, и опрос ботов.
+    """
+    from tg_repost.tools.backup import run_backup
+
+    try:
+        archive = await asyncio.to_thread(run_backup, keep)
+    except Exception:
+        # Сбой копии не должен ронять планировщик: остальные джобы к резервным
+        # копиям отношения не имеют.
+        logger.exception("Резервная копия не создана")
+        return
+    logger.info("Резервная копия готова: %s", archive.name)
+
+
 @dataclass
 class RunningComponents:
     """Текущие живые экземпляры (если запущены) — единые на процесс, чтобы
@@ -268,6 +287,16 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         settings.channel_stats_enabled and tele_client is not None,
         collect_channel_stats, [tele_client],
         IntervalTrigger(hours=settings.channel_stats_interval_hours),
+    )
+    # Резервная копия по расписанию. РАНЬШЕ КОПИИ ДЕЛАЛИСЬ ТОЛЬКО КНОПКОЙ, и
+    # «хранение 14 последних» из кода не работало в Docker ни дня: каталог не
+    # был смонтирован наружу, и каждый деплой стирал копии вместе со слоем
+    # контейнера (разбор архитектуры 2026-08-18). Джоба не зависит ни от
+    # Telegram, ни от бота — она про сохранность данных, а не про доставку.
+    _resync_optional_job(
+        scheduler, "daily_backup", settings.backup_enabled,
+        _run_backup_job, [settings.backup_keep],
+        CronTrigger(hour=max(0, min(23, settings.backup_hour)), minute=0),
     )
     _resync_optional_job(
         scheduler, "recycle_job", settings.recycle_enabled,

@@ -527,6 +527,21 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "уже не читают. Требует прав АДМИНИСТРАТОРА в канале.",
     ),
     SettingsGroup(
+        "backup", "Резервные копии",
+        (
+            SettingField("backup_enabled", "Делать копии по расписанию", "bool",
+                         needs_resync=True),
+            SettingField("backup_hour", "Час по UTC", "int", needs_resync=True),
+            SettingField("backup_keep", "Сколько копий хранить", "int"),
+        ),
+        "Копия включает .env, обе базы и логи; складывается в data/backups на "
+        "хосте и переживает пересоздание контейнера. Раньше копии делались "
+        "только кнопкой и жили внутри контейнера — то есть исчезали при каждом "
+        "обновлении системы. ВАЖНО: в копии лежит мастер-ключ вместе с "
+        "зашифрованной базой, поэтому выгружать её наружу можно только "
+        "зашифрованной.",
+    ),
+    SettingsGroup(
         "recycle", "Повтор выстреливших постов — F55",
         (
             SettingField("recycle_enabled", "Включён", "bool", needs_resync=True),
