@@ -111,7 +111,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "nav.contacts": {"ru": "Участники", "en": "Contacts"},
     "nav.segments": {"ru": "Сегменты", "en": "Segments"},
     "nav.broadcasts": {"ru": "Рассылки", "en": "Broadcasts"},
-    "nav.funnels": {"ru": "Воронки", "en": "Funnels"},
     "nav.mediakit": {"ru": "Медиакит", "en": "Media kit"},
     "nav.ad_requests": {"ru": "Заявки на рекламу", "en": "Ad requests"},
     "nav.users": {"ru": "Пользователи", "en": "Users"},
@@ -626,137 +625,8 @@ STRINGS: dict[str, dict[str, str]] = {
     "flows.canvas_hours_n": {"ru": "{n} ч", "en": "{n} h"},
 
     # --- F75, шаг 6: перенос воронок в конструктор ---
-    "funnels.migrate": {"ru": "В конструктор", "en": "To the builder"},
-    "funnels.migrated_to": {"ru": "перенесена в сценарий", "en": "migrated to scenario"},
-    "funnels.migrated_and_off": {
-        "ru": "Перенесено и опубликовано. Внутри старой воронки никого не было, "
-              "поэтому она выключена: два движка на один «/start» слали бы "
-              "человеку и цепочку, и сценарий.",
-        "en": "Migrated and published. Nobody was inside the old funnel, so it "
-              "was switched off: two engines on one «/start» would send a "
-              "person both the chain and the scenario.",
-    },
-    "funnels.migrate_note": {
-        "ru": "Перенос собирает из воронки сценарий: задержка становится узлом "
-              "«пауза», сообщение — узлом «текст». Если внутри воронки никого "
-              "нет, она выключается сразу — два движка на один «/start» слали "
-              "бы человеку и цепочку, и сценарий. Если люди внутри есть, "
-              "воронка остаётся работать: выключение оборвёт им цепочку, и это "
-              "решение остаётся за вами.",
-        "en": "Migration turns the funnel into a scenario: a delay becomes a "
-              "«pause» node, a message becomes a «text» node. If nobody is "
-              "inside, the funnel is switched off right away — two engines on "
-              "one «/start» would send a person both the chain and the "
-              "scenario. If people are inside, it keeps running: switching it "
-              "off cuts their chain, and that call is yours.",
-    },
-    "funnels.migrate_no_bots": {
-        "ru": "Переносить пока некуда: сначала заведите бота в «Конструкторе "
-              "ботов» — сценарий принадлежит боту, и писать людям будет он.",
-        "en": "Nowhere to migrate yet: add a bot in «Bot builder» first — a "
-              "scenario belongs to a bot, and that bot is who writes to people.",
-    },
-    "funnels.migrate_pick_bot": {
-        "ru": "Выберите бота, которому достанется сценарий.",
-        "en": "Pick the bot that will own the scenario.",
-    },
-    "funnels.confirm_migrate": {
-        "ru": "Перенести воронку в конструктор? Старая останется работать, "
-              "пока вы её не выключите.",
-        "en": "Migrate the funnel to the builder? The old one keeps running "
-              "until you turn it off.",
-    },
-    "funnels.migrated": {
-        "ru": "Перенесено и опубликовано. Старая воронка ещё работает; внутри "
-              "неё сейчас {n} человек — выключение оборвёт им цепочку.",
-        "en": "Migrated and published. The old funnel is still running; {n} "
-              "people are inside — turning it off cuts their chain.",
-    },
 
     # --- F71: воронки ---
-    "funnels.title": {"ru": "Воронки", "en": "Funnels"},
-    "funnels.intro": {
-        "ru": "Цепочка сообщений с задержками: человек нажал «Запустить» у "
-              "бота — и получает шаги по очереди. Цепочка обрывается, если "
-              "он отписался, заблокировал бота или воронку выключили.",
-        "en": "A chain of messages with delays: a person presses «Start» in "
-              "the bot and receives the steps one by one. The chain stops if "
-              "they unsubscribe, block the bot, or the funnel is turned off.",
-    },
-    "funnels.create": {"ru": "Новая воронка", "en": "New funnel"},
-    "funnels.name": {"ru": "Название", "en": "Name"},
-    "funnels.steps": {"ru": "Шаги", "en": "Steps"},
-    "funnels.steps_n": {"ru": "{n} шт.", "en": "{n}"},
-    "funnels.total_span": {"ru": "растянута на {h} ч", "en": "spans {h} h"},
-    "funnels.people": {"ru": "Люди", "en": "People"},
-    "funnels.running_n": {"ru": "идут: {n}", "en": "in progress: {n}"},
-    "funnels.done_n": {"ru": "дошли: {n}", "en": "finished: {n}"},
-    "funnels.stopped_n": {"ru": "сорвались: {n}", "en": "stopped: {n}"},
-    "funnels.state": {"ru": "Состояние", "en": "State"},
-    "funnels.active": {"ru": "включена", "en": "on"},
-    "funnels.paused": {"ru": "выключена", "en": "off"},
-    "funnels.start": {"ru": "Включить", "en": "Turn on"},
-    "funnels.stop": {"ru": "Выключить", "en": "Turn off"},
-    "funnels.delete": {"ru": "Удалить", "en": "Delete"},
-    "funnels.confirm_activate": {
-        "ru": "Включить воронку? С этого момента каждый, кто запустит бота, "
-              "начнёт получать цепочку.",
-        "en": "Turn the funnel on? From now on everyone who starts the bot "
-              "will begin receiving the chain.",
-    },
-    "funnels.confirm_delete": {
-        "ru": "Удалить воронку? Вместе с ней пропадёт история прохождений, "
-              "восстановить её нечем.",
-        "en": "Delete the funnel? Its run history goes with it and cannot be "
-              "restored.",
-    },
-    "funnels.empty": {"ru": "Воронок пока нет.", "en": "No funnels yet."},
-    "funnels.reach_note": {
-        "ru": "Воронка доходит только до тех, кто запускал бота: Telegram не "
-              "даёт боту написать первым.",
-        "en": "A funnel only reaches people who started the bot: Telegram "
-              "does not let a bot write first.",
-    },
-    "funnels.trigger_note": {
-        "ru": "Запускается, когда человек нажимает «Запустить» у бота. Других "
-              "триггеров намеренно нет: каждый — это точка, где воронка может "
-              "выстрелить неожиданно.",
-        "en": "Starts when a person presses «Start» in the bot. Other "
-              "triggers are deliberately absent: each one is a place where a "
-              "funnel could fire unexpectedly.",
-    },
-    "funnels.steps_hint": {
-        "ru": "Часы отсчитываются от предыдущего шага, а у первого — от "
-              "запуска. Пустой текст = строки нет: так шаг и добавляется, и "
-              "удаляется.",
-        "en": "Hours count from the previous step, and for the first one from "
-              "enrollment. Empty text = no row: that is how a step is both "
-              "added and removed.",
-    },
-    "funnels.after_hours": {"ru": "Шаг {n}, через (ч)", "en": "Step {n}, after (h)"},
-    "funnels.step_placeholder": {
-        "ru": "Текст сообщения. Пусто — шага нет.",
-        "en": "Message text. Empty means no step.",
-    },
-    "funnels.save": {"ru": "Сохранить", "en": "Save"},
-    "funnels.back": {"ru": "К списку", "en": "Back to list"},
-    "funnels.warn_in_flight": {
-        "ru": "Сейчас по цепочке идут {n} чел. Позиция хранится номером шага: "
-              "вставите шаг в середину — ушедшие дальше получат чужое "
-              "сообщение, уберёте хвост — их цепочка закончится досрочно.",
-        "en": "{n} people are going through the chain right now. Position is "
-              "stored as a step number: insert a step in the middle and those "
-              "further along get someone else's message; cut the tail and "
-              "their chain ends early.",
-    },
-    "funnels.error_no_steps": {
-        "ru": "У воронки нет шагов — включать нечего.",
-        "en": "The funnel has no steps — there is nothing to turn on.",
-    },
-    "funnels.error_delay_not_number": {
-        "ru": "Шаг {n}: задержка должна быть числом часов.",
-        "en": "Step {n}: the delay must be a number of hours.",
-    },
 
     # --- F64: рассылки по сегменту ---
     "broadcasts.title": {"ru": "Рассылки", "en": "Broadcasts"},
@@ -3080,6 +2950,23 @@ STRINGS: dict[str, dict[str, str]] = {
         "unsubscribing — people are still subscribed but no longer reading. "
         "Requires ADMIN rights in the channel.",
     },
+    "settings.group.backup.title": {
+        "ru": "Резервные копии", "en": "Backups",
+    },
+    "settings.group.backup.desc": {
+        "ru": "Копия включает .env, обе базы и логи; складывается в "
+              "data/backups на хосте и переживает пересоздание контейнера. "
+              "Раньше копии делались только кнопкой и жили внутри контейнера — "
+              "то есть исчезали при каждом обновлении системы. ВАЖНО: в копии "
+              "лежит мастер-ключ вместе с зашифрованной базой, поэтому "
+              "выгружать её наружу можно только зашифрованной.",
+        "en": "A backup includes .env, both databases and the logs; it is "
+              "written to data/backups on the host and survives container "
+              "recreation. Backups used to be made by a button only and lived "
+              "inside the container — that is, vanished on every update. NOTE: "
+              "a backup holds the master key together with the encrypted "
+              "database, so send it anywhere only encrypted.",
+    },
     "settings.group.recycle.title": {
         "ru": "Повтор выстреливших постов", "en": "Recycling top posts",
     },
@@ -3764,6 +3651,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Окно динамики, дней", "en": "Trend window, days",
     },
     # F55 — повтор выстреливших постов.
+    "settings.field.backup_enabled.label": {
+        "ru": "Делать копии по расписанию", "en": "Scheduled backups",
+    },
+    "settings.field.backup_hour.label": {"ru": "Час по UTC", "en": "Hour, UTC"},
+    "settings.field.backup_keep.label": {
+        "ru": "Сколько копий хранить", "en": "How many backups to keep",
+    },
     "settings.field.recycle_enabled.label": {"ru": "Включён", "en": "Enabled"},
     "settings.field.recycle_interval_hours.label": {
         "ru": "Как часто искать, часов", "en": "Check every, hours",

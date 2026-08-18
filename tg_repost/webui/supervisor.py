@@ -35,7 +35,6 @@ from tg_repost import (
     broadcasts_repo,
     flow_bots,
     flow_engine,
-    funnels_repo,
     task_queue,
     webhooks_repo,
 )
@@ -60,7 +59,6 @@ logger = get_logger(__name__)
 # уже известны. Иначе задача, поставленная до регистрации, ушла бы в failed
 # с «нет обработчика» — см. `task_queue.run_once`.
 broadcasts_repo.register_handler()
-funnels_repo.register_handler()
 webhooks_repo.register_handler()
 crypto_polling.register_handler()
 flow_engine.register_handler()

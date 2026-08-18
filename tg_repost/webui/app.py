@@ -47,7 +47,6 @@ from tg_repost.webui.bots_routes import build_bots_router
 from tg_repost.webui.broadcasts_routes import build_broadcasts_router
 from tg_repost.webui.calendar_routes import build_calendar_router
 from tg_repost.webui.contacts_routes import build_contacts_router
-from tg_repost.webui.funnels_routes import build_funnels_router
 from tg_repost.webui.mediakit_routes import build_mediakit_router
 from tg_repost.webui.affiliate_routes import build_affiliate_router
 from tg_repost.webui.api_routes import build_api_router
@@ -855,7 +854,6 @@ def create_app() -> FastAPI:
     app.include_router(build_invites_router())
     app.include_router(build_contacts_router())
     app.include_router(build_broadcasts_router())
-    app.include_router(build_funnels_router())
     app.include_router(build_bots_router())
     app.include_router(build_subscriptions_router())
     app.include_router(build_affiliate_router())

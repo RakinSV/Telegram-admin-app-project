@@ -20,7 +20,7 @@ PAGES = [
     "/",              # app.py
     "/ads",           # crud_routes.py
     "/support",       # support_routes.py
-    "/funnels",       # funnels_routes.py
+    "/bots",          # bots_routes.py
     "/contacts",      # contacts_routes.py
     "/broadcasts",    # broadcasts_routes.py
     "/mediakit",      # mediakit_routes.py

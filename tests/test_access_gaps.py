@@ -124,5 +124,5 @@ def test_owner_still_sees_everything():
 
     body = client.get("/").text
 
-    for path in ("/settings", "/users", "/audit", "/support", "/funnels"):
+    for path in ("/settings", "/users", "/audit", "/support", "/bots"):
         assert f'href="{path}"' in body, path

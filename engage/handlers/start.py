@@ -126,17 +126,11 @@ async def on_start(message: Message, command: CommandObject, bot: Bot) -> None:
         subscribers_repo.record_contact(
             user_id, username=user.username, first_name=user.first_name,
         )
-        # F71: запуск воронок. Повторное нажатие «Запустить» цепочку не
-        # дублирует — защита стоит в самом `enroll`, а не здесь: сюда можно
-        # попасть и по deep-link, и обычным стартом.
-        from tg_repost import funnels_repo
-
-        try:
-            funnels_repo.enroll(user_id)
-        except Exception as exc:  # noqa: BLE001
-            # Сбой воронки не должен ломать приветствие: человек пришёл по
-            # ссылке на конкурс, и молчание вместо ответа он свяжет с ней.
-            logger.warning("F71: не удалось записать %s в воронки: %s", user_id, exc)
+        # Воронки (F71) отсюда УБРАНЫ вместе со всем движком: их заменил
+        # конструктор сценариев (F75). Сценарий принадлежит своему боту и
+        # запускается его собственным «/start» — в том боте, которому человек
+        # написал. Прежняя схема (запись в Engage, отправка ботом модерации)
+        # не доходила до тех, кто боту модерации никогда не писал.
 
     if link is None:
         await message.answer(_WELCOME)
