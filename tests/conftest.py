@@ -125,3 +125,24 @@ def _clean_guardian_config():
     with guardian_session_scope() as session:
         session.query(BotConfig).delete()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _keep_queue_handlers():
+    """Реестр обработчиков очереди восстанавливается после каждого теста.
+
+    `task_queue._handlers` заполняется ОДИН РАЗ, при импорте супервизора.
+    Два файла чистят его, чтобы проверить поведение «обработчика нет», — и
+    после них реестр остаётся пустым до конца процесса. Любая следующая
+    задача (рассылка, вебхук, платёж, шаг сценария) уходила бы в `failed` с
+    «нет обработчика», причём в коде очереди при этом всё исправно.
+
+    Снимок и возврат вместо запрета чистить: проверять поведение без
+    обработчика — законная задача, ломать соседей — нет.
+    """
+    from tg_repost import task_queue
+
+    snapshot = dict(task_queue._handlers)
+    yield
+    task_queue._handlers.clear()
+    task_queue._handlers.update(snapshot)
