@@ -346,6 +346,31 @@ STRINGS: dict[str, dict[str, str]] = {
     "export.error_invalid_date": {
         "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
     },
+    "export.media_section_title": {
+        "ru": "Уборка медиа", "en": "Media cleanup",
+    },
+    "export.media_section_desc": {
+        "ru": "Удалить обложки уже отработанных постов — отклонённых, "
+              "опубликованных и упавших — старше срока хранения из настроек, "
+              "вместе со ссылками на них в базе. Посты в работе не трогаются.",
+        "en": "Delete covers of posts that are already done — rejected, "
+              "published and failed — older than the retention period from "
+              "settings, together with their references in the database. "
+              "Posts still in work are left alone.",
+    },
+    "export.media_cleanup_button": {
+        "ru": "Убрать сейчас", "en": "Clean up now",
+    },
+    "export.confirm_media_cleanup": {
+        "ru": "Удалить обложки отработанных постов? Файлы не восстановить.",
+        "en": "Delete covers of finished posts? The files cannot be restored.",
+    },
+    "export.media_cleanup_done": {
+        "ru": "Убрано {files} файлов отработанных постов и {orphans} ничьих, "
+              "освобождено {mb} МБ.",
+        "en": "Removed {files} files of finished posts and {orphans} orphans, "
+              "freed {mb} MB.",
+    },
     "export.backup_section_title": {
         "ru": "Полный бэкап (токены, настройки, БД целиком)",
         "en": "Full backup (tokens, settings, the whole database)",

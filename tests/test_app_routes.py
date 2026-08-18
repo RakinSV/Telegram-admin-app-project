@@ -1544,6 +1544,34 @@ def test_reject_all_leaves_non_pending_posts_alone():
         assert session.get(Post, posted_id).status == PostStatus.POSTED
 
 
+def test_media_cleanup_button_is_reachable_from_the_page():
+    """Кнопка на странице обслуживания, а не только джоба в планировщике:
+    место на диске кончается не по расписанию, и ждать до 04:30 UTC ради
+    2,8 ГБ владельцу незачем."""
+    client = _client()
+    _bootstrap(client)
+
+    page = client.get("/export")
+    assert "/export/media/cleanup" in page.text, "кнопки уборки нет на странице"
+
+    response = client.post("/export/media/cleanup")
+
+    assert response.status_code == 200
+    assert "МБ" in response.text or "MB" in response.text
+
+
+def test_media_cleanup_is_not_triggered_by_a_plain_get():
+    """Уборка УДАЛЯЕТ файлы. На GET такое вешать нельзя — его дёргает
+    предзагрузка ссылок браузером и любой обход страниц; ровно так на стенде
+    сами собой появились две лишние копии базы."""
+    client = _client()
+    _bootstrap(client)
+
+    response = client.get("/export/media/cleanup")
+
+    assert response.status_code == 405, "уборка медиа доступна по GET"
+
+
 def test_backup_is_not_created_by_a_plain_get():
     """Бэкап СОЗДАЁТСЯ, а не читается: он собирает .env, базы и логи в архив
     на диске. GET для такого не годится — его дёргает всё подряд: предзагрузка

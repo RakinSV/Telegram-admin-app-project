@@ -527,6 +527,19 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "уже не читают. Требует прав АДМИНИСТРАТОРА в канале.",
     ),
     SettingsGroup(
+        "media_cleanup", "Уборка медиа",
+        (
+            SettingField("media_cleanup_enabled", "Убирать по расписанию", "bool",
+                         needs_resync=True),
+            SettingField("media_retention_days", "Хранить, дней", "int",
+                         needs_resync=True),
+        ),
+        "Обложки постов, которые уже отработаны — отклонённых, опубликованных "
+        "и упавших, — удаляются вместе со ссылками в базе. Остальные не "
+        "трогаются вовсе. У упавших срок двойной: их можно повторить из "
+        "админки, и повтор без картинки был бы потерей, а не уборкой.",
+    ),
+    SettingsGroup(
         "backup", "Резервные копии",
         (
             SettingField("backup_enabled", "Делать копии по расписанию", "bool",

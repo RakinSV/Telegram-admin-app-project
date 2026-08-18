@@ -87,6 +87,22 @@ async def _run_backup_job(keep: int) -> None:
     logger.info("Резервная копия готова: %s", archive.name)
 
 
+async def _run_media_cleanup(retention_days: int) -> None:
+    """Уборка медиа по расписанию.
+
+    В отдельном потоке: обход каталога с тысячей файлов и их удаление —
+    блокирующая работа, в общем цикле она задержала бы и админку, и ботов.
+    """
+    from tg_repost.tools.media_cleanup import cleanup_media
+
+    try:
+        await asyncio.to_thread(cleanup_media, retention_days)
+    except Exception:
+        # Сбой уборки не должен ронять планировщик: место на диске — не повод
+        # останавливать рассылки и сценарии.
+        logger.exception("Уборка медиа не выполнена")
+
+
 @dataclass
 class RunningComponents:
     """Текущие живые экземпляры (если запущены) — единые на процесс, чтобы
@@ -299,6 +315,14 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         scheduler, "daily_backup", settings.backup_enabled,
         _run_backup_job, [settings.backup_keep],
         CronTrigger(hour=max(0, min(23, settings.backup_hour)), minute=0),
+    )
+    # Уборка медиа. Не зависит ни от Telegram, ни от бота: это про место на
+    # диске. На стенде без неё скопилось 2,8 ГБ обложек при базе в 8 МБ, из
+    # них 2,3 ГБ — у отклонённых постов.
+    _resync_optional_job(
+        scheduler, "media_cleanup", settings.media_cleanup_enabled,
+        _run_media_cleanup, [settings.media_retention_days],
+        CronTrigger(hour=4, minute=30),
     )
     _resync_optional_job(
         scheduler, "recycle_job", settings.recycle_enabled,

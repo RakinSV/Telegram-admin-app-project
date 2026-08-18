@@ -1200,6 +1200,36 @@ def build_crud_router() -> APIRouter:
             {"error": None, "restore_success": True, "restored_count": len(restored)},
         )
 
+    # --- Уборка медиа вручную ---
+    # По расписанию уборка идёт ночью, но кнопка нужна отдельно: место на
+    # диске кончается не по расписанию. На стенде к моменту, когда уборку
+    # написали, лежало 2,8 ГБ при базе в 8 МБ — ждать до 04:30 UTC ради этого
+    # владельцу незачем.
+
+    @router.post("/export/media/cleanup")
+    async def export_media_cleanup(request: Request) -> Response:
+        """Убрать медиа отработанных постов сейчас, не дожидаясь ночи.
+
+        POST по той же причине, что и у бэкапа: обработчик УДАЛЯЕТ файлы.
+        Такое нельзя вешать на GET — его дёргает предзагрузка ссылок в
+        браузере и любой обход страниц.
+        """
+        from tg_repost.tools.media_cleanup import cleanup_media
+
+        settings = get_settings()
+        result = await asyncio.to_thread(
+            cleanup_media, settings.media_retention_days,
+        )
+        audit.record_audit(
+            "media_cleanup",
+            detail=f"{result.files_deleted}+{result.orphans_deleted} файлов, "
+                   f"{result.megabytes_freed} МБ",
+        )
+        return _templates.TemplateResponse(
+            request, "export.html",
+            {"error": None, "cleanup_result": result},
+        )
+
     return router
 
 

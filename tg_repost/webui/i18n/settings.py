@@ -314,6 +314,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "unsubscribing — people are still subscribed but no longer reading. "
         "Requires ADMIN rights in the channel.",
     },
+    "settings.group.media_cleanup.title": {
+        "ru": "Уборка медиа", "en": "Media cleanup",
+    },
+    "settings.group.media_cleanup.desc": {
+        "ru": "Обложки постов, которые уже отработаны — отклонённых, "
+              "опубликованных и упавших, — удаляются вместе со ссылками в "
+              "базе. Остальные не трогаются вовсе. У упавших срок двойной: их "
+              "можно повторить из админки, и повтор без картинки был бы "
+              "потерей, а не уборкой.",
+        "en": "Covers of posts that are already done — rejected, published and "
+              "failed ones — are deleted together with their references in the "
+              "database. Everything else is left alone entirely. Failed posts "
+              "keep theirs twice as long: they can be retried from the admin "
+              "panel, and a retry without the picture would be a loss, not "
+              "cleanup.",
+    },
     "settings.group.backup.title": {
         "ru": "Резервные копии", "en": "Backups",
     },
@@ -985,6 +1001,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Окно динамики, дней", "en": "Trend window, days",
     },
     # F55 — повтор выстреливших постов.
+    "settings.field.media_cleanup_enabled.label": {
+        "ru": "Убирать по расписанию", "en": "Scheduled cleanup",
+    },
+    "settings.field.media_retention_days.label": {
+        "ru": "Хранить, дней", "en": "Keep for, days",
+    },
     "settings.field.backup_enabled.label": {
         "ru": "Делать копии по расписанию", "en": "Scheduled backups",
     },
