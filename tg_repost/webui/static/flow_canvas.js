@@ -31,6 +31,12 @@
   var connectFrom = null;   // ключ узла, от которого тянем связь
   var pending = null;       // связь, у которой осталось выбрать условие
   var dirty = false;
+  /* Стопка прошлых состояний схемы. Настроенный узел собирают минутами, а
+     удаляют одним промахом мыши; без отмены это значит собрать заново. Глубина
+     ограничена: схема на полсотни узлов весит немного, но держать её историю
+     бесконечно незачем. */
+  var history = [];
+  var HISTORY_LIMIT = 30;
   var kindByName = {};
   KINDS.forEach(function (item) { kindByName[item.kind] = item; });
 
@@ -57,6 +63,28 @@
       if (graph.nodes[i].node_key === key) { return graph.nodes[i]; }
     }
     return null;
+  }
+
+  function remember() {
+    history.push(JSON.stringify(graph));
+    if (history.length > HISTORY_LIMIT) { history.shift(); }
+  }
+
+  function undo() {
+    var previous = history.pop();
+    if (!previous) {
+      statusLine.textContent = TEXT.nothing_to_undo;
+      statusLine.className = "flow-status muted";
+      return;
+    }
+    graph = JSON.parse(previous);
+    selected = null;
+    connectFrom = null;
+    pending = null;
+    dirty = true;
+    statusLine.textContent = TEXT.undone;
+    statusLine.className = "flow-status warn";
+    render();
   }
 
   function markDirty() {
@@ -100,6 +128,7 @@
     var y = 20;
     graph.nodes.forEach(function (n) { y = Math.max(y, n.y + 130); });
     var node = { node_key: nextKey(), kind: kind, config: config, x: 30, y: y };
+    remember();
     graph.nodes.push(node);
     selected = node.node_key;
     markDirty();
@@ -182,6 +211,7 @@
   }
 
   function addEdge(fromKey, toKey, condition) {
+    remember();
     graph.edges.push({
       from_key: fromKey, to_key: toKey,
       condition: condition, condition_value: null,
@@ -351,6 +381,7 @@
       var remove = el("button", "secondary", TEXT.delete_edge);
       remove.type = "button";
       remove.addEventListener("click", function () {
+        remember();
         graph.edges = graph.edges.filter(function (e) { return e !== edge; });
         markDirty();
         render();
@@ -359,9 +390,27 @@
       inspector.appendChild(row);
     });
 
+    var copy = el("button", "secondary flow-copy-node", TEXT.copy_node);
+    copy.type = "button";
+    copy.addEventListener("click", function () {
+      // Копия БЕЗ связей: куда вести новый узел, знает только владелец, а
+      // унаследованные переходы увели бы людей туда же, куда исходный.
+      remember();
+      var clone = JSON.parse(JSON.stringify(node));
+      clone.node_key = nextKey();
+      clone.x = node.x + 30;
+      clone.y = node.y + 40;
+      graph.nodes.push(clone);
+      selected = clone.node_key;
+      markDirty();
+      render();
+    });
+    inspector.appendChild(copy);
+
     var removeNode = el("button", "secondary flow-delete-node", TEXT.delete_node);
     removeNode.type = "button";
     removeNode.addEventListener("click", function () {
+      remember();
       graph.nodes = graph.nodes.filter(function (n) { return n !== node; });
       // Висящая связь ведёт в пустоту, и человек в такой ветке застревает —
       // связи удаляются вместе с узлом, а не оставляются владельцу на память.
@@ -466,6 +515,18 @@
       problemsList.appendChild(el("li", "badge warn", problem));
     });
   }
+
+  document.getElementById("flow-undo").addEventListener("click", undo);
+
+  document.addEventListener("keydown", function (event) {
+    // Ctrl+Z — то, что рука делает сама. Внутри поля ввода не перехватываем:
+    // там отмена браузера отменяет набранный текст, и это правильнее.
+    var inField = event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName);
+    if ((event.ctrlKey || event.metaKey) && event.key === "z" && !inField) {
+      event.preventDefault();
+      undo();
+    }
+  });
 
   document.getElementById("flow-save").addEventListener("click", function () {
     statusLine.textContent = TEXT.saving;

@@ -10,6 +10,7 @@
     </p>
   </div>
   <div class="flow-actions">
+    <button type="button" id="flow-undo" class="secondary" title="Ctrl+Z">{{ t('flows.undo') }}</button>
     <button type="button" id="flow-save">{{ t('flows.save_draft') }}</button>
     <form method="post" action="/flows/{{ flow.id }}/publish"
           onsubmit="return confirm('{{ t('flows.confirm_publish') }}');">

@@ -51,6 +51,20 @@
             onsubmit="return confirm('{{ t('funnels.confirm_delete') }}');">
         <button type="submit" class="secondary">{{ t('funnels.delete') }}</button>
       </form>
+      {# F75, шаг 6: перенос в конструктор. Бот выбирается здесь же — уводить
+         владельца на отдельную страницу ради одного списка незачем. #}
+      {% if bots %}
+      <form method="post" action="/funnels/{{ row.view.id }}/migrate"
+            class="inline-form"
+            onsubmit="return confirm('{{ t('funnels.confirm_migrate') }}');">
+        <select name="bot_id">
+          {% for bot in bots %}
+          <option value="{{ bot.id }}">{{ bot.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="secondary">{{ t('funnels.migrate') }}</button>
+      </form>
+      {% endif %}
     </td>
   </tr>
   {% else %}
@@ -59,4 +73,8 @@
 </table>
 
 <p class="hint">{{ t('funnels.reach_note') }}</p>
+<p class="hint">{{ t('funnels.migrate_note') }}</p>
+{% if not bots %}
+<p class="hint">{{ t('funnels.migrate_no_bots') }}</p>
+{% endif %}
 {% endblock %}

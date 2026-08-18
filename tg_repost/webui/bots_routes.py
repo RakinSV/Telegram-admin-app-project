@@ -95,7 +95,7 @@ _CANVAS_TEXT_KEYS = (
     "unsaved", "saved", "saving", "save_failed", "connect", "connecting_hint",
     "choose_condition", "cancel", "select_hint", "node_key", "edges_out", "no_edges",
     "delete_edge", "delete_node", "condition_value", "buttons_hint",
-    "list_hint", "hours_n",
+    "list_hint", "hours_n", "undone", "nothing_to_undo", "copy_node",
 )
 
 

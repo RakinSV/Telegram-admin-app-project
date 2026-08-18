@@ -238,3 +238,35 @@ async def test_listing_counts_flows():
         session.add(Flow(bot_id=bot_id, name="Второй"))
 
     assert bots.list_all()[0].flows_count == 2
+
+async def test_token_of_another_process_is_refused(monkeypatch):
+    """ДВА ОПРОСА ОДНОГО БОТА — ЭТО ПОТЕРЯННЫЕ СООБЩЕНИЯ ЛЮДЕЙ.
+
+    Telegram отдаёт `getUpdates` ровно одному слушателю: второй получает 409,
+    и апдейты начинают доставаться то одному процессу, то другому. Владелец
+    при этом видит рабочего бота, который «иногда не отвечает». Соблазн
+    вставить сюда токен бота модерации большой — раз «всё в конструкторе».
+    """
+    monkeypatch.setattr(
+        bots, "_belongs_to_another_process",
+        lambda _token: "бот модерации",
+    )
+
+    with pytest.raises(bots.InvalidBot) as exc:
+        await bots.save("Свой", TOKEN, is_active=True)
+
+    assert "уже занят" in str(exc.value)
+
+
+async def test_free_token_passes_the_occupancy_check(monkeypatch):
+    """Обратная проверка: чужих токенов нет — сохранение идёт своим чередом."""
+    monkeypatch.setattr(
+        bots, "_belongs_to_another_process", lambda _token: None,
+    )
+    with patch(
+        "tg_repost.managed_bots_repo.verify_token",
+        new=AsyncMock(return_value=(True, "free_bot")),
+    ):
+        bot_id = await bots.save("Свободный", TOKEN)
+
+    assert bots.get(bot_id) is not None

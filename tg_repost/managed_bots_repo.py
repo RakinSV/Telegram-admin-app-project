@@ -125,6 +125,48 @@ async def verify_token(token: str) -> tuple[bool, str]:
         await bot.session.close()
 
 
+def _guardian_token() -> str:
+    from guardian.config import get_guardian_settings
+
+    return get_guardian_settings().guardian_bot_token
+
+
+def _engage_token() -> str:
+    from engage.config import get_engage_settings
+
+    return get_engage_settings().engage_bot_token
+
+
+def _belongs_to_another_process(token: str) -> str | None:
+    """Не занят ли этот токен одним из собственных ботов системы.
+
+    ДВА ОПРОСА ОДНОГО БОТА — ЭТО ПОТЕРЯННЫЕ АПДЕЙТЫ. Telegram отдаёт `getUpdates`
+    ровно одному слушателю: второй получает 409 Conflict, и сообщения людей
+    начинают доставаться то одному процессу, то другому. Владелец при этом
+    видит рабочего бота, который «иногда не отвечает».
+
+    Соблазн вставить сюда токен бота модерации или Engage большой: раз «всё в
+    конструкторе», кажется логичным добавить туда и их. Поэтому проверка
+    стоит на входе, а не в списке известных проблем.
+    """
+    from tg_repost.config import get_settings
+
+    known = [("бот модерации", get_settings().tg_bot_token)]
+    for label, read in (("Guardian", _guardian_token), ("Engage", _engage_token)):
+        try:
+            known.append((label, read()))
+        except Exception as exc:  # noqa: BLE001
+            # Соседний процесс может быть не настроен вовсе — это норма, а не
+            # сбой. Но молчать нельзя: если чтение сломалось по другой
+            # причине, проверка тихо перестанет ловить занятый токен.
+            logger.debug("F75: токен %s недоступен для сверки: %s", label, exc)
+
+    for label, existing in known:
+        if existing and existing.strip() == token:
+            return label
+    return None
+
+
 async def save(
     name: str,
     token: str,
@@ -148,6 +190,13 @@ async def save(
     if clean_token:
         if len(clean_token) < _MIN_TOKEN_LENGTH or ":" not in clean_token:
             raise InvalidBot("Это не похоже на токен бота — ожидается «цифры:буквы»")
+        occupied = _belongs_to_another_process(clean_token)
+        if occupied is not None:
+            raise InvalidBot(
+                f"Этот токен уже занят: им работает {occupied}. Два опроса "
+                "одного бота — это потерянные сообщения людей: Telegram "
+                "отдаёт их ровно одному слушателю."
+            )
         ok, answer = await verify_token(clean_token)
         if not ok:
             raise InvalidBot(f"Telegram не принял токен: {answer}")

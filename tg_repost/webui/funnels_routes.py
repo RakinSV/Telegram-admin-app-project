@@ -27,8 +27,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from tg_repost import funnels_repo
-from tg_repost.webui import audit, i18n
+from tg_repost import funnels_migration, funnels_repo, managed_bots_repo
+from tg_repost.webui import audit, flash, i18n
 from tg_repost.webui.templating import build_templates
 from tg_repost.webui.auth import require_login
 
@@ -87,6 +87,10 @@ def build_funnels_router() -> APIRouter:
                     for view in views
                 ],
                 "error": error,
+                # F75, шаг 6: перенос в конструктор. Список ботов нужен прямо
+                # здесь — выбирать бота на отдельной странице значило бы уводить
+                # владельца от воронки, которую он переносит.
+                "bots": managed_bots_repo.list_all(),
             },
             status_code=status,
         )
@@ -179,6 +183,34 @@ def build_funnels_router() -> APIRouter:
             target=view.name,
         )
         return RedirectResponse(url="/funnels", status_code=303)
+
+    @router.post("/funnels/{funnel_id}/migrate")
+    async def funnel_migrate(
+        request: Request, funnel_id: int, bot_id: str = Form(""),
+    ) -> Response:
+        """Перенести воронку в конструктор.
+
+        Старая воронка НЕ выключается: выключение обрывает цепочку всем, кто
+        сейчас внутри. Решение остаётся владельцу, и сколько людей ему это
+        будет стоить — написано рядом с кнопкой «Выключить».
+        """
+        if not bot_id.isdigit():
+            return _listing(request, error=i18n.t("funnels.migrate_pick_bot"), status=400)
+        try:
+            result = funnels_migration.migrate(funnel_id, int(bot_id))
+        except funnels_migration.MigrationRefused as exc:
+            return _listing(request, error=str(exc), status=400)
+
+        audit.record_audit(
+            "funnel_migrate", target=str(funnel_id),
+            detail=f"сценарий #{result.flow_id}",
+        )
+        flash.set_flash(
+            request,
+            i18n.t("funnels.migrated", n=result.people_inside),
+            kind="ok",
+        )
+        return RedirectResponse(url=f"/flows/{result.flow_id}", status_code=303)
 
     @router.post("/funnels/{funnel_id}/delete")
     async def funnel_delete(funnel_id: int) -> Response:

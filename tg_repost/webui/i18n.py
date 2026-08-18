@@ -578,6 +578,16 @@ STRINGS: dict[str, dict[str, str]] = {
     "flows.field_days": {"ru": "Дней доступа", "en": "Days of access"},
     "flows.field_payload": {"ru": "Что отправить", "en": "Payload"},
     # Холст.
+    "flows.undo": {"ru": "Отменить", "en": "Undo"},
+    "flows.canvas_undone": {
+        "ru": "Последнее действие отменено.",
+        "en": "Last action undone.",
+    },
+    "flows.canvas_nothing_to_undo": {
+        "ru": "Отменять нечего.",
+        "en": "Nothing to undo.",
+    },
+    "flows.canvas_copy_node": {"ru": "Сделать копию", "en": "Duplicate"},
     "flows.canvas_unsaved": {"ru": "Есть несохранённые правки.", "en": "Unsaved changes."},
     "flows.canvas_saved": {"ru": "Черновик сохранён.", "en": "Draft saved."},
     "flows.canvas_saving": {"ru": "Сохраняю…", "en": "Saving…"},
@@ -614,6 +624,41 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "One option per line",
     },
     "flows.canvas_hours_n": {"ru": "{n} ч", "en": "{n} h"},
+
+    # --- F75, шаг 6: перенос воронок в конструктор ---
+    "funnels.migrate": {"ru": "В конструктор", "en": "To the builder"},
+    "funnels.migrate_note": {
+        "ru": "Перенос собирает из воронки сценарий: задержка становится узлом "
+              "«пауза», сообщение — узлом «текст». Старая воронка продолжает "
+              "работать: выключить её — отдельное решение, потому что "
+              "выключение обрывает цепочку всем, кто сейчас внутри.",
+        "en": "Migration turns the funnel into a scenario: a delay becomes a "
+              "«pause» node, a message becomes a «text» node. The old funnel "
+              "keeps running: turning it off is a separate decision, because "
+              "it cuts the chain for everyone currently inside.",
+    },
+    "funnels.migrate_no_bots": {
+        "ru": "Переносить пока некуда: сначала заведите бота в «Конструкторе "
+              "ботов» — сценарий принадлежит боту, и писать людям будет он.",
+        "en": "Nowhere to migrate yet: add a bot in «Bot builder» first — a "
+              "scenario belongs to a bot, and that bot is who writes to people.",
+    },
+    "funnels.migrate_pick_bot": {
+        "ru": "Выберите бота, которому достанется сценарий.",
+        "en": "Pick the bot that will own the scenario.",
+    },
+    "funnels.confirm_migrate": {
+        "ru": "Перенести воронку в конструктор? Старая останется работать, "
+              "пока вы её не выключите.",
+        "en": "Migrate the funnel to the builder? The old one keeps running "
+              "until you turn it off.",
+    },
+    "funnels.migrated": {
+        "ru": "Перенесено и опубликовано. Старая воронка ещё работает; внутри "
+              "неё сейчас {n} человек — выключение оборвёт им цепочку.",
+        "en": "Migrated and published. The old funnel is still running; {n} "
+              "people are inside — turning it off cuts their chain.",
+    },
 
     # --- F71: воронки ---
     "funnels.title": {"ru": "Воронки", "en": "Funnels"},
