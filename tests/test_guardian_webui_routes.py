@@ -61,6 +61,15 @@ def _isolated_env(tmp_path, monkeypatch):
     invalidate_settings_cache()
     guardian_invalidate_cache()
     yield
+    # УБИРАЕМ ЗА СОБОЙ, а не только перед собой. Цель с `use_guardian=True`,
+    # оставленная после последнего теста, меняет поведение ЧУЖИХ файлов:
+    # переключатель Guardian синхронизирует ВЕСЬ список защищаемых чатов, и
+    # соседний файл получал в списке лишний чат из этого. Найдено прогоном с
+    # перемешанным порядком файлов.
+    with session_scope() as session:
+        session.query(TargetGroup).delete()
+    with guardian_session_scope() as session:
+        session.query(BotConfig).delete()
     setup_token._token = None
     auth._failed_attempts.clear()
     invalidate_settings_cache()

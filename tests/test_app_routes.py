@@ -12,7 +12,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from tg_repost.db.models import AdminUser, AppSetting, Post, PostStat, Secret, Source, TelethonSession
+from tg_repost.db.models import TargetGroup, AdminUser, AppSetting, Post, PostStat, Secret, Source, TelethonSession
 from tg_repost.db.session import session_scope
 from tg_repost.webui import app as app_module
 from tg_repost.webui import audit, auth, settings_store, setup_token
@@ -47,6 +47,9 @@ def _isolated_env(tmp_path, monkeypatch):
         session.query(AppSetting).delete()
         session.query(Secret).delete()
         session.query(Source).delete()
+        # Цели — тоже общее состояние: переключатель Guardian синхронизирует
+        # весь их список, и чужая цель попадала в проверку этого файла.
+        session.query(TargetGroup).delete()
         session.query(TelethonSession).delete()
     os.environ.pop("WEBUI_MASTER_KEY", None)
     os.environ.pop("WEBUI_SESSION_SECRET", None)

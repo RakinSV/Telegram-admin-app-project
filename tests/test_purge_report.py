@@ -38,10 +38,16 @@ def _clean(monkeypatch):
         session.query(ModerationLog).delete()
     purge_report._last_report.clear()
 
-    settings = purge_report.get_guardian_settings()
-    monkeypatch.setattr(settings, "protected_chat_ids", [CHAT], raising=False)
-    # Лог-канал не настроен — отправка молча пропускается, как в проде.
-    monkeypatch.setattr(settings, "guardian_log_channel_id", 0, raising=False)
+    # ПАТЧИМ ФУНКЦИЮ, А НЕ ОБЪЕКТ. `get_guardian_settings()` отдаёт один и тот
+    # же объект, только пока таблица `bot_config` ПУСТА; стоит там появиться
+    # хоть одной строке — и каждый вызов возвращает свежую копию
+    # (`model_copy`), а патч, поставленный на прежний объект, исчезает.
+    # Найдено прогоном с перемешанным порядком файлов: весь этот файл падал
+    # целиком, если раньше отрабатывал файл, оставивший строку в `bot_config`.
+    settings = purge_report.get_guardian_settings().model_copy(
+        update={"protected_chat_ids": [CHAT], "guardian_log_channel_id": 0},
+    )
+    monkeypatch.setattr(purge_report, "get_guardian_settings", lambda: settings)
     yield
     with session_scope() as session:
         session.query(ModerationLog).delete()

@@ -103,3 +103,25 @@ def _clean_audit_log():
     with session_scope() as session:
         session.query(AuditLog).delete()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _clean_guardian_config():
+    """Конфиг Guardian (`bot_config`) — на каждый тест свой.
+
+    ЭТО НЕ ПРОСТО ГИГИЕНА. `get_guardian_settings()` отдаёт ОДИН И ТОТ ЖЕ
+    объект, пока таблица пуста, и СВЕЖУЮ КОПИЮ на каждый вызов, как только в
+    ней появляется хоть одна строка (`model_copy`). То есть строка,
+    оставленная одним файлом, меняет саму механику получения настроек для
+    всех следующих — и патчи, поставленные на объект, перестают действовать.
+
+    Найдено прогонами с перемешанным порядком файлов: файл проверок чистки и
+    жалоб падал ЦЕЛИКОМ (десять проверок), причём в коде чистки не менялось
+    ничего.
+    """
+    from guardian.db.models import BotConfig
+    from guardian.db.session import session_scope as guardian_session_scope
+
+    with guardian_session_scope() as session:
+        session.query(BotConfig).delete()
+    yield
