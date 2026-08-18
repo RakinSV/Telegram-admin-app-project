@@ -372,11 +372,17 @@ async def start_components(settings: Settings | None = None) -> None:
     _sync_jobs(_components.scheduler, settings)  # тоже строит _components.rewriter
     _components.scheduler.start()
     runtime_state.set_component_status("scheduler", True)
-    logger.info(
-        "Пайплайн-тик каждые %d с (auto_post=%s, scheduled_posting=%s)",
-        settings.pipeline_interval_seconds, settings.auto_post_enabled,
-        settings.scheduled_posting_enabled,
-    )
+    # Итог пишем ПО ФАКТУ, а не по настройкам: строка «пайплайн-тик каждые
+    # 30 с» сразу после «пайплайн-тик не ставлю» — это ровно то враньё в логе,
+    # из-за которого потом ищут несуществующую проблему.
+    jobs = sorted(job.id for job in _components.scheduler.get_jobs())
+    logger.info("Планировщик запущен, джоб %d: %s", len(jobs), ", ".join(jobs))
+    if _components.application is not None:
+        logger.info(
+            "Пайплайн-тик каждые %d с (auto_post=%s, scheduled_posting=%s)",
+            settings.pipeline_interval_seconds, settings.auto_post_enabled,
+            settings.scheduled_posting_enabled,
+        )
 
 
 async def stop_components() -> None:
