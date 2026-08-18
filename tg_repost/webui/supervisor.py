@@ -96,7 +96,19 @@ class RunningComponents:
 
     @property
     def is_running(self) -> bool:
-        return self.tele_client is not None
+        """Работает ли хоть что-нибудь.
+
+        РАНЬШЕ ЗДЕСЬ БЫЛ ТОЛЬКО TELETHON, и это ломало остановку: при неудачном
+        старте listener-а `stop_components` выходил сразу, оставляя работать
+        планировщик и ботов сценариев. Теперь компоненты поднимаются независимо
+        друг от друга, поэтому и признак «что-то живо» должен быть общим.
+        """
+        return any((
+            self.tele_client is not None,
+            self.application is not None,
+            self.scheduler is not None,
+            self.flow_polling is not None,
+        ))
 
 
 _components = RunningComponents()
@@ -160,7 +172,16 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
     application = _components.application
     tele_client = _components.tele_client
 
-    if scheduler.get_job("pipeline_tick") is None:
+    # Пайплайн-тик отправляет посты на одобрение и публикует их — без бота
+    # модерации делать ему нечего, а падать каждую минуту он будет исправно.
+    if application is None:
+        if scheduler.get_job("pipeline_tick") is not None:
+            scheduler.remove_job("pipeline_tick")
+        logger.warning(
+            "Бот модерации не запущен — пайплайн-тик не ставлю: рерайт и "
+            "публикация всё равно упрутся в отсутствующего бота",
+        )
+    elif scheduler.get_job("pipeline_tick") is None:
         scheduler.add_job(
             pipeline_tick,
             trigger=IntervalTrigger(seconds=settings.pipeline_interval_seconds),
@@ -208,8 +229,11 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
                 "POSTING_SLOTS — одобренные посты НЕ будут публиковаться!"
             )
 
+    # Джобы, которым НУЖЕН Telethon, при его отсутствии не заводятся вовсе.
+    # Иначе каждая минута расписания давала бы трассировку в логе про `None`,
+    # и настоящие сообщения в нём утонули бы — а работы всё равно никакой.
     _resync_optional_job(
-        scheduler, "collect_stats", settings.stats_enabled,
+        scheduler, "collect_stats", settings.stats_enabled and tele_client is not None,
         collect_stats, [tele_client, application],
         IntervalTrigger(minutes=settings.stats_interval_minutes),
     )
@@ -240,7 +264,8 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         IntervalTrigger(minutes=5),
     )
     _resync_optional_job(
-        scheduler, "channel_stats_job", settings.channel_stats_enabled,
+        scheduler, "channel_stats_job",
+        settings.channel_stats_enabled and tele_client is not None,
         collect_channel_stats, [tele_client],
         IntervalTrigger(hours=settings.channel_stats_interval_hours),
     )
@@ -250,7 +275,8 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
         IntervalTrigger(hours=settings.recycle_interval_hours),
     )
     _resync_optional_job(
-        scheduler, "collect_growth_snapshot", settings.growth_tracking_enabled,
+        scheduler, "collect_growth_snapshot",
+        settings.growth_tracking_enabled and tele_client is not None,
         collect_growth_snapshot, [tele_client],
         IntervalTrigger(minutes=settings.growth_snapshot_interval_minutes),
     )
@@ -276,35 +302,71 @@ def _sync_jobs(scheduler: AsyncIOScheduler, settings: Settings) -> None:
 
 
 async def start_components(settings: Settings | None = None) -> None:
-    """Поднять Telethon listener + бот модерации + планировщик с нуля."""
+    """Поднять Telethon listener + бот модерации + боты сценариев + планировщик.
+
+    КАЖДЫЙ КОМПОНЕНТ ПОДНИМАЕТСЯ ОТДЕЛЬНО, И ПАДЕНИЕ ОДНОГО НЕ УНОСИТ
+    ОСТАЛЬНЫХ. Найдено аудитом на стенде: Telegram оттуда недоступен, Telethon
+    падал с `ConnectionError`, и вместе с ним НЕ запускались ни планировщик, ни
+    воркер очереди, ни боты конструктора — хотя ни один из них от Telethon не
+    зависит. Снаружи это выглядело как «админка работает, а система нет»:
+    рассылки не уходят, шаги воронок не отправляются, сроки в сценариях не
+    подметаются, и единственный признак — серый значок на `/components`.
+
+    Порядок сохранён: сначала чтение (listener), потом отправка (боты), потом
+    расписание. Планировщик идёт последним, потому что его джобы держат ссылки
+    на всё перечисленное выше.
+    """
     if _components.is_running:
         logger.warning("start_components: компоненты уже запущены, пропуск")
         return
     settings = settings or get_settings()
 
-    _components.tele_client = build_client()
-    _components.extra_tele_clients = build_extra_clients()
-    await start_listeners([_components.tele_client, *_components.extra_tele_clients])
-    runtime_state.set_component_status("listener", True)
+    try:
+        _components.tele_client = build_client()
+        _components.extra_tele_clients = build_extra_clients()
+        await start_listeners(
+            [_components.tele_client, *_components.extra_tele_clients]
+        )
+        runtime_state.set_component_status("listener", True)
+    except Exception:
+        # Типичные причины: не поднялся прокси, истекла сессия, провайдер
+        # режет Telegram. Всё это чинится в админке, и админка обязана при
+        # этом работать — вместе с очередью и расписанием.
+        logger.exception(
+            "Telethon listener не поднялся — остальные компоненты запускаю без него"
+        )
+        _components.tele_client = None
+        _components.extra_tele_clients = []
+        runtime_state.set_component_status("listener", False)
 
-    _components.application = build_application()
-    await _components.application.initialize()
-    await _components.application.start()
-    assert _components.application.updater is not None  # build_application() не отключает updater
-    # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
-    # my_chat_member нужен для обнаружения чатов (F08-доп., см.
-    # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
-    # недокументированного здесь дефолтного поведения getUpdates.
-    await _components.application.updater.start_polling(
-        drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
-    )
-    runtime_state.set_component_status("bot", True)
-    logger.info("Бот модерации запущен")
+    try:
+        _components.application = build_application()
+        await _components.application.initialize()
+        await _components.application.start()
+        assert _components.application.updater is not None  # build_application() не отключает updater
+        # allowed_updates=ALL_TYPES явно (не полагаемся на дефолт Bot API) —
+        # my_chat_member нужен для обнаружения чатов (F08-доп., см.
+        # moderation_bot.py::_on_my_chat_member), явное перечисление надёжнее
+        # недокументированного здесь дефолтного поведения getUpdates.
+        await _components.application.updater.start_polling(
+            drop_pending_updates=True, allowed_updates=Update.ALL_TYPES,
+        )
+        runtime_state.set_component_status("bot", True)
+        logger.info("Бот модерации запущен")
+    except Exception:
+        logger.exception(
+            "Бот модерации не поднялся — остальные компоненты запускаю без него"
+        )
+        _components.application = None
+        runtime_state.set_component_status("bot", False)
 
     # F75: боты-конструкторы. Поднимаются ПОСЛЕ бота модерации и до
     # планировщика: подметание просроченных сроков (джоба ниже) отправляет
     # сообщения этими же ботами, и к первому её проходу они должны быть живы.
-    await start_flow_bots()
+    try:
+        await start_flow_bots()
+    except Exception:
+        logger.exception("Боты-конструкторы не поднялись — продолжаю без них")
 
     _components.scheduler = AsyncIOScheduler()
     _sync_jobs(_components.scheduler, settings)  # тоже строит _components.rewriter

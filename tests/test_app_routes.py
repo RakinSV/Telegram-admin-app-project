@@ -1075,7 +1075,7 @@ def test_backup_download_returns_zip_attachment():
     веб-админки, не только через ручной запуск с сервера/cron."""
     client = _client()
     _bootstrap(client)
-    r = client.get("/export/backup/download")
+    r = client.post("/export/backup/download")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/zip"
     assert "attachment" in r.headers["content-disposition"]
@@ -1085,7 +1085,7 @@ def test_backup_download_returns_zip_attachment():
 def test_backup_restore_round_trips_a_downloaded_backup():
     client = _client()
     _bootstrap(client)
-    archive = client.get("/export/backup/download").content
+    archive = client.post("/export/backup/download").content
 
     r = client.post(
         "/export/backup/restore",
@@ -1545,3 +1545,19 @@ def test_reject_all_leaves_non_pending_posts_alone():
     client.post("/moderation/reject-all", follow_redirects=False)
     with session_scope() as session:
         assert session.get(Post, posted_id).status == PostStatus.POSTED
+
+
+def test_backup_is_not_created_by_a_plain_get():
+    """Бэкап СОЗДАЁТСЯ, а не читается: он собирает .env, базы и логи в архив
+    на диске. GET для такого не годится — его дёргает всё подряд: предзагрузка
+    ссылок браузером, закладка, обход админки.
+
+    Найдено аудитом стенда: обход страниц оставил две лишние копии базы по
+    8 МБ, ничего для этого не нажимая.
+    """
+    client = _client()
+    _bootstrap(client)
+
+    response = client.get("/export/backup/download")
+
+    assert response.status_code == 405, "скачивание бэкапа снова доступно по GET"

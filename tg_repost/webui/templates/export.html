@@ -31,7 +31,7 @@
 <h2>{{ t('export.backup_section_title') }}</h2>
 <p class="muted">{{ t('export.backup_section_desc') }}</p>
 <div class="card">
-  <form method="get" action="/export/backup/download">
+  <form method="post" action="/export/backup/download">
     <button type="submit">{{ t('export.backup_download') }}</button>
   </form>
 </div>

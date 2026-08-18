@@ -3,6 +3,7 @@
 (сам APScheduler-планировщик не требует сети, job-функции не вызываются,
 только регистрируются)."""
 
+import pytest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -18,6 +19,25 @@ from tg_repost.webui import supervisor as supervisor_module
 
 def _noop(*args, **kwargs):
     pass
+
+
+@pytest.fixture(autouse=True)
+def _live_components():
+    """Живые компоненты на время теста.
+
+    `_sync_jobs` теперь СМОТРИТ на них: джоба, которой нужен Telethon или бот
+    модерации, без них не заводится (аудит стенда 2026-08-18 — на стенде без
+    Telegram такие джобы давали трассировку каждую минуту и ноль работы).
+    Тесты ниже проверяют флаги настроек, поэтому компоненты им нужны живые —
+    иначе они проверяли бы не то, ради чего написаны.
+    """
+    components = get_components()
+    before = (components.tele_client, components.application)
+    components.tele_client = object()
+    components.application = object()
+    yield
+    components.tele_client, components.application = before
+
 
 
 def test_running_components_is_running_false_by_default():
