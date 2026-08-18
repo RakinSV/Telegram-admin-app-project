@@ -37,6 +37,10 @@
      бесконечно незачем. */
   var history = [];
   var HISTORY_LIMIT = 30;
+  /* Шаг сетки. Узлы прилипают к ней при перетаскивании: схема из десятка
+     карточек, поставленных «на глаз», читается заметно хуже, чем та же схема
+     со строгими рядами, а ровнять их вручную мышью — работа ради работы. */
+  var GRID = 20;
   var kindByName = {};
   KINDS.forEach(function (item) { kindByName[item.kind] = item; });
 
@@ -126,8 +130,9 @@
     // Новый узел ставится ниже последнего, а не в одну точку: иначе первые
     // добавленные оказываются друг под другом и их не видно.
     var y = 20;
-    graph.nodes.forEach(function (n) { y = Math.max(y, n.y + 130); });
-    var node = { node_key: nextKey(), kind: kind, config: config, x: 30, y: y };
+    graph.nodes.forEach(function (n) { y = Math.max(y, n.y + GRID * 7); });
+    var node = { node_key: nextKey(), kind: kind, config: config,
+                 x: GRID * 2, y: snap(y) };
     remember();
     graph.nodes.push(node);
     selected = node.node_key;
@@ -261,11 +266,15 @@
     card.addEventListener("pointerup", onNodePointerUp);
   }
 
+  function snap(value) {
+    return Math.round(value / GRID) * GRID;
+  }
+
   function onNodePointerMove(event) {
     if (!drag) { return; }
     var node = nodeByKey(drag.key);
-    node.x = Math.max(0, drag.originX + (event.clientX - drag.startX));
-    node.y = Math.max(0, drag.originY + (event.clientY - drag.startY));
+    node.x = Math.max(0, snap(drag.originX + (event.clientX - drag.startX)));
+    node.y = Math.max(0, snap(drag.originY + (event.clientY - drag.startY)));
     if (Math.abs(event.clientX - drag.startX) > 3
         || Math.abs(event.clientY - drag.startY) > 3) {
       drag.moved = true;
@@ -398,8 +407,8 @@
       remember();
       var clone = JSON.parse(JSON.stringify(node));
       clone.node_key = nextKey();
-      clone.x = node.x + 30;
-      clone.y = node.y + 40;
+      clone.x = snap(node.x + GRID * 2);
+      clone.y = snap(node.y + GRID * 2);
       graph.nodes.push(clone);
       selected = clone.node_key;
       markDirty();

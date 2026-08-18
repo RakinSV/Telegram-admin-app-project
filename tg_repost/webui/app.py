@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -377,6 +377,32 @@ def _telethon_wizard_routes(
 def _public_router() -> APIRouter:
     """Роуты без авторизации: бутстрап-визард и логин."""
     router = APIRouter()
+
+    @router.get("/health")
+    async def health() -> Response:
+        """Живо ли приложение и что именно в нём работает.
+
+        БЕЗ АВТОРИЗАЦИИ И БЕЗ СЕКРЕТОВ: адрес нужен docker-healthcheck и
+        внешнему монитору, у которых пароля нет. Наружу уходит только состав
+        компонентов — по нему нельзя узнать ни настроек, ни данных.
+
+        ОТВЕТ 200 ДАЖЕ ПРИ УПАВШИХ КОМПОНЕНТАХ. Здоровье процесса и здоровье
+        связи с Telegram — разные вещи: админка обязана работать именно тогда,
+        когда Telegram недоступен, потому что чинят это в ней. Контейнер,
+        перезапущенный из-за отвалившегося провайдера, лечения бы не дал.
+
+        Найдено аудитом: адрес был разрешён в политике доступа, а самого
+        роута не существовало — 404. Контейнер при этом показывал «Up», хотя
+        внутри не поднялся ни один компонент.
+        """
+        from tg_repost.webui import runtime_state
+
+        status = runtime_state.get_component_status()
+        return JSONResponse({
+            "status": "ok",
+            "components": status,
+            "degraded": [name for name, alive in sorted(status.items()) if not alive],
+        })
 
     @router.get("/lang/{code}")
     async def set_language(request: Request, code: str, next: str = "/") -> Response:

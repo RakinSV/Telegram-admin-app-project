@@ -47,6 +47,10 @@ class Migrated:
     published_version: int | None
     # Сколько людей сейчас идёт по СТАРОЙ воронке: именно им стоит выключение.
     people_inside: int
+    # Выключена ли старая воронка прямо сейчас. Выключаем САМИ только когда
+    # внутри никого: обрывать нечего, а два движка на один «/start» — это
+    # два сообщения человеку.
+    switched_off: bool
 
 
 def build_graph(steps) -> tuple[list[dict], list[dict]]:  # noqa: ANN001 — tuple[Step, ...]
@@ -104,6 +108,11 @@ def migrate(funnel_id: int, bot_id: int) -> Migrated:
         raise MigrationRefused("Воронка не найдена")
     if not funnel.steps:
         raise MigrationRefused("В воронке нет шагов — переносить нечего")
+    if funnel.is_migrated:
+        raise MigrationRefused(
+            f"Эта воронка уже перенесена в сценарий #{funnel.migrated_to_flow_id}. "
+            "Второй перенос сделал бы двойника, который отвечает тем же людям."
+        )
 
     bot = managed_bots_repo.get(bot_id)
     if bot is None:
@@ -131,13 +140,28 @@ def migrate(funnel_id: int, bot_id: int) -> Migrated:
         raise MigrationRefused(f"Сценарий не собрался: {exc}") from exc
 
     inside = funnels_repo.runs_of(funnel_id)["running"]
+    funnels_repo.mark_migrated(funnel_id, flow_id)
+
+    # ВЫКЛЮЧАЕМ САМИ ТОЛЬКО ПУСТУЮ ВОРОНКУ. Внутри никого — обрывать нечего, а
+    # оставить её включённой значит держать два движка на один «/start»: человек
+    # получит и старую цепочку, и новый сценарий. Если же люди внутри есть,
+    # решение остаётся за владельцем: выключение завершит им цепочку на
+    # середине, и цена этого — его, а не наша.
+    switched_off = False
+    if inside == 0 and funnel.is_active:
+        funnels_repo.set_active(funnel_id, False)
+        switched_off = True
+
     logger.info(
-        "F75: воронка «%s» перенесена в сценарий #%d бота «%s» (версия %d)",
-        funnel.name, flow_id, bot.name, version,
+        "F75: воронка «%s» перенесена в сценарий #%d бота «%s» (версия %d), "
+        "внутри людей %d, старая %s",
+        funnel.name, flow_id, bot.name, version, inside,
+        "выключена" if switched_off else "оставлена включённой",
     )
     return Migrated(
         funnel_id=funnel_id, flow_id=flow_id,
         published_version=version, people_inside=inside,
+        switched_off=switched_off,
     )
 
 
@@ -147,4 +171,7 @@ def pending() -> list[funnels_repo.FunnelView]:
     Пустые сюда не попадают: переносить нечего, а показывать владельцу строку,
     на которой перенос всегда откажет, — издевательство.
     """
-    return [view for view in funnels_repo.list_all() if view.steps]
+    return [
+        view for view in funnels_repo.list_all()
+        if view.steps and not view.is_migrated
+    ]

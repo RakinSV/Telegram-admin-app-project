@@ -69,6 +69,13 @@ class FunnelView:
     trigger: str
     steps: tuple[Step, ...]
     is_active: bool
+    # F75, шаг 6: в какой сценарий конструктора воронка перенесена.
+    # `None` — не переносилась.
+    migrated_to_flow_id: int | None = None
+
+    @property
+    def is_migrated(self) -> bool:
+        return self.migrated_to_flow_id is not None
 
 
 def parse_steps(raw: object) -> tuple[Step, ...]:
@@ -162,6 +169,7 @@ def get(funnel_id: int) -> FunnelView | None:
             id=row.id, name=row.name, trigger=row.trigger,
             steps=parse_steps(json.loads(row.steps_json)) if row.steps_json != "[]" else (),
             is_active=row.is_active,
+            migrated_to_flow_id=row.migrated_to_flow_id,
         )
 
 
@@ -178,6 +186,21 @@ def set_active(funnel_id: int, active: bool) -> bool:
         if row is None:
             return False
         row.is_active = active
+        return True
+
+
+def mark_migrated(funnel_id: int, flow_id: int) -> bool:
+    """Запомнить, в какой сценарий конструктора уехала воронка.
+
+    Связь хранится ЯВНО, а не выводится по совпадению названий: владелец
+    должен видеть в списке, что эта воронка уже живёт в новом движке, а
+    повторный перенос должен упираться в отказ, а не создавать двойника.
+    """
+    with session_scope() as session:
+        row = session.get(Funnel, funnel_id)
+        if row is None:
+            return False
+        row.migrated_to_flow_id = flow_id
         return True
 
 

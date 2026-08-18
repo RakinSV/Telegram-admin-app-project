@@ -786,6 +786,11 @@ class Funnel(Base):
     trigger: Mapped[str] = mapped_column(String(32), default="start")
     steps_json: Mapped[str] = mapped_column(Text, default="[]")
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # F75, шаг 6: в какой сценарий конструктора воронка перенесена. NULL —
+    # не переносилась. Хранится ЯВНО, а не выводится по совпадению названий:
+    # владелец должен видеть в списке, что эта воронка уже живёт в новом
+    # движке, и не переносить её второй раз.
+    migrated_to_flow_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

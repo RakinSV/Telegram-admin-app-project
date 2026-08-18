@@ -165,20 +165,76 @@ def test_scenario_keeps_the_funnel_name():
 # --- чего перенос делать НЕ должен ---
 
 
-def test_old_funnel_keeps_running():
+def test_funnel_with_people_inside_keeps_running():
     """ГЛАВНОЕ ОГРАНИЧЕНИЕ ПЕРЕНОСА.
 
     Выключение воронки останавливает цепочку всем, кто сейчас внутри
     (`handle_step_task` завершает запуск с причиной «воронка выключена»).
     Решать это за владельца нельзя.
     """
+    from tg_repost import subscribers_repo
+
+    bot_id = _bot()
+    funnel_id = _funnel(active=True)
+    subscribers_repo.record_contact(ALICE)
+    funnels_repo.enroll(ALICE)
+
+    result = funnels_migration.migrate(funnel_id, bot_id)
+
+    assert result.switched_off is False
+    view = funnels_repo.get(funnel_id)
+    assert view is not None and view.is_active is True
+
+
+def test_empty_funnel_is_switched_off_on_migration():
+    """Внутри никого — обрывать нечего, а оставить включённой значит держать
+    ДВА движка на один «/start»: человек получит и старую цепочку, и новый
+    сценарий."""
     bot_id = _bot()
     funnel_id = _funnel(active=True)
 
-    funnels_migration.migrate(funnel_id, bot_id)
+    result = funnels_migration.migrate(funnel_id, bot_id)
+
+    assert result.switched_off is True
+    view = funnels_repo.get(funnel_id)
+    assert view is not None and view.is_active is False
+
+
+def test_migration_is_remembered_on_the_funnel():
+    """Связь хранится явно: владелец должен видеть в списке, что воронка уже
+    живёт в новом движке."""
+    bot_id = _bot()
+    funnel_id = _funnel()
+
+    result = funnels_migration.migrate(funnel_id, bot_id)
 
     view = funnels_repo.get(funnel_id)
-    assert view is not None and view.is_active is True
+    assert view is not None
+    assert view.is_migrated is True
+    assert view.migrated_to_flow_id == result.flow_id
+
+
+def test_second_migration_of_the_same_funnel_is_refused():
+    """Двойник отвечал бы тем же людям тем же ботом."""
+    first_bot, second_bot = _bot("Первый"), _bot("Второй")
+    funnel_id = _funnel()
+    funnels_migration.migrate(funnel_id, first_bot)
+
+    with pytest.raises(funnels_migration.MigrationRefused) as exc:
+        funnels_migration.migrate(funnel_id, second_bot)
+
+    assert "уже перенесена" in str(exc.value)
+
+
+def test_pending_skips_already_migrated():
+    bot_id = _bot()
+    migrated = _funnel("Перенесённая")
+    _funnel("Ещё не перенесённая")
+    funnels_migration.migrate(migrated, bot_id)
+
+    names = [view.name for view in funnels_migration.pending()]
+
+    assert names == ["Ещё не перенесённая"]
 
 
 def test_people_inside_are_counted_for_the_owner():

@@ -39,6 +39,12 @@
       {% else %}
       <span class="muted">{{ t('funnels.paused') }}</span>
       {% endif %}
+      {% if row.view.is_migrated %}
+      <div class="muted">
+        {{ t('funnels.migrated_to') }}
+        <a href="/flows/{{ row.view.migrated_to_flow_id }}">#{{ row.view.migrated_to_flow_id }}</a>
+      </div>
+      {% endif %}
     </td>
     <td>
       <form method="post" action="/funnels/{{ row.view.id }}/toggle"
@@ -53,7 +59,7 @@
       </form>
       {# F75, шаг 6: перенос в конструктор. Бот выбирается здесь же — уводить
          владельца на отдельную страницу ради одного списка незачем. #}
-      {% if bots %}
+      {% if bots and not row.view.is_migrated %}
       <form method="post" action="/funnels/{{ row.view.id }}/migrate"
             class="inline-form"
             onsubmit="return confirm('{{ t('funnels.confirm_migrate') }}');">

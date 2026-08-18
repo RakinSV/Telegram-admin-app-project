@@ -207,7 +207,8 @@ def build_funnels_router() -> APIRouter:
         )
         flash.set_flash(
             request,
-            i18n.t("funnels.migrated", n=result.people_inside),
+            i18n.t("funnels.migrated_and_off") if result.switched_off
+            else i18n.t("funnels.migrated", n=result.people_inside),
             kind="ok",
         )
         return RedirectResponse(url=f"/flows/{result.flow_id}", status_code=303)

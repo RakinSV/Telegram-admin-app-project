@@ -407,7 +407,16 @@ button.small { padding: 4px 10px; font-size: 12px; }
 .flow-palette-item:active { transform: scale(0.98); }
 
 .flow-canvas-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
-.flow-canvas { position: relative; min-height: 420px; min-width: 520px; }
+.flow-canvas {
+  position: relative; min-height: 420px; min-width: 520px;
+  /* Сетка видна еле-еле: она подсказка для глаза, а не элемент схемы.
+     Шаг совпадает с шагом прилипания в flow_canvas.js — иначе узлы вставали
+     бы «между линий», и подсказка врала бы. */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, .035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, .035) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
 .flow-edges { position: absolute; inset: 0; width: 100%; pointer-events: none; }
 .flow-edge { fill: none; stroke: var(--border); stroke-width: 2; }
 /* Ветки на верный и неверный ответ различаются цветом: в графе из десяти

@@ -627,15 +627,28 @@ STRINGS: dict[str, dict[str, str]] = {
 
     # --- F75, шаг 6: перенос воронок в конструктор ---
     "funnels.migrate": {"ru": "В конструктор", "en": "To the builder"},
+    "funnels.migrated_to": {"ru": "перенесена в сценарий", "en": "migrated to scenario"},
+    "funnels.migrated_and_off": {
+        "ru": "Перенесено и опубликовано. Внутри старой воронки никого не было, "
+              "поэтому она выключена: два движка на один «/start» слали бы "
+              "человеку и цепочку, и сценарий.",
+        "en": "Migrated and published. Nobody was inside the old funnel, so it "
+              "was switched off: two engines on one «/start» would send a "
+              "person both the chain and the scenario.",
+    },
     "funnels.migrate_note": {
         "ru": "Перенос собирает из воронки сценарий: задержка становится узлом "
-              "«пауза», сообщение — узлом «текст». Старая воронка продолжает "
-              "работать: выключить её — отдельное решение, потому что "
-              "выключение обрывает цепочку всем, кто сейчас внутри.",
+              "«пауза», сообщение — узлом «текст». Если внутри воронки никого "
+              "нет, она выключается сразу — два движка на один «/start» слали "
+              "бы человеку и цепочку, и сценарий. Если люди внутри есть, "
+              "воронка остаётся работать: выключение оборвёт им цепочку, и это "
+              "решение остаётся за вами.",
         "en": "Migration turns the funnel into a scenario: a delay becomes a "
-              "«pause» node, a message becomes a «text» node. The old funnel "
-              "keeps running: turning it off is a separate decision, because "
-              "it cuts the chain for everyone currently inside.",
+              "«pause» node, a message becomes a «text» node. If nobody is "
+              "inside, the funnel is switched off right away — two engines on "
+              "one «/start» would send a person both the chain and the "
+              "scenario. If people are inside, it keeps running: switching it "
+              "off cuts their chain, and that call is yours.",
     },
     "funnels.migrate_no_bots": {
         "ru": "Переносить пока некуда: сначала заведите бота в «Конструкторе "
