@@ -1,3 +1,7 @@
+﻿# ФАЙЛ СОХРАНЁН С BOM НАМЕРЕННО. Windows PowerShell 5.1 читает .ps1 без
+# BOM как ANSI: кириллица в комментариях превращается в мусор, и скрипт
+# падает на разборе, а не на логике. Проверено на стенде — первый запуск
+# упал с MissingEndCurlyBrace именно поэтому.
 # Обновление стенда одной командой. Запускается НА СТЕНДЕ:
 #   powershell -ExecutionPolicy Bypass -File C:\deploy\tg-app\deploy_stand.ps1
 #
