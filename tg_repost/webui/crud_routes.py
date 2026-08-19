@@ -138,6 +138,36 @@ def _moderation_detail_context(post_id: int, error: str | None = None) -> dict:
     }
 
 
+def _safe_media_path(filename: str) -> Path | None:
+    """Путь к файлу внутри media_dir — или None, если он оттуда выходит.
+
+    ПРОВЕРКА ПО ФАКТИЧЕСКОМУ ПУТИ, А НЕ ПО СИМВОЛАМ. Раньше здесь
+    отвергались «/», «\» и «..», и это выглядело достаточным. На Windows —
+    нет: «C:.env» не содержит ни одного из трёх, а `Path("media") / "C:.env"`
+    даёт «C:.env», то есть файл в текущем каталоге диска C, мимо media_dir.
+    Страница доступна роли `editor`, которая по замыслу только модерирует
+    посты, — и через неё читался бы `.env` с мастер-ключом, которым
+    расшифровываются все секреты системы.
+
+    Тот же способ уже используется при восстановлении из архива
+    (`tools/backup.py`): привести к абсолютному пути и убедиться, что он
+    внутри разрешённого каталога. Список запрещённых символов такого не
+    даёт — он всегда неполон.
+    """
+    media_dir = Path(get_settings().media_dir).resolve()
+    try:
+        candidate = (media_dir / filename).resolve()
+    except (OSError, ValueError):
+        # Слишком длинное имя или недопустимые символы — файла с таким
+        # именем всё равно нет, разбираться дальше незачем.
+        return None
+    if not candidate.is_relative_to(media_dir):
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
 def build_crud_router() -> APIRouter:
     """CRUD-роуты — все требуют авторизации (см. `auth.require_login`)."""
     router = APIRouter(dependencies=[Depends(require_login)])
@@ -807,15 +837,10 @@ def build_crud_router() -> APIRouter:
 
     @router.get("/media/{filename}")
     async def serve_media(request: Request, filename: str) -> Response:
-        """Отдать файл из media_dir (обложки постов) — только для залогиненного
-        владельца (роутер защищён `require_login` на уровне `APIRouter`).
-        `filename` — просто basename, без слэшей/`..`: путь всегда строится
-        от `media_dir`, наружу выйти нельзя (CWE-22, path traversal)."""
+        """Отдать файл из media_dir (обложки постов)."""
         del request
-        if "/" in filename or "\\" in filename or ".." in filename:
-            raise HTTPException(status_code=404)
-        path = Path(get_settings().media_dir) / filename
-        if not path.is_file():
+        path = _safe_media_path(filename)
+        if path is None:
             raise HTTPException(status_code=404)
         # nosniff — файлы в media_dir приходят из недоверенных источников
         # (скачаны по ссылке из чужого поста, сгенерированы внешним AI-
