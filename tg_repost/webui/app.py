@@ -191,6 +191,10 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
     """
     revealed = revealed or {}
     all_secrets = {s.key: s for s in settings_store.list_secret_status()}
+    # ОДИН запрос на всю страницу вместо запроса на каждое поле. Полей 154,
+    # и замер 2026-08-19 показал ровно 154 одинаковых обращения к базе на
+    # один показ страницы.
+    overridden = settings_store.overridden_keys()
     return [
         {
             "key": group.key,
@@ -212,7 +216,7 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
                     # Есть ли сохранённое значение, перекрывающее дефолт кода.
                     # Только для таких полей показывается кнопка сброса — у
                     # остальных сбрасывать нечего, и кнопка бы врала.
-                    "is_overridden": settings_store.is_overridden(f),
+                    "is_overridden": f.name in overridden,
                 }
                 for f in group.fields
             ],

@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.types import (
@@ -121,7 +122,10 @@ async def on_buy(callback, bot: Bot) -> None:  # CallbackQuery
 
     if rail is not None and has_card:
         await callback.message.answer(
-            f"{product.name} — {product.price_human}\nКак будете платить?",
+            # Экранируем название: оно приходит из админки без проверок,
+            # а бот шлёт с parse_mode=HTML — «<» ломает отправку целиком.
+            f"{escape(product.name)} — {product.price_human}\n"
+            "Как будете платить?",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="Картой", callback_data=f"pay:card:{product_id}")],
                 [InlineKeyboardButton(text="Криптой", callback_data=f"pay:crypto:{product_id}")],
@@ -203,7 +207,7 @@ async def _send_crypto_invoice(callback, product_id: int) -> None:
 
     schedule(order.id)
     await callback.message.answer(
-        f"Заказ №{order.id}: {product.name}\n"
+        f"Заказ №{order.id}: {escape(product.name)}\n"
         f"К оплате: {invoice.amount} {invoice.asset}\n\n"
         f"{invoice.pay_url}\n\n"
         "Как только перевод придёт, я подтвержу заказ здесь же.",

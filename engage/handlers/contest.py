@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from aiogram import Bot, Router
 from aiogram.enums import ChatMemberStatus
 from aiogram.exceptions import TelegramBadRequest
@@ -72,7 +73,10 @@ async def handle_contest_start(
     result = await check_all_conditions(bot, contest, user_id)
     if not result.ok:
         await message.answer(
-            f"Пока не получается записать тебя на «{contest.title}»:\n"
+            # Экранируем: бот шлёт с parse_mode=HTML (дефолт в bot.py), и
+            # «<» в названии Telegram разбирает как начало тега —
+            # сообщение не уходит вовсе, с «can't parse entities».
+            f"Пока не получается записать тебя на «{escape(contest.title)}»:\n"
             + "\n".join(f"• {m}" for m in result.missing)
             + "\n\nВыполни условия и нажми на ссылку ещё раз.",
         )
@@ -84,8 +88,8 @@ async def handle_contest_start(
         full_name=getattr(user, "full_name", None),
     ):
         await message.answer(
-            f"✅ Ты участвуешь в «{contest.title}».\n"
-            f"Приз: {contest.prize}\n"
+            f"✅ Ты участвуешь в «{escape(contest.title)}».\n"
+            f"Приз: {escape(contest.prize)}\n"
             f"Итоги: {contest.ends_at:%d.%m.%Y %H:%M} UTC\n\n"
             f"Розыгрыш честный и проверяемый: seed опубликован заранее — "
             f"<code>{contest.draw_seed}</code>",

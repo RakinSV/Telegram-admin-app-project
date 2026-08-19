@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, F, Router
@@ -119,7 +120,8 @@ async def on_subscribe(message: Message, bot: Bot) -> None:
         subscription_period=SUBSCRIPTION_PERIOD,
     )
     await message.answer(
-        f"Доступ к «{title}» — {price} ⭐ в месяц.\n"
+        # Экранируем: parse_mode=HTML стоит дефолтом бота.
+        f"Доступ к «{escape(title)}» — {price} ⭐ в месяц.\n"
         "Подписка продлевается автоматически, отменить можно в Telegram.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text=f"Оплатить {price} ⭐", url=link),

@@ -777,11 +777,26 @@ def effective_value(field: SettingField) -> object:
 
 def is_overridden(field: SettingField) -> bool:
     """Есть ли для поля сохранённое в админке значение (строка в
-    `app_settings`), перекрывающее дефолт кода/`.env`."""
+    `app_settings`), перекрывающее дефолт кода/`.env`.
+
+    Для СПИСКА полей эту функцию звать нельзя — есть `overridden_keys()`.
+    Замер 2026-08-19: страница настроек делала 155 запросов, из них 154 —
+    вот этот, по одному на поле.
+    """
+    return field.name in overridden_keys()
+
+
+def overridden_keys() -> set[str]:
+    """Все ключи, у которых есть сохранённое в админке значение — ОДНИМ
+    запросом.
+
+    Полей в настройках 154, и раньше страница спрашивала базу про каждое
+    отдельно. На SQLite это не падало, но 154 обращения к базе на один
+    показ страницы — это 154 остановки общего цикла событий, в котором
+    вместе с админкой живут все четыре бота.
+    """
     with session_scope() as session:
-        return session.query(AppSetting.id).filter(
-            AppSetting.key == field.name,
-        ).first() is not None
+        return {key for (key,) in session.query(AppSetting.key)}
 
 
 def reset_setting(key: str) -> bool:

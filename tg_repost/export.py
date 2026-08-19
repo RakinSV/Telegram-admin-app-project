@@ -62,13 +62,25 @@ def export_posts(since: datetime | None = None, until: datetime | None = None) -
         # цифры из него однажды предъявят наружу.
         stats = post_stats_repo.latest_stats_for(session, [post.id for post in posts])
 
-        rows = []
-        for post in posts:
-            targets = (
-                session.query(PostTarget).filter(PostTarget.post_id == post.id).all()
+        # Цели забираем ОДНИМ запросом на всю выборку. Раньше здесь был
+        # запрос на каждый пост: замер 2026-08-19 дал 100 запросов на экспорт
+        # ста постов, то есть цена росла ровно вместе с объёмом выгрузки —
+        # а выгружают как раз всё и сразу, при передаче канала.
+        targets_by_post: dict[int, list[PostTarget]] = {}
+        if posts:
+            all_targets = (
+                session.query(PostTarget)
+                .filter(PostTarget.post_id.in_([post.id for post in posts]))
+                .order_by(PostTarget.id)
+                .all()
             )
-            rows.append(_post_row(post, targets, stats.get(post.id)))
-        return rows
+            for target in all_targets:
+                targets_by_post.setdefault(target.post_id, []).append(target)
+
+        return [
+            _post_row(post, targets_by_post.get(post.id, []), stats.get(post.id))
+            for post in posts
+        ]
 
 
 def export_posts_json(since: datetime | None = None, until: datetime | None = None) -> str:

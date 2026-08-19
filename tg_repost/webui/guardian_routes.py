@@ -45,6 +45,12 @@ _templates = build_templates()
 
 
 def _settings_groups_context() -> list[dict]:
+    # Настройки читаются ОДИН раз на всю страницу. Раньше значение каждого
+    # поля бралось через `effective_value(f)`, а тот зовёт
+    # `get_guardian_settings()`, который каждый раз идёт в базу за оверлеем и
+    # за расшифровкой токена. Замер 2026-08-19: 41 обращение к таблице
+    # секретов на один показ страницы, по одному на поле.
+    current = get_guardian_settings()
     return [
         {
             "key": group.key,
@@ -59,7 +65,7 @@ def _settings_groups_context() -> list[dict]:
                     "hint": i18n.opt(f"guardian.settings.field.{f.name}.hint"),
                     "value_type": f.value_type,
                     "choices": f.choices,
-                    "value": settings_store.effective_value(f),
+                    "value": getattr(current, f.name),
                 }
                 for f in group.fields
             ],

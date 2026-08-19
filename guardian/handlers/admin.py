@@ -12,6 +12,7 @@ user_id первым аргументом: `/ban 123456789 причина`.
 
 from __future__ import annotations
 
+from html import escape
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -378,7 +379,9 @@ async def cmd_delword(message: Message, command: CommandObject, bot: Bot) -> Non
         return
     stopwords_repo.remove_stopword(word, message.chat.id)
     _reload_keyword_filter()
-    await message.reply(f"Стоп-слово «{word}» удалено (если было).")
+    # Экранируем: у Guardian parse_mode=HTML дефолтом, и «<» в слове
+    # оставил бы админа без ответа вообще.
+    await message.reply(f"Стоп-слово «{escape(word)}» удалено (если было).")
 
 
 @router.message(Command("listwords"))
@@ -449,7 +452,7 @@ async def cmd_addomain(message: Message, command: CommandObject, bot: Bot) -> No
         )
         return
     _reload_link_filter()
-    await message.reply(f"Домен «{domain}» добавлен в whitelist.")
+    await message.reply(f"Домен «{escape(domain)}» добавлен в whitelist.")
 
 
 @router.message(Command("deldomain"))
@@ -463,7 +466,9 @@ async def cmd_deldomain(message: Message, command: CommandObject, bot: Bot) -> N
         return
     domains_repo.remove_allowed_domain(raw_domain, message.chat.id, str(actor_id))
     _reload_link_filter()
-    await message.reply(f"Домен «{raw_domain}» удалён из whitelist (если был).")
+    await message.reply(
+        f"Домен «{escape(raw_domain)}» удалён из whitelist (если был)."
+    )
 
 
 @router.message(Command("listdomains"))
