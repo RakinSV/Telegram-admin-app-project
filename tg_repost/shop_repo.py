@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 
 from tg_repost.db.models import Order, Product
@@ -420,11 +421,34 @@ def mark_crypto_order_paid(order_id: int) -> OrderView | None:
     принимается и помечается — деньги уже пришли, и отказать нельзя.
     """
     with session_scope() as session:
-        row = session.get(Order, order_id)
-        if row is None or row.status != STATUS_NEW:
-            # Повторный проход опроса по уже подтверждённому заказу — не
-            # ошибка: опрос идёт по расписанию и мог наложиться.
+        # ЗАХВАТ ЗАКАЗА ОДНИМ УСЛОВНЫМ ЗАПРОСОМ, а не «прочитать и проверить».
+        # Так было, и это давало ту же ошибку, что когда-то с остатком (см.
+        # `_take_from_stock`): два наложившихся подтверждения оба читают
+        # статус «новый», оба проходят проверку и оба списывают со склада —
+        # один товар уходит бесплатно, а покупатель получает два уведомления
+        # об оплате. Замер 2026-08-19 на файловой базе: два одновременных
+        # вызова, остаток 5 -> 3 вместо 4.
+        #
+        # Сегодня наложиться нечему: очередь строго последовательна, а у
+        # джобы max_instances=1. Но это свойство ПЛАНИРОВЩИКА, а не денег:
+        # оно исчезнет от второго воркера или от кнопки «проверить оплату
+        # сейчас» — а цена ошибки здесь настоящие деньги и настоящий товар.
+        claimed = session.execute(
+            update(Order)
+            .where(Order.id == order_id, Order.status == STATUS_NEW)
+            .values(status=STATUS_PAID, paid_at=_utcnow())
+        )
+        if claimed.rowcount == 0:
+            # Заказа нет, или его уже подтвердил кто-то другой. Повторный
+            # проход опроса по подтверждённому заказу — не ошибка.
             return None
+
+        row = session.get(Order, order_id)
+        if row is None:  # pragma: no cover — строку только что обновили
+            return None
+        # Значение в памяти после прямого UPDATE устаревает — ровно та же
+        # ловушка, что уже ловили в `_take_from_stock` и в очереди задач.
+        session.refresh(row)
 
         product = session.get(Product, row.product_id)
         if not _take_from_stock(session, product, row.quantity):
@@ -436,8 +460,6 @@ def mark_crypto_order_paid(order_id: int) -> OrderView | None:
                 order_id, row.product_id,
             )
 
-        row.status = STATUS_PAID
-        row.paid_at = _utcnow()
         logger.info("F70: заказ #%d оплачен криптой", order_id)
         return _order_view(row)
 
