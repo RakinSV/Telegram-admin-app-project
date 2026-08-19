@@ -645,6 +645,19 @@ def _protected_router() -> APIRouter:
                     )
                     for field in group.fields
                 }
+                # Пределы — тем же ValueError, чтобы отказ выглядел одинаково.
+                # Пустое поле превращается в 0, и для интервала это значит
+                # такт раз в секунду вместо тридцати — вместе со всеми
+                # запросами к платному провайдеру.
+                #
+                # ТОЛЬКО ПО ПРИСЛАННЫМ ПОЛЯМ. Поле, которого в форме не было,
+                # тоже становится нулём, но это давнее поведение сохранения
+                # настроек, и проверять его здесь значило бы отвергать
+                # частичную отправку целиком — на этом сразу упал тест
+                # сохранения промптов.
+                for field in group.fields:
+                    if field.name in form:
+                        settings_store.check_limits(field, coerced[field.name])
             except ValueError:
                 return _templates.TemplateResponse(
                     request,

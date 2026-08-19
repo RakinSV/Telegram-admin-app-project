@@ -56,6 +56,7 @@ from tg_repost.telegram.moderation_bot import forget_send_failures
 from tg_repost.telegram.publisher import resolve_target_labels_for_post
 from tg_repost.webui import access, audit, i18n, log_broadcast, settings_store
 from tg_repost.webui.templating import build_templates
+from tg_repost.webui.form_utils import parse_db_int
 from tg_repost.webui.auth import require_login
 from tg_repost.webui.supervisor import get_components, resync_scheduler_jobs, restart_telethon_listener
 
@@ -527,9 +528,11 @@ def build_crud_router() -> APIRouter:
     async def targets_create(
         request: Request, chat_id: str = Form(...), title: str = Form("")
     ) -> Response:
-        try:
-            chat_id_int = int(chat_id.strip())
-        except ValueError:
+        # Через общий разбор: он же проверяет, что число влезает в базу.
+        # Раньше длинное число доходило до записи и падало OverflowError —
+        # владелец видел стектрейс вместо «неверный chat_id».
+        chat_id_int = parse_db_int(chat_id)
+        if chat_id_int is None:
             return _templates.TemplateResponse(request, "targets.html", {
                 "targets": targets_repo.list_targets(),
                 "discovered": discovered_chats_repo.list_pending_discovered_chats(),

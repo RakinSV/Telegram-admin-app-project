@@ -45,6 +45,10 @@ class SettingField:
     # проходила валидацию — value_type="str" принимает любую непустую строку —
     # и код, сравнивающий через `==`, тихо переставал работать).
     choices: tuple[str, ...] | None = None
+    # Пределы для чисел. Заданы НЕ у всех полей — только там, где неверное
+    # значение ломает конкретное поведение (см. `_LIMITS` ниже).
+    min_value: float | None = None
+    max_value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -62,7 +66,85 @@ class SettingsGroup:
     secret_keys: tuple[str, ...] = ()
 
 
-SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
+
+# ПРЕДЕЛЫ ЧИСЛОВЫХ НАСТРОЕК (перебор ввода 2026-08-19).
+#
+# Пустое поле в форме превращается в 0 — так задумано для галочек и списков,
+# но для интервала это беда: `IntervalTrigger(seconds=0)` APScheduler молча
+# подменяет на ОДНУ СЕКУНДУ, и такт пайплайна вместо тридцати секунд идёт
+# каждую секунду — вместе со всеми запросами к платному провайдеру.
+# Отрицательное значение ещё хуже: время следующего запуска оказывается в
+# прошлом, и джоба крутится без остановки.
+#
+# Час вне 0-23 и минута вне 0-59 роняют `CronTrigger` прямо при сохранении
+# настроек — то есть владелец получает пятисотку.
+#
+# Правила по суффиксу имени НЕ ГОДЯТСЯ, это проверено: `max_reads_per_hour` —
+# счётчик, а не час суток, а `paid_access_chat_id` отрицателен по природе
+# (у Telegram id групп начинаются с -100). Поэтому список явный.
+_LIMITS: dict[str, tuple[float | None, float | None]] = {
+    # Час суток и минута — иначе CronTrigger падает при сохранении.
+    "backup_hour": (0, 23),
+    "digest_hour": (0, 23),
+    "digest_minute": (0, 59),
+    # Периодические джобы: ноль превращается в секунду, минус — в вечный цикл.
+    "pipeline_interval_seconds": (1, None),
+    "task_queue_interval_seconds": (1, None),
+    "comfyui_poll_interval_seconds": (1, None),
+    "rss_poll_interval_minutes": (1, None),
+    "stats_interval_minutes": (1, None),
+    "channel_stats_interval_hours": (1, None),
+    "recycle_interval_hours": (1, None),
+    # Таймауты сети: ноль означает «не ждать вовсе», то есть отменить запрос.
+    "openai_timeout_seconds": (1, None),
+    "link_fetch_timeout_seconds": (1, None),
+    # Температура вне 0..2 отвергается самим провайдером — но уже в бою, на
+    # каждом посте, и выглядит это как «рерайт перестал работать».
+    "rewrite_temperature": (0, 2),
+    # Сроки хранения и окна: отрицательный срок бессмысленен.
+    "media_retention_days": (0, None),
+    "queue_retention_days": (0, None),
+    "audit_retention_days": (0, None),
+    "dedup_window_days": (0, None),
+    "stats_window_days": (0, None),
+    "recycle_window_days": (0, None),
+    "recycle_min_age_days": (0, None),
+}
+
+
+def _with_limits(group: SettingsGroup) -> SettingsGroup:
+    """Проставить пределы полям группы по таблице выше."""
+    from dataclasses import replace
+
+    fields = tuple(
+        replace(f, min_value=_LIMITS[f.name][0], max_value=_LIMITS[f.name][1])
+        if f.name in _LIMITS else f
+        for f in group.fields
+    )
+    return replace(group, fields=fields)
+
+
+def check_limits(field: SettingField, value: object) -> None:
+    """Бросить ValueError, если значение вне предела поля.
+
+    ValueError, а не свой тип: сохранение настроек уже ловит его и показывает
+    понятную форму с ошибкой вместо пятисотки.
+    """
+    if field.min_value is None and field.max_value is None:
+        return
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return
+    if field.min_value is not None and value < field.min_value:
+        raise ValueError(
+            f"{field.name}: {value} меньше допустимого {field.min_value}"
+        )
+    if field.max_value is not None and value > field.max_value:
+        raise ValueError(
+            f"{field.name}: {value} больше допустимого {field.max_value}"
+        )
+
+
+_RAW_GROUPS: tuple[SettingsGroup, ...] = (
     SettingsGroup(
         "telegram", "Telegram (идентичность)",
         (
@@ -681,6 +763,13 @@ SETTINGS_GROUPS: tuple[SettingsGroup, ...] = (
         "перезапустить (`docker compose restart engage`).",
         secret_keys=("engage_bot_token",),
     ),
+)
+
+
+# Пределы проставляются здесь, а не у каждого поля: так их видно списком,
+# и добавить новый предел — одна строка в `_LIMITS`, а не правка описания.
+SETTINGS_GROUPS: tuple[SettingsGroup, ...] = tuple(
+    _with_limits(group) for group in _RAW_GROUPS
 )
 
 SECRET_LABELS: dict[str, str] = {

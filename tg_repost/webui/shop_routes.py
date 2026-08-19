@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from tg_repost import shop_repo as shop
 from tg_repost.webui import audit, i18n
 from tg_repost.webui.auth import require_login
+from tg_repost.webui.form_utils import fits_in_db
 from tg_repost.webui.templating import build_templates
 
 _templates = build_templates()
@@ -32,7 +33,11 @@ def rubles_to_minor(raw: str) -> int | None:
         return None
     try:
         value = round(float(text) * 100)
-    except ValueError:
+    except (ValueError, OverflowError):
+        return None
+    # Верхний предел — тот же, что у базы: цена в сорок цифр не «дорогой
+    # товар», а опечатка, и раньше она валила сохранение OverflowError.
+    if not fits_in_db(value):
         return None
     return value if value > 0 else None
 
