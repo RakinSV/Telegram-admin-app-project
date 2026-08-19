@@ -91,3 +91,52 @@ def test_terminal_flag():
     assert PostStatus.REJECTED.is_terminal
     assert not PostStatus.NEW.is_terminal
     assert not PostStatus.REWRITING.is_terminal
+
+
+# --- сторож: статус меняют только через set_status ---
+
+
+def test_production_code_never_assigns_post_status_directly():
+    """Проверка перехода живёт в `Post.set_status`, а не в самой колонке.
+
+    ЭТО ЗНАЧИТ, ЧТО ЕЁ МОЖНО ОБОЙТИ ОДНОЙ СТРОКОЙ: `post.status = X` пишет
+    что угодно куда угодно. Перебор 2026-08-19 это и показал — прямым
+    присваиванием проходят все 90 переходов из 90, включая «опубликован ->
+    новый», после которого пост уходит на второй рерайт и вторую оплату.
+
+    Сегодня таких строк в рабочем коде НЕТ — все 25 переходов идут через
+    `set_status`. Сторож стоит на том, чтобы так и осталось: без него
+    первая же прямая запись молча отключит машину состояний, а паспорт
+    системы продолжит обещать, что она строгая.
+    """
+    import ast
+    import pathlib
+
+    offenders = []
+    for package in ("tg_repost", "guardian", "engage"):
+        for path in pathlib.Path(package).rglob("*.py"):
+            if "__pycache__" in path.parts or "migrations" in path.parts:
+                continue
+            # В самой модели присваивание и должно быть — это тело set_status.
+            if path.as_posix().endswith("db/models.py"):
+                continue
+            source = path.read_text(encoding="utf-8-sig")
+            if "PostStatus." not in source:
+                continue
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Assign):
+                    continue
+                value = node.value
+                if not (isinstance(value, ast.Attribute)
+                        and isinstance(value.value, ast.Name)
+                        and value.value.id == "PostStatus"):
+                    continue
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and target.attr == "status":
+                        offenders.append(f"{path}:{node.lineno}")
+
+    assert not offenders, (
+        "статус поста присваивается напрямую, минуя set_status() и проверку "
+        f"перехода: {offenders}"
+    )
