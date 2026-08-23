@@ -216,6 +216,35 @@ async def check_provider() -> ProviderCheck:
 
         result.steps.append(await _timed(title, probe()))
 
+    if settings.enable_auto_cover and settings.cover_strategy == "openai":
+        cover_model = settings.cover_openai_model
+
+        async def probe_cover() -> str:
+            response = await client.images.generate(
+                model=cover_model, prompt="синий круг",
+                # Размер приходит из настроек строкой, а у SDK он объявлен
+                # закрытым списком. Подавление ниже — тот же приём, что уже
+                # стоит в covers/openai_compatible.py: провайдеры принимают и
+                # размеры, которых в списке OpenAI нет.
+                size=settings.cover_openai_image_size,  # type: ignore[arg-type]
+                n=1,
+            )
+            item = response.data[0]
+            if getattr(item, "b64_json", None):
+                return "картинка получена"
+            if getattr(item, "url", None):
+                # Код обложек читает `b64_json` (см. covers/openai_compatible).
+                raise RuntimeError(
+                    "провайдер вернул ссылку вместо картинки — этот способ "
+                    "код обложек не поддерживает"
+                )
+            raise RuntimeError("ответ без картинки")
+
+        result.steps.append(await _timed(
+            f"Картинки «{cover_model}» — авто-обложки",
+            probe_cover(),
+        ))
+
     if settings.semantic_dedup_enabled:
         embedding_model = settings.openai_embedding_model
 

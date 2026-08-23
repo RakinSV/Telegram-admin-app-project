@@ -251,3 +251,115 @@ def test_check_is_not_triggered_by_a_plain_get():
     response = client.get("/settings/check-provider")
 
     assert response.status_code == 405, "проверка доступна по GET"
+
+
+# --- генератор картинок ---
+
+
+class FakeImages:
+    def __init__(self, mode: str = "b64") -> None:
+        self.mode = mode
+        self.asked: list[str] = []
+
+    async def generate(self, *, model, prompt, size, n):
+        self.asked.append(model)
+        if self.mode == "fail":
+            raise RuntimeError(
+                "{'message': 'No credentials for image provider: black-forest-labs'}"
+            )
+        if self.mode == "url":
+            item = type("I", (), {"b64_json": None, "url": "http://картинка"})()
+        else:
+            item = type("I", (), {"b64_json": "AAAA", "url": None})()
+        return type("R", (), {"data": [item]})()
+
+
+@pytest.mark.asyncio
+async def test_broken_image_generator_is_reported(provider, monkeypatch):
+    """ТОТ САМЫЙ СЛУЧАЙ СО СТЕНДА: обложки не генерировались, и владелец видел
+    только «картинка как в источнике».
+
+    Провал уходил в WARNING лога и больше никуда: ни на страницу, ни в
+    проверку подключения — её первая версия генератор картинок не трогала
+    вовсе.
+    """
+    install, monkeypatch_ = provider
+    monkeypatch_.setenv("ENABLE_AUTO_COVER", "true")
+    monkeypatch_.setenv("COVER_STRATEGY", "openai")
+    monkeypatch_.setenv("COVER_OPENAI_MODEL", "black-forest-labs/flux")
+    invalidate_settings_cache()
+    client = install(models=["рабочая-модель"])
+    client.images = FakeImages("fail")
+
+    result = await check_provider()
+
+    assert not result.ok
+    cover_step = [s for s in result.steps if "Картинки" in s.title]
+    assert cover_step, "генератор картинок не проверяется вовсе"
+    assert not cover_step[0].ok
+    assert "No credentials" in cover_step[0].detail
+
+
+@pytest.mark.asyncio
+async def test_working_image_generator_passes(provider):
+    install, monkeypatch_ = provider
+    monkeypatch_.setenv("ENABLE_AUTO_COVER", "true")
+    monkeypatch_.setenv("COVER_STRATEGY", "openai")
+    invalidate_settings_cache()
+    client = install(models=["рабочая-модель"])
+    client.images = FakeImages("b64")
+
+    result = await check_provider()
+
+    assert result.ok, [s.detail for s in result.steps if not s.ok]
+    assert any("Картинки" in s.title for s in result.steps)
+
+
+@pytest.mark.asyncio
+async def test_image_url_instead_of_bytes_is_called_out(provider):
+    """Провайдер может вернуть ССЫЛКУ вместо самой картинки — код обложек
+    такое не поддерживает и молча получит пустоту. Проверка должна сказать об
+    этом словами, а не показать галочку."""
+    install, monkeypatch_ = provider
+    monkeypatch_.setenv("ENABLE_AUTO_COVER", "true")
+    monkeypatch_.setenv("COVER_STRATEGY", "openai")
+    invalidate_settings_cache()
+    client = install(models=["рабочая-модель"])
+    client.images = FakeImages("url")
+
+    result = await check_provider()
+
+    cover_step = [s for s in result.steps if "Картинки" in s.title]
+    assert cover_step and not cover_step[0].ok
+    assert "ссылку" in cover_step[0].detail
+
+
+@pytest.mark.asyncio
+async def test_images_not_checked_when_covers_are_off(provider):
+    """Выключенные обложки проверять незачем — это лишний платный вызов."""
+    install, monkeypatch_ = provider
+    monkeypatch_.setenv("ENABLE_AUTO_COVER", "false")
+    invalidate_settings_cache()
+    client = install(models=["рабочая-модель"])
+    client.images = FakeImages("b64")
+
+    result = await check_provider()
+
+    assert client.images.asked == []
+    assert not any("Картинки" in s.title for s in result.steps)
+
+
+@pytest.mark.asyncio
+async def test_images_not_checked_for_comfyui_strategy(provider):
+    """У ComfyUI свой адрес и свой протокол — через провайдера он не идёт."""
+    install, monkeypatch_ = provider
+    monkeypatch_.setenv("ENABLE_AUTO_COVER", "true")
+    monkeypatch_.setenv("COVER_STRATEGY", "comfyui")
+    invalidate_settings_cache()
+    client = install(models=["рабочая-модель"])
+    client.images = FakeImages("b64")
+
+    result = await check_provider()
+
+    assert client.images.asked == []
+    assert not any("Картинки" in s.title for s in result.steps)
