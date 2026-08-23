@@ -157,8 +157,12 @@ async def test_provider_error_is_shown_in_plain_words(provider):
 
     failed = [s for s in result.steps if not s.ok]
     assert failed, "отказ модели не показан"
-    assert "Unknown model" in failed[0].detail
-    assert "{" not in failed[0].detail, "в интерфейс уехал сырой JSON"
+    # Ровно текст сообщения, без хвоста разметки. Проверка со стенда
+    # показывала «...: openai', 'type': 'invalid_request_error', 'code':
+    # 'bad_request'}}» — владельцу этот хвост ничего не говорит.
+    assert failed[0].detail == "Unknown model рабочая-модель", (
+        f"в интерфейс уехало лишнее: {failed[0].detail!r}"
+    )
 
 
 # --- роли ---

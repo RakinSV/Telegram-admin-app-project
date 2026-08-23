@@ -116,10 +116,22 @@ def suspicious_characters(value: str) -> list[str]:
 
 
 def _short(error: BaseException) -> str:
-    """Короткая суть ошибки: провайдеры возвращают простыню JSON."""
+    """Короткая суть ошибки: провайдеры возвращают простыню JSON.
+
+    Берём значение поля `message` целиком — до закрывающей кавычки, а не «всё
+    после двоеточия»: иначе в интерфейс уезжает хвост вида
+    `', 'type': 'invalid_request_error', 'code': 'bad_request'}}`, который
+    владельцу ничего не говорит.
+    """
     text = str(error)
-    if "'message': " in text:
-        text = text.split("'message': ", 1)[1]
+    marker = "'message': "
+    if marker in text:
+        tail = text.split(marker, 1)[1].lstrip()
+        if tail[:1] in {"'", '"'}:
+            quote = tail[0]
+            closing = tail.find(quote, 1)
+            tail = tail[1:closing] if closing > 0 else tail[1:]
+        text = tail
     return text.strip().strip("'\"")[:300]
 
 
