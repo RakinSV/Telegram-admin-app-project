@@ -121,6 +121,23 @@ def list_all() -> list[RailView]:
         return [_view(row) for row in rows]
 
 
+def toggle_rail(rail_id: int) -> bool | None:
+    """Переключить рельс. `None` — рельса нет.
+
+    Раньше рельс можно было только удалить: состояние на странице
+    показывалось, а менять его было нечем. Временно отключить приём в одной
+    валюте — обычное дело, и удалять ради этого настройку с ключами не
+    годится.
+    """
+    with session_scope() as session:
+        row = session.get(CryptoRail, rail_id)
+        if row is None:
+            return None
+        row.is_active = not row.is_active
+        return row.is_active
+
+
+
 def delete(rail_id: int) -> bool:
     """Удалить способ и отвязать его от групп.
 

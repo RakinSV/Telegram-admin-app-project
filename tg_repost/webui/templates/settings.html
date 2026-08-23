@@ -24,12 +24,6 @@
   {% endif %}
 </div>
 
-<div class="section-nav">
-  <span class="muted" style="font-size:11px; align-self:center; padding: 0 4px;">{{ t('settings.jump_to') }}:</span>
-  {% for group in groups %}
-  <a href="#{{ group.key }}">{{ group.title }}</a>
-  {% endfor %}
-</div>
 
 {% for group in groups %}
 <div class="settings-group" id="{{ group.key }}">

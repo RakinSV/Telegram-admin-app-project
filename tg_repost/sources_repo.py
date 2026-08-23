@@ -67,6 +67,25 @@ def deactivate_source(source_id: int) -> bool:
         return True
 
 
+def toggle_source(source_id: int) -> bool | None:
+    """Переключить активность источника. `None` — источника нет.
+
+    ПОЧЕМУ ЭТО ПОНАДОБИЛОСЬ. Выключить источник было чем — кнопка
+    «Деактивировать», — а включить обратно нечем: обратной функции не
+    существовало вовсе, ни в репозитории, ни на странице. Выключенный
+    источник оставался в списке навсегда со словом «нет» и той же кнопкой,
+    которая уже ничего не меняла. У целевых групп такой переключатель есть
+    с самого начала (`targets_repo.toggle_target`), у источников его
+    забыли.
+    """
+    with session_scope() as session:
+        source = session.get(Source, source_id)
+        if source is None:
+            return None
+        source.is_active = not source.is_active
+        return source.is_active
+
+
 def set_source_style(source_id: int, style: str) -> bool:
     """F15 — стиль рерайта для источника. False, если источник не найден."""
     with session_scope() as session:

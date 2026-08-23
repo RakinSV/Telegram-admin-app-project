@@ -96,6 +96,18 @@ def build_crypto_router() -> APIRouter:
         del saved
         return RedirectResponse(url="/crypto", status_code=303)
 
+    @router.post("/crypto/{rail_id}/toggle")
+    async def crypto_toggle(request: Request, rail_id: int) -> Response:
+        """Включить или выключить рельс, не удаляя настройку с ключами."""
+        del request
+        new_state = rails.toggle_rail(rail_id)
+        if new_state is not None:
+            audit.record_audit(
+                "crypto_rail_toggle", target=f"#{rail_id}",
+                detail=f"active={new_state}",
+            )
+        return RedirectResponse(url="/crypto", status_code=303)
+
     @router.post("/crypto/{rail_id}/delete")
     async def crypto_delete(rail_id: int) -> Response:
         view = rails.get(rail_id)

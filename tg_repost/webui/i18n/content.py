@@ -346,6 +346,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "export.error_invalid_date": {
         "ru": "Дата должна быть в формате ГГГГ-ММ-ДД.", "en": "The date must be in YYYY-MM-DD format.",
     },
+    "dashboard.tick_running_title": {
+        "ru": "Пайплайн занят дольше обычного",
+        "en": "The pipeline is busy longer than usual",
+    },
+    "dashboard.tick_running_desc": {
+        "ru": "Идёт уже {minutes} мин, сейчас в работе пост #{post}, ждут "
+              "рерайта: {waiting}. Пока такт не закончится, следующие "
+              "запуски пропускаются. Если это надолго — уменьшите «Таймаут "
+              "запроса» и «Повторов при сбое» в настройках рерайта: при 180 с "
+              "и двух повторах один вызов модели может занять девять минут.",
+        "en": "Running for {minutes} min, currently on post #{post}, waiting "
+              "for rewrite: {waiting}. While the tick runs, further starts are "
+              "skipped. If this drags on, lower the request timeout and retry "
+              "count in the rewrite settings: at 180 s with two retries a "
+              "single model call can take nine minutes.",
+    },
     "dashboard.failed_tasks_title": {
         "ru": "Упавшие задачи ({count})", "en": "Failed tasks ({count})",
     },

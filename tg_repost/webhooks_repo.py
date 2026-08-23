@@ -252,6 +252,30 @@ def _record_success(webhook_id: int) -> None:
         row.last_delivery_at = _utcnow()
 
 
+def toggle_webhook(webhook_id: int) -> bool | None:
+    """Переключить подписку. `None` — подписки нет.
+
+    ЗАЧЕМ ЭТО НУЖНО ОТДЕЛЬНО. Вебхук выключает САМА СИСТЕМА — после серии
+    отказов подряд (см. `_record_failure`). Приёмник полежал пять минут, и
+    подписка мертва; включить её обратно из админки было нечем, оставалось
+    удалить и завести заново, потеряв адрес и секрет. Это хуже, чем у
+    источников: там владелец выключал сам и знал об этом.
+
+    СЧЁТЧИК ОТКАЗОВ СБРАСЫВАЕТСЯ ПРИ ВКЛЮЧЕНИИ. Без этого подписка умирала бы
+    снова на первом же следующем отказе: счётчик уже на пределе, и порог
+    срабатывает мгновенно.
+    """
+    with session_scope() as session:
+        row = session.get(Webhook, webhook_id)
+        if row is None:
+            return None
+        row.is_active = not row.is_active
+        if row.is_active:
+            row.failure_streak = 0
+            row.last_error = None
+        return row.is_active
+
+
 def _record_failure(webhook_id: int, error: str) -> None:
     with session_scope() as session:
         row = session.get(Webhook, webhook_id)

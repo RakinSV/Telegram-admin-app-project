@@ -125,6 +125,9 @@
         {% endif %}
       </td>
       <td>
+        <form method="post" action="/integrations/webhooks/{{ hook.id }}/toggle" style="display:inline;">
+          <button type="submit" class="secondary">{{ t('common.deactivate') if hook.is_active else t('common.activate') }}</button>
+        </form>
         <form method="post" action="/integrations/webhooks/{{ hook.id }}/delete"
               onsubmit="return confirm('{{ t('common.confirm_delete') }}');">
           <button type="submit" class="secondary">{{ t('common.delete') }}</button>

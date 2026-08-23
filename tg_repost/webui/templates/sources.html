@@ -67,7 +67,11 @@
       <td>{{ s.style_profile or 'default' }}</td>
       <td>{{ {True: 'on', False: 'off', None: t('common.enrich_global')}[s.enrich_sources] }}</td>
       <td>{% if s.target_chat_ids %}{{ t('sources.targets_count', n=s.target_chat_ids.split(',')|length) }}{% else %}<span class="muted">{{ t('common.all') }}</span>{% endif %}</td>
-      <td>{{ m.confirm_form('/sources/%d/delete'|format(s.id), t('common.deactivate')) }}</td>
+      <td>
+        <form method="post" action="/sources/{{ s.id }}/toggle" style="display:inline;">
+          <button type="submit" class="secondary">{{ t('common.deactivate') if s.is_active else t('common.activate') }}</button>
+        </form>
+      </td>
     </tr>
     {% else %}
     <tr><td colspan="7" class="muted">{{ t('common.empty_list') }}</td></tr>

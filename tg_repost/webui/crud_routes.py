@@ -506,6 +506,17 @@ def build_crud_router() -> APIRouter:
             url=f"/sources/{source_id}?backfilled={count}", status_code=303,
         )
 
+    @router.post("/sources/{source_id}/toggle")
+    async def source_toggle(request: Request, source_id: int) -> Response:
+        """Включить или выключить источник. Тот же приём, что у целей."""
+        del request
+        new_state = sources_repo.toggle_source(source_id)
+        if new_state is not None:
+            audit.record_audit(
+                "source_toggle", target=f"#{source_id}", detail=f"active={new_state}",
+            )
+        return RedirectResponse(url="/sources", status_code=303)
+
     @router.post("/sources/{source_id}/delete")
     async def source_delete(request: Request, source_id: int) -> Response:
         del request

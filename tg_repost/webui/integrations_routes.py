@@ -90,6 +90,22 @@ def build_integrations_router() -> APIRouter:
         audit.record_audit("webhook_create", target=url.strip())
         return RedirectResponse(url="/integrations", status_code=303)
 
+    @router.post("/integrations/webhooks/{webhook_id}/toggle")
+    async def webhook_toggle(request: Request, webhook_id: int) -> Response:
+        """Включить или выключить подписку.
+
+        Нужно прежде всего затем, что подписку выключает САМА СИСТЕМА после
+        серии отказов — приёмник полежал, и включить его обратно было нечем.
+        """
+        del request
+        new_state = hooks.toggle_webhook(webhook_id)
+        if new_state is not None:
+            audit.record_audit(
+                "webhook_toggle", target=f"#{webhook_id}",
+                detail=f"active={new_state}",
+            )
+        return RedirectResponse(url="/integrations", status_code=303)
+
     @router.post("/integrations/webhooks/{webhook_id}/delete")
     async def delete_webhook(webhook_id: int) -> Response:
         view = hooks.get(webhook_id)

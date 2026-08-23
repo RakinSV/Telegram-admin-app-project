@@ -8,6 +8,9 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Awaitable, Callable
+
 import asyncio
 import re
 import uuid
@@ -22,6 +25,7 @@ from tg_repost.config import get_settings
 from tg_repost.covers.dispatcher import generate_cover
 from tg_repost.db.models import Post, PostCoverVariant, PostRewriteVariant, PostStatus
 from tg_repost.db.session import session_scope
+from tg_repost.scheduler import pipeline_state
 from tg_repost.enrichment.enricher import enrich_post, enrichment_enabled_for
 from tg_repost.enrichment.link_content import (
     download_link_image,
@@ -90,19 +94,64 @@ def effective_source_chars(original: str, link_text: str) -> int:
     return len("".join(stripped.split())) + len((link_text or "").strip())
 
 
+# Сколько пост может законно висеть в «рерайтится». Берём с большим запасом
+# к худшему случаю одного поста (таймаут провайдера × повторы × число вызовов):
+# лучше подождать лишнего, чем начать рерайт заново поверх идущего.
+STUCK_REWRITING_MINUTES = 60
+
+
+def _release_stuck_posts() -> None:
+    """Вернуть в очередь посты, застрявшие в «рерайтится».
+
+    Статус `rewriting` — это отметка «пост занят». Если процесс перезапустился
+    посреди рерайта, отметка остаётся навсегда: пост не в очереди, не готов и
+    не упал, его просто нет. Замер на стенде 2026-08-23 нашёл ШЕСТЬ таких —
+    самый старый висел 31 день.
+
+    У очереди задач такой возврат есть с самого начала (`task_queue.claim_next`
+    забирает задачи, арендованные упавшим процессом), у рерайта его забыли.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=STUCK_REWRITING_MINUTES)
+    with session_scope() as session:
+        stuck = (
+            session.query(Post)
+            .filter(Post.status == PostStatus.REWRITING, Post.updated_at < cutoff)
+            .all()
+        )
+        for post in stuck:
+            # Через set_status: переход rewriting → new разрешён графом, и
+            # проверять его должен он же, а не этот код.
+            post.set_status(PostStatus.NEW, reason="возвращён в очередь: рерайт оборвался")
+        if stuck:
+            logger.warning(
+                "Возвращены в очередь %d постов, застрявших в рерайте дольше "
+                "%d мин: %s", len(stuck), STUCK_REWRITING_MINUTES,
+                ", ".join(f"#{post.id}" for post in stuck),
+            )
+
+
 async def rewrite_new_posts(
     rewriter: RewriterClient, batch: int = 5,
     bot: Bot | None = None,
+    after_each: Callable[[], Awaitable[None]] | None = None,
 ) -> None:
     """Рерайтнуть посты со статусом `new` (F06).
 
     `bot` нужен ТОЛЬКО для трансляции хода редакции в чат «кухни»
     (F50) — без него рерайт работает ровно как раньше, поэтому параметр
     необязательный (его нет у существующих вызовов в тестах).
+
+    `after_each` — что сделать с ГОТОВЫМ постом, не дожидаясь остальных.
+    Раньше отправка на модерацию стояла в `pipeline_tick` ПОСЛЕ всей пачки, и
+    первый готовый пост ждал ещё четырёх. Замер на стенде 2026-08-23: около
+    семи минут на пост, то есть полчаса тишины на ровном месте — владелец
+    видел «посты ловятся, дальше ничего».
     """
     # F51: даём сюжету собраться. Одна и та же новость приходит из разных
     # источников не одновременно, и если хватать первый же пост сразу, то
     # подтверждения подтянутся уже после рерайта — фактчек их не увидит.
+    _release_stuck_posts()
+
     grace_minutes = max(0, get_settings().cluster_grace_minutes)
     ripe_before = datetime.now(timezone.utc) - timedelta(minutes=grace_minutes)
 
@@ -117,6 +166,8 @@ async def rewrite_new_posts(
         ]
 
     for post_id in post_ids:
+        post_started = time.perf_counter()
+        pipeline_state.post_started(post_id)
         # Резервируем пост: new → rewriting. Заодно читаем стиль источника (F15)
         # и решаем, нужно ли обогащение (F16).
         with session_scope() as session:
@@ -377,11 +428,22 @@ async def rewrite_new_posts(
                         ))
                 post.set_status(PostStatus.REWRITTEN)
         logger.info(
-            "Пост %s рерайчен (стиль=%s, редакция=%s, вариантов текста=%d, "
-            "вариантов обложки=%d, ссылка=%s, обогащение=%s, %d токенов)",
-            post_id, prompt_name, editorial_on, len(rewrite_texts), len(cover_paths),
-            bool(link_text), enrich, sum(rewrite_tokens_list),
+            "Пост %s рерайчен за %.0f с (стиль=%s, редакция=%s, вариантов "
+            "текста=%d, вариантов обложки=%d, ссылка=%s, обогащение=%s, "
+            "%d токенов)",
+            post_id, time.perf_counter() - post_started, prompt_name, editorial_on,
+            len(rewrite_texts), len(cover_paths), bool(link_text), enrich,
+            sum(rewrite_tokens_list),
         )
+
+        # Готовый пост отдаём СРАЗУ. Сбой отправки не должен ронять рерайт
+        # остальных: пост уже готов и лежит в очереди, следующий проход его
+        # подберёт.
+        if after_each is not None:
+            try:
+                await after_each()
+            except Exception:
+                logger.exception("Пост %s готов, но отправить не удалось", post_id)
 
 
 async def _auto_publish_rewritten(bot: Bot) -> None:
@@ -411,14 +473,49 @@ async def _auto_publish_rewritten(bot: Bot) -> None:
 
 
 async def pipeline_tick(rewriter: RewriterClient, bot: Bot) -> None:
-    """Один проход пайплайна: рерайт + реклама (F21) + (модерация | авто-постинг)."""
+    """Один проход пайплайна: рерайт + реклама (F21) + (модерация | авто-постинг).
+
+    ТАКТ РАССКАЗЫВАЕТ, ЧЕМ ЗАНЯТ. Пока он идёт, APScheduler пропускает
+    следующие запуски с сообщением «maximum number of running instances
+    reached» — и это всё, что было видно снаружи. Оно не говорит ни что
+    делается, ни как давно, и владелец видит только тишину: посты ловятся,
+    дальше ничего. Замер на стенде 2026-08-23: такт шёл больше часа, потому
+    что при таймауте 180 с и двух повторах ОДИН вызов модели может занять
+    девять минут, а на пост их шесть.
+    """
     settings = get_settings()
+    started = time.perf_counter()
+    pipeline_state.tick_started()
     try:
-        await rewrite_new_posts(rewriter, bot=bot)
+        # Отправка готового поста идёт СРАЗУ после его рерайта, а не после
+        # всей пачки — иначе первый готовый ждёт остальных.
+        async def dispatch_ready() -> None:
+            if settings.auto_post_enabled:
+                await _auto_publish_rewritten(bot)
+            else:
+                await send_pending_for_approval(bot)
+
+        await rewrite_new_posts(rewriter, bot=bot, after_each=dispatch_ready)
         await inject_native_ad(rewriter)
-        if settings.auto_post_enabled:
-            await _auto_publish_rewritten(bot)
-        else:
-            await send_pending_for_approval(bot)
+        # Ещё раз в конце: реклама могла добавить пост, а зависшие с прошлого
+        # прохода могли освободиться.
+        await dispatch_ready()
     except Exception as exc:
         logger.exception("Ошибка в pipeline_tick: %s", exc)
+    finally:
+        elapsed = time.perf_counter() - started
+        interval = max(1, settings.pipeline_interval_seconds)
+        if elapsed > interval:
+            with session_scope() as session:
+                waiting = (
+                    session.query(Post)
+                    .filter(Post.status == PostStatus.NEW).count()
+                )
+            logger.warning(
+                "Такт пайплайна занял %.0f с при интервале %d с — следующие "
+                "запуски пропускаются. Ждут рерайта: %d постов. Если это "
+                "надолго, уменьшите таймаут запроса и число повторов в "
+                "/settings → Рерайт.",
+                elapsed, interval, waiting,
+            )
+        pipeline_state.record_tick(elapsed)

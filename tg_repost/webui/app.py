@@ -17,6 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tg_repost import crypto, task_queue
 from tg_repost.config import SECRET_FIELD_NAMES, get_settings, invalidate_settings_cache
+from tg_repost.scheduler import pipeline_state
 from tg_repost.logging_conf import get_logger
 from tg_repost.webui import (
     access,
@@ -585,6 +586,10 @@ def _protected_router() -> APIRouter:
             # Упавшие задачи очереди. До 2026-08-18 на них не смотрел никто:
             # через очередь идут рассылки, вебхуки, ОПРОС ПЛАТЕЖЕЙ и шаги
             # сценариев, и любая из них умирала молча.
+            # Чем занят пайплайн. Раньше единственным признаком затора было
+            # предупреждение APScheduler в логе, которое не говорит ни что
+            # застряло, ни как давно — владелец видел только тишину.
+            "pipeline_tick": pipeline_state.current(),
             "failed_tasks": task_queue.failed_tasks(limit=10),
             "failed_tasks_total": task_queue.count_failed(),
         }

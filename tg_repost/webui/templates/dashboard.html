@@ -76,6 +76,18 @@
   </div>
 </div>
 
+{% if pipeline_tick.running and pipeline_tick.running_seconds > 120 %}
+<div class="card" style="border-color: var(--warn);">
+  <strong>{{ t('dashboard.tick_running_title') }}</strong>
+  <div class="muted" style="margin-top:4px;">
+    {{ t('dashboard.tick_running_desc',
+          minutes='%.0f'|format(pipeline_tick.running_seconds / 60),
+          post=pipeline_tick.current_post_id or '—',
+          waiting=funnel.get('new', 0)) }}
+  </div>
+</div>
+{% endif %}
+
 {% if failed_tasks %}
 <h2>{{ t('dashboard.failed_tasks_title', count=failed_tasks_total) }}</h2>
 <p class="muted">{{ t('dashboard.failed_tasks_desc') }}</p>
