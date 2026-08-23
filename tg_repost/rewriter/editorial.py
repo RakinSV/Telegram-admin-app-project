@@ -31,6 +31,7 @@ from tg_repost.config import get_settings
 from tg_repost.enrichment.search import get_search_client
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import (
+    ROLE_EDITOR,
     RewriterClient,
     is_billing_error,
     resolve_rewrite_template,
@@ -189,7 +190,7 @@ async def editorial_rewrite(
                 sources=sources, draft=draft, language_line=language_line,
             )
             review = await client.rewrite_with_prompt(
-                editor_prompt, temperature=_EDITOR_TEMPERATURE,
+                editor_prompt, temperature=_EDITOR_TEMPERATURE, role=ROLE_EDITOR,
             )
             total_tokens += review.total_tokens
         except Exception as exc:
@@ -219,7 +220,9 @@ async def editorial_rewrite(
             revise_prompt = resolve_rewrite_template("journalist_revise").format(
                 sources=sources, draft=draft, editor_notes=critique, web_findings=findings,
             )
-            revised = await client.rewrite_with_prompt(revise_prompt)
+            revised = await client.rewrite_with_prompt(
+                revise_prompt, role=ROLE_EDITOR,
+            )
             total_tokens += revised.total_tokens
         except Exception as exc:
             if is_billing_error(exc):

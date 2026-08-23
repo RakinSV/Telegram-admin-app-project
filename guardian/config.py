@@ -303,6 +303,87 @@ def _secret_override() -> dict[str, object]:
         return {}
 
 
+def _shared_ai_override() -> dict[str, object]:
+    """Адрес и ключ AI-провайдера — ИЗ АДМИНКИ РЕПОСТ-БОТА.
+
+    ПОЧЕМУ НЕ СВОИ ПОЛЯ. Комментарий у самих настроек говорит прямо:
+    «переиспользует те же ключи, что и репост-бот». Так и было задумано, но
+    на деле Guardian читал только `.env`, а владелец настраивает провайдера в
+    админке — и туда Guardian не смотрел. Замер на стенде 2026-08-22: в
+    админке стоял OmniRoute, а Guardian видел `https://api.openai.com/v1` с
+    ПУСТЫМ ключом. При `spam_mode=ai` это не ошибка на экране, а тишина:
+    вызов падает, срабатывает fail-open, и спам идёт в группу как ни в чём не
+    бывало.
+
+    Два одинаковых поля в двух админках были бы хуже: их забывают
+    синхронизировать, и расходятся они молча.
+
+    МОДЕЛЬ — ИСКЛЮЧЕНИЕ. Её Guardian может задать свою (`/guardian/settings`,
+    группа «Спам-фильтр»): классификация спама — задача простая, и на ней
+    разумно держать модель подешевле, чем на рерайте. Пустое значение
+    означает «как у репост-бота» и сюда не попадает.
+
+    Читаем ту же зашифрованную таблицу `secrets`, что и токен бота, тем же
+    мастер-ключом. Любая ошибка — молчаливый откат на `.env`: уронить
+    Guardian на чтении настроек нельзя.
+    """
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    master_key = os.environ.get("WEBUI_MASTER_KEY", "")
+    result: dict[str, object] = {}
+    try:
+        from tg_repost.crypto import decrypt
+        from tg_repost.db.models import AppSetting, Secret
+        from tg_repost.db.session import session_scope as tg_repost_session_scope
+
+        with tg_repost_session_scope() as session:
+            base_url_row = (
+                session.query(AppSetting)
+                .filter(AppSetting.key == "openai_base_url")
+                .one_or_none()
+            )
+            model_row = (
+                session.query(AppSetting)
+                .filter(AppSetting.key == "openai_model")
+                .one_or_none()
+            )
+            key_row = (
+                session.query(Secret)
+                .filter(Secret.key == "openai_api_key")
+                .one_or_none()
+            ) if master_key else None
+            base_url_raw = base_url_row.value if base_url_row else None
+            model_raw = model_row.value if model_row else None
+            key_encrypted = key_row.encrypted_value if key_row else None
+    except Exception:  # noqa: BLE001 — БД недоступна: работаем на .env
+        return {}
+
+    for field, raw in (("openai_base_url", base_url_raw), ("openai_model", model_raw)):
+        if not raw:
+            continue
+        try:
+            value = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(value, str) and value.strip():
+            result[field] = value
+
+    if key_encrypted:
+        try:
+            result["openai_api_key"] = decrypt(key_encrypted, master_key)
+        except Exception as exc:  # noqa: BLE001 — см. `_secret_override`
+            # Молчать здесь нельзя: без ключа AI-фильтр спама тихо
+            # пропускает всё (fail-open), и понять почему будет не по чему.
+            from guardian.logging_conf import get_logger
+
+            get_logger(__name__).warning(
+                "Ключ AI-провайдера из админки не расшифровался (%s) — "
+                "спам-фильтр останется на значении из .env", type(exc).__name__,
+            )
+    return result
+
+
 def get_guardian_settings() -> GuardianSettings:
     """Настройки: .env-дефолты + свежий оверлей из `bot_config`/`secrets`
     на каждый вызов (см. docstring модуля про кросс-процессную свежесть).
@@ -312,7 +393,20 @@ def get_guardian_settings() -> GuardianSettings:
     типа, что и .env-поле. Секретный токен из `secrets` имеет ПРИОРИТЕТ над
     `bot_config`/`.env` (маловероятная коллизия ключей, но явный порядок
     важнее угадывания)."""
-    overrides = _db_overrides()
+    # Порядок важен: общие настройки провайдера от репост-бота идут ПЕРВЫМИ,
+    # собственный оверлей Guardian их перекрывает (так пин своей модели в
+    # `/guardian/settings` побеждает), а секретный токен бота — последним.
+    overrides = _shared_ai_override()
+    own = _db_overrides()
+    # ПУСТОЕ ПОЛЕ МОДЕЛИ — ЭТО «КАК У РЕПОСТ-БОТА», А НЕ «ПУСТАЯ МОДЕЛЬ».
+    # Форма настроек отправляет ВСЕ поля группы, включая незаполненные, так
+    # что пустая строка попадает в `bot_config` сама собой при первом же
+    # сохранении спам-фильтра. Без этой строки включение фильтра ломало бы
+    # его же: модель становилась пустой, и вызов уходил в никуда.
+    model = own.get("openai_model")
+    if isinstance(model, str) and not model.strip():
+        own.pop("openai_model")
+    overrides.update(own)
     overrides.update(_secret_override())
     base = _env_settings()
     # ВНИМАНИЕ НА РАЗНИЦУ. Пока в `bot_config` пусто, возвращается САМ

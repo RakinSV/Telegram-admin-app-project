@@ -206,6 +206,16 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
             # провайдер повисла в БД, рерайт продолжал падать со старой).
             SettingField("openai_base_url", "Base URL", "str", needs_resync=True),
             SettingField("openai_model", "Модель", "str", needs_resync=True),
+            # Ролевые переопределения. Пусто = основная модель выше. Отдельные
+            # поля появились затем, что задачи разной сложности: фактчек
+            # выигрывает от модели посильнее, а выбор поискового запроса
+            # прекрасно делается дешёвой.
+            SettingField("openai_model_editor",
+                         "Модель редактора-фактчекера (пусто — основная)", "str"),
+            SettingField("openai_model_quiz",
+                         "Модель квизов (пусто — основная)", "str"),
+            SettingField("openai_model_aux",
+                         "Модель вспомогательных задач (пусто — основная)", "str"),
             SettingField("openai_timeout_seconds", "Таймаут запроса, сек", "float", needs_resync=True),
             SettingField("openai_max_retries", "Повторов запроса при сбое", "int", needs_resync=True),
             SettingField("rewrite_min_source_chars", "Минимум материала для рерайта", "int"),

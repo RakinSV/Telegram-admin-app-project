@@ -626,6 +626,32 @@ def _protected_router() -> APIRouter:
         del request
         return RedirectResponse(url="/settings", status_code=308)
 
+    @router.post("/settings/check-provider")
+    async def settings_check_provider(request: Request) -> Response:
+        """Проверить связку с AI-провайдером и показать результат на странице.
+
+        МЕТОДОМ POST: обработчик делает ПЛАТНЫЕ вызовы наружу. На GET такое
+        вешать нельзя — его дёргает предзагрузка ссылок браузером и любой
+        обход страниц, и счёт бы рос сам собой.
+
+        Роут объявлен ДО `/settings/{group_key}`: иначе «check-provider»
+        попало бы в него как имя группы, и вместо проверки владелец получал
+        бы молчаливое ничего.
+        """
+        from tg_repost.rewriter.probe import check_provider
+
+        result = await check_provider()
+        audit.record_audit(
+            "provider_check",
+            detail="успешно" if result.ok else "с ошибками",
+        )
+        return _templates.TemplateResponse(
+            request,
+            "settings.html",
+            {"groups": _settings_groups_context(), "error": None,
+             "provider_check": result},
+        )
+
     @router.post("/settings/{group_key}")
     async def settings_save(request: Request, group_key: str) -> Response:
         group = next(

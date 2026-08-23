@@ -252,6 +252,19 @@ class Settings(BaseSettings):
     openai_base_url: str = Field("https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="OPENAI_MODEL")
+    # РОЛЕВЫЕ ПЕРЕОПРЕДЕЛЕНИЯ МОДЕЛИ. Пусто = та же, что в `openai_model`.
+    #
+    # Восемь ИИ-функций системы ходили через одну модель, и это неудобно там,
+    # где задачи разной сложности: фактчек редактора выигрывает от модели
+    # посильнее, а выбор поискового запроса или строчка дайджеста прекрасно
+    # делаются дешёвой. Раздельные поля позволяют платить по задаче.
+    #
+    # Именно ПЕРЕОПРЕДЕЛЕНИЯ, а не полный набор: пустое поле означает
+    # «как основная». Иначе на чистой установке пришлось бы заполнять
+    # четыре поля вместо одного, и три из них — одним и тем же значением.
+    openai_model_editor: str = Field("", alias="OPENAI_MODEL_EDITOR")
+    openai_model_quiz: str = Field("", alias="OPENAI_MODEL_QUIZ")
+    openai_model_aux: str = Field("", alias="OPENAI_MODEL_AUX")
     # Рерайт по полной статье — длинный промпт, и на медленной/локальной
     # модели он не укладывался в дефолтный таймаут клиента: пост уходил в
     # failed с «Request timed out» ещё до модерации. Держим явным и

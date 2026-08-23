@@ -551,6 +551,44 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Use for the image AI",
     },
     "settings.field.openai_base_url.label": {"ru": "Base URL", "en": "Base URL"},
+    "common.millis": {"ru": "мс", "en": "ms"},
+    "settings.check_provider_button": {
+        "ru": "Проверить подключение к ИИ",
+        "en": "Check the AI connection",
+    },
+    "settings.check_provider_hint": {
+        "ru": "Короткий запрос к провайдеру по каждой настроенной модели. "
+              "Стоит несколько токенов и отвечает сразу — вместо того чтобы "
+              "узнавать об ошибке по первому посту через часы.",
+        "en": "A short request to the provider for every configured model. "
+              "Costs a few tokens and answers at once — instead of learning "
+              "about a mistake from the first post hours later.",
+    },
+    "settings.field.openai_model_editor.label": {
+        "ru": "Модель редактора-фактчекера (пусто — основная)",
+        "en": "Fact-checking editor model (empty — main one)",
+    },
+    "settings.field.openai_model_editor.hint": {
+        "ru": "Проверка фактов выигрывает от модели посильнее: здесь ошибка "
+              "уходит в опубликованный пост.",
+        "en": "Fact checking benefits from a stronger model: a mistake here "
+              "ends up in a published post.",
+    },
+    "settings.field.openai_model_quiz.label": {
+        "ru": "Модель квизов (пусто — основная)",
+        "en": "Quiz model (empty — main one)",
+    },
+    "settings.field.openai_model_aux.label": {
+        "ru": "Модель вспомогательных задач (пусто — основная)",
+        "en": "Model for auxiliary tasks (empty — main one)",
+    },
+    "settings.field.openai_model_aux.hint": {
+        "ru": "Ключевые слова, отбор источников, текст рекламы, запрос для "
+              "обложки, сводка дайджеста. Задачи на десяток токенов — дешёвой "
+              "модели хватает.",
+        "en": "Keywords, source selection, ad copy, cover prompt, digest "
+              "summary. Ten-token jobs — a cheap model is enough.",
+    },
     "settings.field.openai_model.label": {"ru": "Модель", "en": "Model"},
     "settings.field.openai_timeout_seconds.label": {
         "ru": "Таймаут запроса, сек", "en": "Request timeout, sec",

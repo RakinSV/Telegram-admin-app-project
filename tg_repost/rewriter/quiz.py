@@ -15,6 +15,7 @@ import json
 import re
 from dataclasses import dataclass
 
+from tg_repost.rewriter.client import ROLE_QUIZ
 from tg_repost.logging_conf import get_logger
 from tg_repost.rewriter.client import RewriterClient, resolve_rewrite_template
 
@@ -108,7 +109,9 @@ async def generate_quiz(client: RewriterClient, source_text: str) -> QuizDraft |
         return None
     prompt = resolve_rewrite_template("quiz").format(source=source_text)
     try:
-        result = await client.rewrite_with_prompt(prompt, temperature=_QUIZ_TEMPERATURE)
+        result = await client.rewrite_with_prompt(
+            prompt, temperature=_QUIZ_TEMPERATURE, role=ROLE_QUIZ,
+        )
     except Exception as exc:  # noqa: BLE001
         # Викторина — необязательная надстройка над постом: её сбой не должен
         # ничего ломать (в отличие от рерайта, где ошибка значима).

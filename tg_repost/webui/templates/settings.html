@@ -5,6 +5,25 @@
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 <p class="muted">{{ t('settings.intro', resync='<span class="badge warn">' ~ t('common.resync_badge') ~ '</span>') | safe }}</p>
 
+<div class="card">
+  <form method="post" action="/settings/check-provider">
+    <button type="submit">{{ t('settings.check_provider_button') }}</button>
+    <span class="hint">{{ t('settings.check_provider_hint') }}</span>
+  </form>
+  {% if provider_check %}
+  <div style="margin-top:10px;">
+    <div class="muted" style="font-size:12px;">{{ provider_check.base_url }}</div>
+    {% for step in provider_check.steps %}
+    <div style="margin-top:6px;">
+      <span class="badge {{ 'ok' if step.ok else 'warn' }}">{{ '✓' if step.ok else '✕' }}</span>
+      <strong>{{ step.title }}</strong>
+      <span class="muted">— {{ step.detail }}{% if step.millis %}, {{ step.millis }} {{ t('common.millis') }}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
 <div class="section-nav">
   <span class="muted" style="font-size:11px; align-self:center; padding: 0 4px;">{{ t('settings.jump_to') }}:</span>
   {% for group in groups %}

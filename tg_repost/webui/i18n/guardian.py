@@ -289,6 +289,18 @@ STRINGS: dict[str, dict[str, str]] = {
     # --- Guardian: лейблы полей ---
     "guardian.settings.field.guardian_group_id.label": {"ru": "id защищаемой группы", "en": "Protected group id"},
     "guardian.settings.field.guardian_log_channel_id.label": {"ru": "id канала для лога модерации", "en": "Moderation log channel id"},
+    "guardian.settings.field.openai_model.label": {
+        "ru": "Модель (пусто — как у репост-бота)",
+        "en": "Model (empty — same as the repost bot)",
+    },
+    "guardian.settings.field.openai_model.hint": {
+        "ru": "Адрес и ключ провайдера общие с репост-ботом и задаются в его "
+              "настройках. Здесь можно выбрать модель подешевле: отличить "
+              "спам проще, чем переписать пост.",
+        "en": "The provider URL and key are shared with the repost bot and set "
+              "in its settings. Here you can pick a cheaper model: telling "
+              "spam apart is easier than rewriting a post.",
+    },
     "guardian.settings.field.spam_mode.label": {"ru": "Режим", "en": "Mode"},
     "guardian.settings.field.ai_spam_confidence_threshold.label": {"ru": "Порог уверенности AI", "en": "AI confidence threshold"},
     "guardian.settings.field.captcha_type.label": {"ru": "Тип", "en": "Type"},

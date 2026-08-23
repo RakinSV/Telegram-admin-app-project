@@ -82,6 +82,30 @@ _OUTPUT_CONTRACT = (
 )
 
 
+# Роли, у которых может быть своя модель (см. `Settings.openai_model_*`).
+# Пустое переопределение означает «основная модель».
+ROLE_MAIN = "main"
+ROLE_EDITOR = "editor"
+ROLE_QUIZ = "quiz"
+ROLE_AUX = "aux"
+
+
+def model_for_role(role: str = ROLE_MAIN) -> str:
+    """Какая модель обслуживает роль. Читается НА КАЖДЫЙ ВЫЗОВ.
+
+    Не в конструкторе клиента: тогда смена модели в админке применялась бы
+    только после пересборки клиента, а поле обещает «применяется сразу».
+    Температура читается здесь же по тому же принципу.
+    """
+    settings = get_settings()
+    override = {
+        ROLE_EDITOR: settings.openai_model_editor,
+        ROLE_QUIZ: settings.openai_model_quiz,
+        ROLE_AUX: settings.openai_model_aux,
+    }.get(role, "")
+    return override.strip() or settings.openai_model
+
+
 @dataclass
 class RewriteResult:
     """Результат рерайта: текст и метрики токенов."""
@@ -197,6 +221,9 @@ class RewriterClient:
             max_retries=settings.openai_max_retries,
             http_client=http_client,
         )
+        # Только для сообщений в лог: сам вызов берёт модель через
+        # `model_for_role()`, иначе смена модели в админке ждала бы
+        # пересборки клиента.
         self._model = settings.openai_model
         self._embedding_model = settings.openai_embedding_model
 
@@ -229,7 +256,7 @@ class RewriterClient:
         )
 
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=model_for_role(ROLE_MAIN),
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
@@ -251,6 +278,7 @@ class RewriterClient:
 
     async def rewrite_with_prompt(
         self, prompt: str, *, temperature: float | None = None,
+        role: str = ROLE_MAIN,
     ) -> RewriteResult:
         """Рерайт по УЖЕ собранному промпту (формат «статья», см.
         `telegraph/article.py`; рецензия/правка редакции, см.
@@ -260,12 +288,17 @@ class RewriterClient:
 
         `temperature=None` — брать `rewrite_temperature` из настроек (прежнее
         поведение). Явное значение нужно рецензии редактора: фактчек должен
-        быть детерминированным, а не «творческим» на 0.8."""
+        быть детерминированным, а не «творческим» на 0.8.
+
+        `role` — чья это работа. У редактора и у квизов может стоять своя
+        модель (`/settings`), пустое поле означает основную. Статья на
+        Telegraph роли не имеет намеренно: это тот же пост, только длиннее, и
+        отдавать его модели попроще значило бы ухудшить главный материал."""
         temperature = (
             temperature if temperature is not None else get_settings().rewrite_temperature
         )
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=model_for_role(role),
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
@@ -278,10 +311,16 @@ class RewriterClient:
         )
 
     async def complete(self, prompt: str, *, temperature: float = 0.3) -> str:
-        """Одноразовый LLM-вызов для вспомогательных задач (F16: ключевые слова,
-        отбор релевантных источников). Возвращает текст ответа."""
+        """Одноразовый LLM-вызов для вспомогательных задач. Возвращает текст.
+
+        Через этот метод идут ВСЕ мелкие поручения: ключевые слова и отбор
+        источников (F16), текст нативной рекламы (F21), запрос для генератора
+        обложки, сводка дайджеста (F20). Роль у них общая — `aux`, и модель
+        для неё задаётся одним полем: разводить их по четырём настройкам
+        значило бы четыре поля ради задач на десяток токенов каждая.
+        """
         response = await self._client.chat.completions.create(
-            model=self._model,
+            model=model_for_role(ROLE_AUX),
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
         )
