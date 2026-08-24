@@ -267,6 +267,29 @@ class Settings(BaseSettings):
     # Живёт здесь, а не в своей таблице, потому что это именно кэш — пропажа
     # ничего не ломает, а таблица ради одной строки была бы лишней.
     provider_models_cache: str = Field("", alias="PROVIDER_MODELS_CACHE")
+    # ТЕМПЕРАТУРА ПО СТИЛЬ-ПРОФИЛЮ. Пусто = общая `rewrite_temperature`.
+    #
+    # Одна температура на все профили — источник «пишет хрень». Замер на
+    # стенде 2026-08-23: при 0.8 модель добавила в новость «учётные записи
+    # двух миллионов граждан» — числа, которого в источнике нет. Промпт при
+    # этом прямо запрещает выдумывать числа, но с творческой настройкой он
+    # борется, а не работает.
+    #
+    # Новости и инструкции живут фактами: там нужна низкая температура.
+    # Мнение и юмор без неё становятся пресными. Один параметр этого
+    # различить не может.
+    rewrite_temperature_news: float | None = Field(
+        None, alias="REWRITE_TEMPERATURE_NEWS"
+    )
+    rewrite_temperature_opinion: float | None = Field(
+        None, alias="REWRITE_TEMPERATURE_OPINION"
+    )
+    rewrite_temperature_instruction: float | None = Field(
+        None, alias="REWRITE_TEMPERATURE_INSTRUCTION"
+    )
+    rewrite_temperature_humor: float | None = Field(
+        None, alias="REWRITE_TEMPERATURE_HUMOR"
+    )
     openai_model_editor: str = Field("", alias="OPENAI_MODEL_EDITOR")
     openai_model_quiz: str = Field("", alias="OPENAI_MODEL_QUIZ")
     openai_model_aux: str = Field("", alias="OPENAI_MODEL_AUX")

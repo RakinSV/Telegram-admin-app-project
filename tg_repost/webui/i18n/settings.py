@@ -645,6 +645,42 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.rewrite_variant_count.label": {
         "ru": "Вариантов текста на пост", "en": "Text variants per post",
     },
+    "settings.field.rewrite_temperature_news.label": {
+        "ru": "Температура новостей (пусто — общая)",
+        "en": "News temperature (empty — the shared one)",
+    },
+    "settings.field.rewrite_temperature_news.hint": {
+        "ru": "Новость живёт фактами. При высокой температуре модель "
+              "дописывает числа и детали, которых в источнике нет, — промпт "
+              "это запрещает, но борется с настройкой. Разумно 0.2-0.4.",
+        "en": "News lives on facts. At a high temperature the model invents "
+              "numbers and details absent from the source — the prompt "
+              "forbids that but fights the setting. 0.2-0.4 is sensible.",
+    },
+    "settings.field.rewrite_temperature_opinion.label": {
+        "ru": "Температура мнений (пусто — общая)",
+        "en": "Opinion temperature (empty — the shared one)",
+    },
+    "settings.field.rewrite_temperature_instruction.label": {
+        "ru": "Температура инструкций (пусто — общая)",
+        "en": "Instruction temperature (empty — the shared one)",
+    },
+    "settings.field.rewrite_temperature_instruction.hint": {
+        "ru": "Шаги, команды и версии выдумывать нельзя — здесь нужна такая "
+              "же низкая температура, как у новостей.",
+        "en": "Steps, commands and versions must not be invented — this needs "
+              "the same low temperature as news.",
+    },
+    "settings.field.rewrite_temperature_humor.label": {
+        "ru": "Температура юмора (пусто — общая)",
+        "en": "Humor temperature (empty — the shared one)",
+    },
+    "settings.field.rewrite_temperature_humor.hint": {
+        "ru": "Здесь наоборот: при низкой температуре шутка становится "
+              "пересказом. Разумно 0.8-1.0.",
+        "en": "The opposite here: at a low temperature a joke turns into a "
+              "retelling. 0.8-1.0 is sensible.",
+    },
     "settings.field.rewrite_temperature.label": {"ru": "Температура", "en": "Temperature"},
     "settings.field.rewrite_temperature.hint": {
         "ru": "Насколько свободно модель формулирует. Ниже 0.7 текст сушится и "

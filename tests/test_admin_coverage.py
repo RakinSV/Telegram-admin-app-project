@@ -19,6 +19,11 @@ from tg_repost.webui.settings_store import SECRET_HINTS, SECRET_LABELS, SETTINGS
 _DELIBERATELY_NOT_IN_UI = {
     "webui_master_key", "webui_session_secret", "database_url",
     "guardian_database_url", "log_level", "log_file", "media_dir",
+    # Кэш списка моделей провайдера, а не настройка: правится кнопкой
+    # «Обновить список моделей», руками его вводить незачем и вредно —
+    # это JSON на 15 КБ. Хранится в Settings, чтобы переиспользовать
+    # готовый механизм оверлея из БД, а не заводить таблицу ради кэша.
+    "provider_models_cache",
 }
 
 

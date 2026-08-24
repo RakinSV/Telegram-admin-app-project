@@ -231,7 +231,22 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
             # Живое поле — RewriterClient.rewrite() читает его из get_settings()
             # на каждый вызов, needs_resync не нужен (в отличие от base_url/
             # model выше, которые сидят в конструкторе клиента).
-            SettingField("rewrite_temperature", "Температура", "float"),
+            SettingField("rewrite_temperature", "Температура (общая)", "float"),
+            # Своя температура у профиля. Пусто = общая выше. Одна на все —
+            # источник выдуманных фактов: новость и инструкция живут
+            # фактами, мнение и юмор без свободы становятся пресными.
+            SettingField("rewrite_temperature_news",
+                         "Температура новостей (пусто — общая)", "optional_float",
+                         min_value=0, max_value=2),
+            SettingField("rewrite_temperature_opinion",
+                         "Температура мнений (пусто — общая)", "optional_float",
+                         min_value=0, max_value=2),
+            SettingField("rewrite_temperature_instruction",
+                         "Температура инструкций (пусто — общая)", "optional_float",
+                         min_value=0, max_value=2),
+            SettingField("rewrite_temperature_humor",
+                         "Температура юмора (пусто — общая)", "optional_float",
+                         min_value=0, max_value=2),
             # Живое поле — читается в scheduler/jobs.py на каждый тик, не
             # кэшируется ни в каком клиенте, needs_resync не нужен.
             SettingField("rewrite_variant_count", "Вариантов текста на пост", "int"),

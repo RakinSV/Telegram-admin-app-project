@@ -61,6 +61,33 @@ _STYLE_SETTING_FIELDS = {
 # из двух списков, снова появился бы в UI с нередактируемым промптом.
 KNOWN_STYLES = tuple(_STYLE_SETTING_FIELDS)
 
+# Температура по стиль-профилю. Пусто в настройке = общая
+# `rewrite_temperature`. У `default` своей нет намеренно: он и есть «общий».
+_STYLE_TEMPERATURE_FIELDS = {
+    "news": "rewrite_temperature_news",
+    "opinion": "rewrite_temperature_opinion",
+    "instruction": "rewrite_temperature_instruction",
+    "humor": "rewrite_temperature_humor",
+}
+
+
+def temperature_for_style(prompt_name: str) -> float:
+    """Какая температура обслуживает стиль-профиль.
+
+    ЗАЧЕМ ОТДЕЛЬНО ПО ПРОФИЛЯМ. Одна температура на все — источник
+    выдуманных фактов в новостях: при 0.8 модель дописала в новость число,
+    которого в источнике нет, хотя промпт это прямо запрещает. Новость и
+    инструкция живут фактами, мнение и юмор без свободы становятся
+    пресными — одним числом это не выражается.
+    """
+    settings = get_settings()
+    field = _STYLE_TEMPERATURE_FIELDS.get(prompt_name)
+    if field is not None:
+        own = getattr(settings, field, None)
+        if own is not None:
+            return float(own)
+    return settings.rewrite_temperature
+
 # Промпты, которые НЕ являются стиль-профилями и потому в KNOWN_STYLES не
 # входят (иначе «article» появился бы в выпадающем списке стилей источника,
 # хотя это другая ось: стиль — как писать, формат — куда публиковать).
@@ -247,7 +274,7 @@ class RewriterClient:
         # температура и промпты правятся в /settings живьём, без пересборки
         # клиента (в отличие от base_url/api_key/модели — те в конструкторе
         # AsyncOpenAI, поэтому требуют resync, см. get_rewriter()).
-        temperature = get_settings().rewrite_temperature
+        temperature = temperature_for_style(prompt_name)
 
         logger.debug(
             "Запрос рерайта: model=%s, стиль=%s, язык=%s, длина=%d, ссылка=%s, t=%.2f",

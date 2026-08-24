@@ -62,6 +62,16 @@ def coerce_form_value(value_type: str, raw: object) -> object:
             # nan/inf проходят через float() молча и ломают всё дальше.
             raise ValueError(f"недопустимое число: {text}")
         return value_f
+    if value_type == "optional_float":
+        # Пусто = «не задано», а НЕ ноль. Для температуры разница
+        # принципиальная: ноль — это законное значение «отвечай
+        # детерминированно», и путать его с «наследовать общую» нельзя.
+        if not text.strip():
+            return None
+        value_opt = float(text)
+        if value_opt != value_opt or value_opt in (float("inf"), float("-inf")):
+            raise ValueError(f"недопустимое число: {text}")
+        return value_opt
     if value_type == "csv_list":
         return [s.strip() for s in text.split(",") if s.strip()]
     return text
