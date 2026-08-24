@@ -832,6 +832,22 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.field.telegraph_author_name.label": {
         "ru": "Автор (подпись под статьёй)", "en": "Author (byline)",
     },
+    "settings.field.telegraph_blank_on_delete.label": {
+        "ru": "Затирать статью при удалении поста",
+        "en": "Blank the article when the post is deleted",
+    },
+    "settings.field.telegraph_blank_on_delete.hint": {
+        "ru": "Удалить страницу Telegraph нельзя — в его API нет такого "
+              "метода. Галочка заменяет текст заглушкой НЕОБРАТИМО: ссылка "
+              "останется рабочей, содержимого по ней не будет. Срабатывает "
+              "только когда пост удалён из ВСЕХ целей — статья одна на все "
+              "группы.",
+        "en": "A Telegraph page cannot be deleted — its API has no such "
+              "method. This replaces the text with a stub IRREVERSIBLY: the "
+              "link keeps working, the content does not. Applies only once "
+              "the post is deleted from ALL targets — one article serves "
+              "every group.",
+    },
     "settings.field.telegraph_author_url.label": {
         "ru": "Ссылка автора (например, канал)", "en": "Author link (e.g. your channel)",
     },

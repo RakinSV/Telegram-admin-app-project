@@ -547,6 +547,16 @@ class Settings(BaseSettings):
     # глобальный рубильник: выключен, значит формат «статья» игнорируется и
     # всё публикуется обычными постами.
     telegraph_enabled: bool = Field(False, alias="TELEGRAPH_ENABLED")
+    # Затирать ли статью на Telegraph, когда пост удаляют из группы.
+    #
+    # ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНО И ЭТО НЕ ПЕРЕСТРАХОВКА. Удалить страницу
+    # Telegraph нельзя вовсе — в его API нет такого метода. Затирание
+    # заменяет текст заглушкой НЕОБРАТИМО: прежнего содержимого Telegraph не
+    # хранит. Удаление поста из канала и судьба статьи — разные решения, и
+    # связывать их молча нельзя.
+    telegraph_blank_on_delete: bool = Field(
+        False, alias="TELEGRAPH_BLANK_ON_DELETE"
+    )
     telegraph_author_name: str = Field("", alias="TELEGRAPH_AUTHOR_NAME")
     telegraph_author_url: str = Field("", alias="TELEGRAPH_AUTHOR_URL")
     # Выдаётся автоматически при первой публикации (createAccount не требует

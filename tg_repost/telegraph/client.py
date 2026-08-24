@@ -120,3 +120,44 @@ async def create_page(title: str, nodes: list[Node]) -> str:
         raise TelegraphError("createPage не вернул url")
     logger.info("Статья опубликована на Telegraph: %s", url)
     return str(url)
+
+def page_path(url: str) -> str | None:
+    """Путь страницы из её адреса: `telegra.ph/Zagolovok-01-02` -> хвост.
+
+    `editPage` работает по пути, а не по полному адресу. В базе у нас лежит
+    именно адрес, поэтому разбираем его здесь, а не заводим вторую колонку.
+    """
+    cleaned = url.strip().rstrip("/")
+    if not cleaned:
+        return None
+    tail = cleaned.rsplit("/", 1)[-1]
+    return tail or None
+
+
+async def blank_page(url: str, note: str) -> None:
+    """Затереть содержимое опубликованной статьи.
+
+    УДАЛИТЬ СТРАНИЦУ TELEGRAPH НЕЛЬЗЯ — в его API нет такого метода, есть
+    только `createPage` и `editPage`. Поэтому «убрать материал» здесь
+    означает заменить текст заглушкой: адрес останется рабочим, а содержимого
+    по нему не будет.
+
+    Это НЕОБРАТИМО: прежний текст Telegraph не хранит, вернуть его неоткуда.
+    Поэтому вызов стоит за галочкой в настройках и по умолчанию выключен.
+
+    Токен для правки сохраняется при первой публикации (см. docstring
+    модуля) — без него страница была бы чужой, и затереть её мы бы не могли.
+    """
+    path = page_path(url)
+    if path is None:
+        raise TelegraphError(f"не разобрать адрес статьи: {url!r}")
+
+    token = await get_or_create_token()
+    await _call("editPage", {
+        "access_token": token,
+        "path": path,
+        "title": "Материал удалён",
+        "content": _encode_content([{"tag": "p", "children": [note]}]),
+        "return_content": False,
+    })
+    logger.info("Статья на Telegraph затёрта: %s", url)

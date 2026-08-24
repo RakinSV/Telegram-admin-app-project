@@ -15,7 +15,10 @@ from tg_repost import post_targets_repo
 from tg_repost.config import get_settings
 from tg_repost.db.models import Post, PostStatus, PostTarget
 from tg_repost.db.session import session_scope
+from tg_repost.logging_conf import get_logger
 from tg_repost.telegram.publisher import publish_post
+
+logger = get_logger(__name__)
 
 
 def list_pending_posts(limit: int = 50) -> list[Post]:
@@ -213,7 +216,50 @@ async def delete_published_post(bot: Bot, post_id: int, target_id: int) -> str |
     except TelegramBadRequest as exc:
         return _reason(exc)
     post_targets_repo.set_message_id(target_id, None)
+    await _blank_telegraph_if_asked(post_id)
     return None
+
+
+async def _blank_telegraph_if_asked(post_id: int) -> None:
+    """Затереть статью на Telegraph, если владелец включил это в настройках.
+
+    ПОЧЕМУ НЕ ПО УМОЛЧАНИЮ. Удалить страницу Telegraph нельзя вовсе — в его
+    API есть только создание и правка. Затирание заменяет текст заглушкой
+    НЕОБРАТИМО, прежнего содержимого Telegraph не хранит. Поэтому удаление
+    поста из канала и судьба статьи — разные решения.
+
+    ЗАТИРАЕМ ТОЛЬКО КОГДА ПОСТА БОЛЬШЕ НЕТ НИ В ОДНОЙ ЦЕЛИ. Один и тот же
+    пост уходит в несколько групп, а статья на них одна: убрав пост из одной
+    группы, владелец не собирался ломать ссылку в остальных.
+
+    Сбой затирания не отменяет удаления поста: сообщение уже удалено, и
+    возвращать ошибку значило бы соврать, что удаление не прошло.
+    """
+    if not get_settings().telegraph_blank_on_delete:
+        return
+
+    with session_scope() as session:
+        post = session.get(Post, post_id)
+        if post is None or not post.telegraph_url:
+            return
+        url = post.telegraph_url
+        still_published = [
+            target for target in post_targets_repo.list_targets_for_post(post_id)
+            if target.message_id is not None
+        ]
+    if still_published:
+        logger.info(
+            "Статья #%d не затирается: пост ещё опубликован в %d цели(ях)",
+            post_id, len(still_published),
+        )
+        return
+
+    from tg_repost.telegraph.client import blank_page
+
+    try:
+        await blank_page(url, "Материал удалён автором.")
+    except Exception as exc:  # noqa: BLE001 — сбой затирания не отменяет удаления
+        logger.warning("Не удалось затереть статью %s: %s", url, exc)
 
 
 async def pin_published_post(bot: Bot, post_id: int, target_id: int, pin: bool) -> str | None:

@@ -384,6 +384,11 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
             SettingField("telegraph_enabled", "Включены", "bool"),
             SettingField("telegraph_author_name", "Автор (подпись под статьёй)", "str"),
             SettingField("telegraph_author_url", "Ссылка автора (например, канал)", "str"),
+            # Удалить страницу Telegraph НЕЛЬЗЯ — в его API нет такого
+            # метода. Галочка затирает содержимое НЕОБРАТИМО, поэтому
+            # выключена по умолчанию.
+            SettingField("telegraph_blank_on_delete",
+                         "Затирать статью при удалении поста", "bool"),
             SettingField("article_teaser_max_chars", "Длина тизера в канале, символов", "int"),
             SettingField("article_prompt_template", "Промпт статьи", "text"),
         ),
