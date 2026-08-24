@@ -178,6 +178,14 @@ def require_setup_token(request: Request, token: str | None = None) -> None:
     raise SetupTokenRequiredError()
 
 
+def _models_fetched_at() -> str:
+    """Когда список моделей забирали в последний раз (для подписи)."""
+    from tg_repost.rewriter.model_catalog import cached_catalog
+
+    stamp = cached_catalog().fetched_at
+    return stamp.strftime("%d.%m.%Y %H:%M UTC") if stamp else ""
+
+
 def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dict]:
     """Собрать контекст `groups` для `settings.html` — переиспользуется GET
     `/settings`, обработчиком ошибки валидации в POST `/settings/{group}` и
@@ -196,6 +204,16 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
     # и замер 2026-08-19 показал ровно 154 одинаковых обращения к базе на
     # один показ страницы.
     overridden = settings_store.overridden_keys()
+    # Подсказки моделей: список забирается кнопкой и лежит в кэше, поэтому
+    # открытие страницы никуда не ходит.
+    from tg_repost.rewriter.model_catalog import cached_catalog
+
+    catalog = cached_catalog()
+    suggestions = {
+        "chat": list(catalog.chat),
+        "embedding": list(catalog.embedding),
+        "image": list(catalog.image),
+    }
     return [
         {
             "key": group.key,
@@ -213,6 +231,9 @@ def _settings_groups_context(revealed: dict[str, str] | None = None) -> list[dic
                     "value_type": f.value_type,
                     "needs_resync": f.needs_resync,
                     "choices": f.choices,
+                    # Список для <datalist>. Пусто — поле останется обычным
+                    # текстовым, как было.
+                    "suggestions": suggestions.get(f.suggest or "", []),
                     "value": settings_store.effective_value(f),
                     # Есть ли сохранённое значение, перекрывающее дефолт кода.
                     # Только для таких полей показывается кнопка сброса — у
@@ -620,7 +641,8 @@ def _protected_router() -> APIRouter:
         return _templates.TemplateResponse(
             request,
             "settings.html",
-            {"groups": _settings_groups_context(), "error": None},
+            {"groups": _settings_groups_context(), "error": None,
+             "models_fetched_at": _models_fetched_at()},
         )
 
     @router.get("/secrets", response_class=HTMLResponse)
@@ -630,6 +652,35 @@ def _protected_router() -> APIRouter:
         # просто ведёт на объединённую страницу.
         del request
         return RedirectResponse(url="/settings", status_code=308)
+
+    @router.post("/settings/refresh-models")
+    async def settings_refresh_models(request: Request) -> Response:
+        """Забрать у провайдера список моделей для подсказок.
+
+        POST: ходит в сеть. Список кладётся в кэш, страница настроек его
+        только читает — открытие страницы никуда не ходит.
+        """
+        from tg_repost.rewriter.model_catalog import refresh_catalog
+
+        try:
+            catalog = await refresh_catalog()
+        except Exception as exc:  # noqa: BLE001 — показываем владельцу причину
+            return _templates.TemplateResponse(
+                request, "settings.html",
+                {"groups": _settings_groups_context(),
+                 "error": i18n.t("settings.models_refresh_failed",
+                                 reason=str(exc)[:200]),
+                 "models_fetched_at": _models_fetched_at()},
+                status_code=400,
+            )
+        audit.record_audit("provider_models_refresh",
+                           detail=f"{len(catalog.models)} моделей")
+        return _templates.TemplateResponse(
+            request, "settings.html",
+            {"groups": _settings_groups_context(), "error": None,
+             "models_fetched_at": _models_fetched_at(),
+             "models_refreshed": len(catalog.models)},
+        )
 
     @router.post("/settings/check-provider")
     async def settings_check_provider(request: Request) -> Response:

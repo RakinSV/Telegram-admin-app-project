@@ -49,6 +49,11 @@ class SettingField:
     # значение ломает конкретное поведение (см. `_LIMITS` ниже).
     min_value: float | None = None
     max_value: float | None = None
+    # Подсказка из списка моделей провайдера: "chat" | "embedding" | "image".
+    # Именно подсказка, а не закрытый список: псевдонимы вроде `auto/cheap`
+    # провайдер может не показывать в `/v1/models`, а работают они —
+    # закрытый список запретил бы рабочую настройку.
+    suggest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -205,17 +210,21 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
             # реальном деплое: смена модели на OpenRouter-совместимый
             # провайдер повисла в БД, рерайт продолжал падать со старой).
             SettingField("openai_base_url", "Base URL", "str", needs_resync=True),
-            SettingField("openai_model", "Модель", "str", needs_resync=True),
+            SettingField("openai_model", "Модель", "str", needs_resync=True,
+                         suggest="chat"),
             # Ролевые переопределения. Пусто = основная модель выше. Отдельные
             # поля появились затем, что задачи разной сложности: фактчек
             # выигрывает от модели посильнее, а выбор поискового запроса
             # прекрасно делается дешёвой.
             SettingField("openai_model_editor",
-                         "Модель редактора-фактчекера (пусто — основная)", "str"),
+                         "Модель редактора-фактчекера (пусто — основная)", "str",
+                         suggest="chat"),
             SettingField("openai_model_quiz",
-                         "Модель квизов (пусто — основная)", "str"),
+                         "Модель квизов (пусто — основная)", "str",
+                         suggest="chat"),
             SettingField("openai_model_aux",
-                         "Модель вспомогательных задач (пусто — основная)", "str"),
+                         "Модель вспомогательных задач (пусто — основная)", "str",
+                         suggest="chat"),
             SettingField("openai_timeout_seconds", "Таймаут запроса, сек", "float", needs_resync=True),
             SettingField("openai_max_retries", "Повторов запроса при сбое", "int", needs_resync=True),
             SettingField("rewrite_min_source_chars", "Минимум материала для рерайта", "int"),
@@ -322,7 +331,8 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
         "semantic_dedup", "Семантический дубль-чек — F13",
         (
             SettingField("semantic_dedup_enabled", "Включён", "bool"),
-            SettingField("openai_embedding_model", "Модель эмбеддингов", "str", needs_resync=True),
+            SettingField("openai_embedding_model", "Модель эмбеддингов", "str",
+                         needs_resync=True, suggest="embedding"),
             SettingField("semantic_similarity_threshold", "Порог сходства", "float"),
             SettingField("dedup_window_days", "Окно сравнения, дней", "int"),
             SettingField("cluster_grace_minutes", "Пауза на сбор сюжета, мин", "int"),
@@ -441,7 +451,8 @@ _RAW_GROUPS: tuple[SettingsGroup, ...] = (
             # только в файле cover_prompt.txt и не редактировался из админки,
             # хотя именно он решает, что за картинка приедет.
             SettingField("cover_search_prompt_template", "Промпт подбора запроса (unsplash/comfyui)", "text"),
-            SettingField("cover_openai_model", "Модель (openai-стратегия)", "str"),
+            SettingField("cover_openai_model", "Модель (openai-стратегия)", "str",
+                         suggest="image"),
             SettingField(
                 "cover_openai_image_size", "Размер картинки (openai-стратегия)", "str",
                 choices=("1792x1024", "1024x1024", "1024x1792", "1536x1024", "1024x1536"),

@@ -552,6 +552,28 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "settings.field.openai_base_url.label": {"ru": "Base URL", "en": "Base URL"},
     "common.millis": {"ru": "мс", "en": "ms"},
+    "settings.refresh_models_button": {
+        "ru": "Обновить список моделей", "en": "Refresh the model list",
+    },
+    "settings.models_fetched_at": {
+        "ru": "Список от {at}. Поля моделей подсказывают из него.",
+        "en": "List from {at}. Model fields suggest from it.",
+    },
+    "settings.models_never_fetched": {
+        "ru": "Список ещё не забирали — поля моделей заполняются вручную.",
+        "en": "The list has not been fetched — model fields are typed by hand.",
+    },
+    "settings.models_refreshed": {
+        "ru": "Получено моделей: {n}", "en": "Models fetched: {n}",
+    },
+    "settings.models_refresh_failed": {
+        "ru": "Не удалось получить список моделей: {reason}",
+        "en": "Could not fetch the model list: {reason}",
+    },
+    "settings.models_suggest_hint": {
+        "ru": "Можно выбрать из {n} моделей провайдера или вписать своё.",
+        "en": "Pick from {n} provider models or type your own.",
+    },
     "settings.check_provider_button": {
         "ru": "Проверить подключение к ИИ",
         "en": "Check the AI connection",

@@ -10,6 +10,16 @@
     <button type="submit">{{ t('settings.check_provider_button') }}</button>
     <span class="hint">{{ t('settings.check_provider_hint') }}</span>
   </form>
+  <form method="post" action="/settings/refresh-models" style="margin-top:8px;">
+    <button type="submit" class="secondary">{{ t('settings.refresh_models_button') }}</button>
+    <span class="hint">
+      {% if models_fetched_at %}{{ t('settings.models_fetched_at', at=models_fetched_at) }}
+      {% else %}{{ t('settings.models_never_fetched') }}{% endif %}
+    </span>
+  </form>
+  {% if models_refreshed %}
+  <div class="badge ok" style="margin-top:6px;">{{ t('settings.models_refreshed', n=models_refreshed) }}</div>
+  {% endif %}
   {% if provider_check %}
   <div style="margin-top:10px;">
     <div class="muted" style="font-size:12px;">{{ provider_check.base_url }}</div>
@@ -77,6 +87,16 @@
           </details>
         {% elif field.value_type in ("int", "float") %}
           <input type="number" step="{{ 'any' if field.value_type == 'float' else '1' }}" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+        {% elif field.suggestions %}
+          {# Подсказка, а НЕ закрытый список: псевдонимы вроде auto/cheap
+             провайдер может не показывать в /v1/models, а работают они. #}
+          <input type="text" id="{{ field.name }}" name="{{ field.name }}"
+                 value="{{ field.value }}" list="models-{{ field.name }}"
+                 autocomplete="off">
+          <datalist id="models-{{ field.name }}">
+            {% for option in field.suggestions %}<option value="{{ option }}"></option>{% endfor %}
+          </datalist>
+          <div class="hint">{{ t('settings.models_suggest_hint', n=field.suggestions|length) }}</div>
         {% else %}
           <input type="text" id="{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
         {% endif %}

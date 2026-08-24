@@ -262,6 +262,11 @@ class Settings(BaseSettings):
     # Именно ПЕРЕОПРЕДЕЛЕНИЯ, а не полный набор: пустое поле означает
     # «как основная». Иначе на чистой установке пришлось бы заполнять
     # четыре поля вместо одного, и три из них — одним и тем же значением.
+    # Кэш списка моделей провайдера (JSON). НЕ настройка: на странице
+    # настроек его нет, правится только кнопкой «Обновить список моделей».
+    # Живёт здесь, а не в своей таблице, потому что это именно кэш — пропажа
+    # ничего не ломает, а таблица ради одной строки была бы лишней.
+    provider_models_cache: str = Field("", alias="PROVIDER_MODELS_CACHE")
     openai_model_editor: str = Field("", alias="OPENAI_MODEL_EDITOR")
     openai_model_quiz: str = Field("", alias="OPENAI_MODEL_QUIZ")
     openai_model_aux: str = Field("", alias="OPENAI_MODEL_AUX")
